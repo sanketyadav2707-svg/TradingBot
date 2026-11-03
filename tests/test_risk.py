@@ -36,7 +36,7 @@ def test_risk_guard_blocks_when_daily_loss_limit_reached() -> None:
 
 def test_risk_guard_accounts_for_remaining_drawdown_buffer() -> None:
     guard = RiskGuard(
-        RiskLimits(max_total_drawdown_usd=20, max_risk_per_trade_usd=50, max_contracts=5)
+        RiskLimits(max_total_drawdown_usd=30, max_risk_per_trade_usd=50, max_contracts=5)
     )
     decision = guard.evaluate_entry(
         instrument=_instrument(),
