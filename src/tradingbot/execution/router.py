@@ -7,6 +7,7 @@ be enabled by configuration; a future live adapter requires a separate, reviewed
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 
 from tradingbot.compliance.rules import FirmComplianceGate
@@ -38,7 +39,7 @@ class OrderIntent:
     side: Side
     stop_ticks: int
     reference_price: float
-    timestamp: object
+    timestamp: datetime
 
 
 class ExecutionRouter:
@@ -73,6 +74,8 @@ class ExecutionRouter:
             raise OrderRejected("flat_side_cannot_be_submitted")
         if intent.instrument.symbol.strip().upper() == "":
             raise OrderRejected("instrument_symbol_missing")
+        if self.broker.instrument.symbol.upper() != intent.instrument.symbol.upper():
+            raise OrderRejected("broker_instrument_mismatch")
         if self.require_firm_profile and self.compliance_gate is None:
             raise OrderRejected("verified_firm_profile_required")
 
@@ -89,7 +92,7 @@ class ExecutionRouter:
 
         if self.compliance_gate is not None:
             compliance = self.compliance_gate.check_entry(
-                timestamp=intent.timestamp,  # type: ignore[arg-type]
+                timestamp=intent.timestamp,
                 symbol=intent.instrument.symbol,
                 quantity=decision.quantity,
             )
@@ -100,5 +103,5 @@ class ExecutionRouter:
             side=intent.side,
             quantity=decision.quantity,
             reference_price=intent.reference_price,
-            timestamp=intent.timestamp,  # type: ignore[arg-type]
+            timestamp=intent.timestamp,
         )
