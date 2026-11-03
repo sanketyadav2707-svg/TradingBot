@@ -6,7 +6,7 @@ This system is research-only until every gate below is completed. Passing softwa
 
 - No live broker class or live order endpoint exists.
 - The paper broker is local and simulated.
-- Risk limits are configurable and checked before each entry.
+- Basic risk limits are configurable and checked before each entry; the current bar backtest uses realized daily PnL and closed-equity peak drawdown, so it is not yet a complete prop-firm drawdown emulator.
 - Default instrument quantity is capped at one contract in the example config.
 - Example data is synthetic and labelled as such.
 - Secrets and local data are excluded from Git.
@@ -25,7 +25,7 @@ This system is research-only until every gate below is completed. Passing softwa
 9. Compare paper fills with observed real-time quotes where properly licensed.
 10. Obtain written firm confirmation for bot, API, platform, account stage and India residency.
 11. Obtain qualified India-specific legal/tax advice before payment, overseas remittance or payout.
-12. Only then consider a low-cost evaluation; never use money needed for education, living costs or emergency savings.
+12. Add and independently test the chosen firm's exact intraday/equity drawdown logic, then consider a low-cost evaluation only if legally cleared; never use money needed for education, living costs or emergency savings.
 
 ## Mandatory research report statistics
 
