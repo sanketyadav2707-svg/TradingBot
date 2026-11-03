@@ -1,0 +1,6 @@
+[runtime]
+mode = "backtest" # backtest | paper. Live mode is not implemented.
+timezone = "America/New_York"
+bar_interval = "5m"
+target_holding_min_seconds = 180
+target_holding_max_seconds = 900
