@@ -10,6 +10,20 @@
   Source: https://ranaroussi.github.io/yfinance/reference/yfinance.price_history.html
 - A free broker practice account may be useful for platform testing, but the actual feed, API permission, exchange data entitlement and delayed/live status must be checked individually.
 
+## Optional Databento historical importer
+
+The repository includes `tradingbot fetch-databento` for 1-minute historical futures OHLCV through the Historical API. It uses the continuous symbology form `{ROOT}.v.0` with `stype_in="continuous"` and preserves returned `instrument_id` and contract `symbol` in extra CSV columns plus a JSON metadata sidecar. Continuous symbology maps a root to the current volume-ranked contract; that is a convenient research series, not a substitute for explicit contract-level roll and fill modelling.
+
+- Install optional packages from the VS Code integrated Terminal at the repository root: `python -m pip install -e ".[marketdata]"`.
+- Set the key only in your local shell environment: `export DATABENTO_API_KEY="..."`. Do not paste it into ChatGPT, source files, GitHub, screenshots or issues.
+- Example from the VS Code integrated Terminal at `~/Documents/TradingBot`: `python -m tradingbot fetch-databento --symbol MES --start 2026-01-05T00:00:00Z --end 2026-01-06T00:00:00Z --output data/raw/MES_1m.csv`.
+- New-account credits are limited and one-time. Check current credit balance, schema/dataset entitlement and licensing before each request. The adapter is historical-only and does not connect to a live feed.
+
+Official references:
+- https://databento.com/docs/quickstart
+- https://databento.com/docs/standards-and-conventions/symbology?historical=python&live=python
+- https://databento.com/docs/api-reference-historical
+
 ## Project policy
 
 1. CSV is the first and only implemented market-data adapter. This keeps development possible without subscriptions or keys.
