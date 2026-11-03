@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
@@ -25,9 +26,7 @@ def _profile() -> FirmRuleProfile:
 
 def test_unverified_profile_fails_closed() -> None:
     profile = _profile()
-    unverified = FirmRuleProfile(
-        **{**profile.__dict__, "verified": False}
-    )
+    unverified = replace(profile, verified=False)
     gate = FirmComplianceGate(unverified)
     now = datetime(2026, 11, 4, 14, 0, tzinfo=ZoneInfo("America/Chicago"))
     result = gate.check_entry(timestamp=now, symbol="MES", quantity=1)
