@@ -12,7 +12,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
-marketdata = ["databento>=0.50", "pandas>=2.2"]
+marketdata = ["databento>=0.50", "pandas>=2.2", "python-dotenv>=1.0"]
 
 [project.scripts]
 tradingbot = "tradingbot.cli:main"
