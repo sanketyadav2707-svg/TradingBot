@@ -14,7 +14,7 @@ Research snapshot: 4 November 2026. This is a shortlist, not a final selection. 
 | MYM | Micro Dow | 1 index point | $0.50 | Secondary test: compare actual spread/depth and opportunity count |
 
 CME contract-spec references:
-- MES: https://www.cmegroup.com/markets/equities/sp/micro-e-mini-sand-500.contractSpecs.html
+- MES: https://www.cmegroup.com/markets/equities/sp/micro-e-mini-sandp-500.contractSpecs.html
 - MNQ: https://www.cmegroup.com/markets/equities/nasdaq/micro-e-mini-nasdaq-100.contractSpecs.html
 - Micro equity index tick table: https://www.cmegroup.com/articles/faqs/frequently-asked-questions-micro-e-mini-equity-index-futures.html
 - MGC: https://www.cmegroup.com/education/courses/event-contracts-underlying-markets/product-gold
@@ -29,12 +29,10 @@ CME's September 2026 monthly report cited:
 
 Source: https://www.cmegroup.com/investor/ news-releases/news-release-details/cme-group-reports-record-average-daily-volume-september-and-q3
 
-CME reported Micro Gold futures average daily volume of 714,000 in Q1 2026. Micro Gold/Silver/Copper combined activity was also reported at 589,919 ADV for YTD 2026 in a later update; the latter is a combined complex figure, not MGC-only volume.
-Sources:
-- https://www.cmegroup.com/newsletters/micro-gold-silver-and-copper-monthly-update/2026-06-micro-metals-products-update.html
-- https://www.cmegroup.com/newsletters/micro-gold-silver-and-copper-monthly-update/2026-09-micro-metals-products-update.html
+CME reported Micro Gold futures ADV of 378,000 contracts in September 2026 (up 21% year over year). This is the cleaner same-month comparison for our shortlist.
+Source: https://www.cmegroup.com/media-room/press-releases/2026/10/02/cme_group_reportsrecordaveragedailyvolumeforseptemberandq3driven.html
 
-These are market-wide exchange statistics, not proof that a specific contract month has tight spreads at every time of day. We still need to measure bid/ask spread, depth, slippage and trade frequency in the precise US session we intend to use. Public reports found in this pass do not provide a comparable verified ADV series for M2K and MYM, so they remain secondary until measured.
+These are market-wide exchange statistics, not proof that a specific contract month has tight spreads at every time of day. We still need to measure bid/ask spread, depth, slippage and trade frequency in the precise US session we intend to use. CME's September 2026 report lists E-mini S&P 500 ADV of 1.8m, which is the full-size ES contract and must not be confused with MES at 1.1m. Public reports found in this pass do not provide a comparable verified ADV series for M2K and MYM, so they remain secondary until measured.
 
 ## Preliminary research order
 
