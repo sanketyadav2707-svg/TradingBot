@@ -8,7 +8,7 @@ This remains an approximation: OHLC bars cannot reproduce queue position or true
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from tradingbot.models import BacktestResult, Bar, Instrument, Side, Trade
@@ -33,7 +33,7 @@ class BacktestConfig:
 class _Position:
     side: Side
     quantity: int
-    entry_time: object
+    entry_time: datetime
     entry_index: int
     entry_price: float
     stop_price: float
@@ -94,7 +94,7 @@ class BacktestEngine:
                 symbol=self.instrument.symbol,
                 side=pos.side,
                 quantity=pos.quantity,
-                entry_time=pos.entry_time,  # type: ignore[arg-type]
+                entry_time=pos.entry_time,
                 exit_time=bar.timestamp,
                 entry_price=pos.entry_price,
                 exit_price=exit_price,
