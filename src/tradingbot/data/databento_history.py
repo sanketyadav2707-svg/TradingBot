@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,19 @@ def fetch_databento_ohlcv(
         raise ValueError(f"Unsupported micro futures root {root!r}")
     if not start.strip() or not end.strip():
         raise ValueError("start and end timestamps are required")
+
+    def parse_aware(value: str) -> datetime:
+        normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError as exc:
+            raise ValueError(f"Invalid ISO-8601 timestamp: {value!r}") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError("Databento start/end timestamps must include a timezone")
+        return parsed
+
+    if parse_aware(start) >= parse_aware(end):
+        raise ValueError("start timestamp must be earlier than end timestamp")
     if not os.environ.get("DATABENTO_API_KEY"):
         raise RuntimeError(
             "DATABENTO_API_KEY is not set. Add it locally to your shell environment; "
@@ -50,7 +64,7 @@ def fetch_databento_ohlcv(
         ) from exc
 
     try:
-        client = db.Historical()  # reads DATABENTO_API_KEY from environment
+        client = db.Historical(os.environ["DATABENTO_API_KEY"])
         data = client.timeseries.get_range(
             dataset=dataset,
             symbols=f"{root}.v.0",
