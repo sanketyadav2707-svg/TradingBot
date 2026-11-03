@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import tomllib
+from datetime import time
 from pathlib import Path
 
 from tradingbot.backtest.engine import BacktestConfig, BacktestEngine
+from tradingbot.compliance.rules import FirmComplianceGate, FirmRuleProfile
 from tradingbot.data.csv_loader import load_bars
 from tradingbot.models import Instrument
 from tradingbot.risk.limits import RiskGuard, RiskLimits
@@ -35,6 +37,11 @@ def _build_parser() -> argparse.ArgumentParser:
     backtest.add_argument("--target-ticks", type=int, default=12)
     backtest.add_argument("--max-holding-bars", type=int, default=3)
     backtest.add_argument("--config-dir", type=Path, default=Path("config"))
+    backtest.add_argument(
+        "--firm-rules",
+        type=Path,
+        help="Optional exact account-model TOML profile; incomplete profiles fail closed",
+    )
 
     validate = sub.add_parser("validate-data", help="Validate a CSV file without trading")
     validate.add_argument("--csv", required=True, type=Path)
@@ -93,6 +100,29 @@ def main() -> None:
     )
     bars = load_bars(args.csv, expected_symbol=instrument.symbol)
     strategy = EmaCrossStrategy(args.fast, args.slow)
+    compliance_gate = None
+    if args.firm_rules:
+        profile_data = _load_toml(args.firm_rules)["profile"]
+        parse_time = lambda value: time.fromisoformat(value) if value else None
+        profile = FirmRuleProfile(
+            firm_name=str(profile_data["firm_name"]),
+            account_model=str(profile_data["account_model"]),
+            verified=bool(profile_data["verified"]),
+            verified_on=str(profile_data["verified_on"]),
+            source_url=str(profile_data["source_url"]),
+            bots_permitted=bool(profile_data["bots_permitted"]),
+            platform=str(profile_data["platform"]),
+            timezone=str(profile_data["timezone"]),
+            allowed_symbols=tuple(profile_data["allowed_symbols"]),
+            latest_entry_time=parse_time(profile_data["latest_entry_time"]),
+            flatten_time=parse_time(profile_data["flatten_time"]),
+            max_contracts=int(profile_data["max_contracts"]) or None,
+            max_daily_loss_usd=float(profile_data["max_daily_loss_usd"]) or None,
+            max_total_drawdown_usd=float(profile_data["max_total_drawdown_usd"]) or None,
+            no_overnight=bool(profile_data["no_overnight"]),
+        )
+        compliance_gate = FirmComplianceGate(profile)
+
     engine = BacktestEngine(
         instrument=instrument,
         risk_guard=guard,
@@ -102,6 +132,7 @@ def main() -> None:
             target_ticks=args.target_ticks,
             max_holding_bars=args.max_holding_bars,
         ),
+        compliance_gate=compliance_gate,
     )
     result = engine.run(bars)
     print(json.dumps(result.metrics(), indent=2))
