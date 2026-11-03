@@ -10,7 +10,9 @@ Initial foundation added directly to private GitHub repository:
 - Risk guard with daily loss, total drawdown, per-trade risk, max contract and max-trade limits.
 - Conservative OHLC backtester with next-bar execution, slippage, commission and stop-first ambiguity.
 - In-memory paper broker; no external/network order route.
-- Pytest suite and GitHub Actions workflow.
+- Pytest suite and GitHub Actions workflow (CI validated through commit e576ccee60f57228d10f3a71c9d28f2a66d7ffaf; newer changes are running through CI).
+- Optional Databento Historical API importer for 1-minute OHLCV, with local environment-key requirement and continuous-contract mapping sidecar.
+- Fail-closed rule profile gate; CLI caps generic risk limits to stricter populated account-profile limits.
 - Credentials and local market data excluded from Git; tiny synthetic fixture included explicitly.
 
 Outstanding:
@@ -18,5 +20,5 @@ Outstanding:
 - Add exchange-authorized historical/intraday data adapter once a lawful free/low-cost source is chosen.
 - Add proper contract roll and session calendar handling.
 - Replace toy EMA signal with independently validated strategy research.
-- Add daily intraday equity/MAE-MFE accounting and broker reconciliation before paper streaming.
+- Add unrealized intraday equity/MAE-MFE accounting, firm-specific trailing/EOD drawdown semantics and broker reconciliation before paper streaming.
 - Obtain India-specific legal/tax advice and written firm confirmation before any paid evaluation or API integration.
