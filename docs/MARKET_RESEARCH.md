@@ -20,6 +20,21 @@ CME contract-spec references:
 - MGC: https://www.cmegroup.com/education/courses/event-contracts-underlying-markets/product-gold
 - MCL: https://www.cmegroup.com/education/articles-and-reports/micro-wti-crude-oil-futures-faq
 
+## Prop-firm cost cross-check (MFFU published table)
+
+MyFundedFutures' currently published instrument table lists the following round-trip costs for the shortlisted micros:
+- MES: $1.90
+- MNQ: $1.90
+- M2K: $1.90
+- MYM: $1.90
+- MGC: $2.20
+- MCL: $1.16
+
+These are provider-published estimates, not universal exchange costs. Verify the current account/platform schedule and what is included (commission, exchange, clearing, NFA, data, etc.) before using them in a backtest. Fees can change and may differ by account plan.
+Source: https://help.myfundedfutures.com/en/articles/9735811-futures-instrument-list
+
+MFFU also currently publishes a $25K/$50K/$100K/$150K micro-metals position cap of 3/5/10/15 contracts respectively. This is firm-specific, not a CME contract limit.
+
 ## What the recent volume data actually says
 
 CME's September 2026 monthly report cited:
