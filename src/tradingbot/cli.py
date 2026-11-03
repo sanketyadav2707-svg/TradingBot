@@ -47,11 +47,34 @@ def _build_parser() -> argparse.ArgumentParser:
     validate.add_argument("--csv", required=True, type=Path)
     validate.add_argument("--symbol")
 
+    databento = sub.add_parser(
+        "fetch-databento",
+        help="Fetch optional historical 1-minute futures data (requires data credits/API key)",
+    )
+    databento.add_argument("--symbol", required=True, choices=["MES", "MNQ", "M2K", "MYM", "MGC", "MCL"])
+    databento.add_argument("--start", required=True, help="ISO-8601 timestamp with timezone")
+    databento.add_argument("--end", required=True, help="ISO-8601 timestamp with timezone")
+    databento.add_argument("--output", required=True, type=Path)
+    databento.add_argument("--dataset", default="GLBX.MDP3")
+
     return parser
 
 
 def main() -> None:
     args = _build_parser().parse_args()
+    if args.command == "fetch-databento":
+        from tradingbot.data.databento_history import fetch_databento_ohlcv
+
+        result = fetch_databento_ohlcv(
+            symbol=args.symbol,
+            start=args.start,
+            end=args.end,
+            output=args.output,
+            dataset=args.dataset,
+        )
+        print(json.dumps(result, indent=2))
+        return
+
     if args.command == "validate-data":
         bars = load_bars(args.csv, args.symbol)
         print(
