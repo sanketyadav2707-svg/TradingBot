@@ -1,0 +1,1 @@
+"""Risk-gated execution routing. Only paper mode is implemented."""
