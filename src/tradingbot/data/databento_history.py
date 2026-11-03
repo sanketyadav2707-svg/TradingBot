@@ -50,6 +50,14 @@ def fetch_databento_ohlcv(
 
     if parse_aware(start) >= parse_aware(end):
         raise ValueError("start timestamp must be earlier than end timestamp")
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except ImportError:
+        # Environment variables can also be exported directly in the shell.
+        pass
+
     if not os.environ.get("DATABENTO_API_KEY"):
         raise RuntimeError(
             "DATABENTO_API_KEY is not set. Add it locally to your shell environment; "
