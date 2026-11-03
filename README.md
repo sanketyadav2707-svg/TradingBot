@@ -37,10 +37,11 @@ python -m tradingbot --help
 python -m tradingbot backtest --csv data/sample/MES_5m_sample.csv --symbol MES
 ```
 
-Optional Databento historical import (only after you have created an account and stored the key locally in your shell environment; no key is needed for the sample backtest):
+Optional Databento historical import (only after you have created an account and stored the key locally in `.env`; no key is needed for the sample backtest):
 
 ```bash
-export DATABENTO_API_KEY="your-key-on-your-own-machine"
+cp .env.example .env
+# Edit .env in VS Code and set DATABENTO_API_KEY=your_key_locally
 python -m pip install -e ".[marketdata]"
 python -m tradingbot fetch-databento --symbol MES --start 2026-01-05T00:00:00Z --end 2026-01-06T00:00:00Z --output data/raw/MES_1m.csv
 ```
