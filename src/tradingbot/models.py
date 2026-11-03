@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
+from math import isfinite
 
 
 class DataValidationError(ValueError):
@@ -27,8 +28,8 @@ class Instrument:
     def __post_init__(self) -> None:
         if not self.symbol.strip():
             raise ValueError("Instrument symbol cannot be empty")
-        if min(self.tick_size, self.tick_value_usd, self.point_value_usd) <= 0:
-            raise ValueError("Instrument tick and point values must be positive")
+        if not all(isfinite(value) and value > 0 for value in (self.tick_size, self.tick_value_usd, self.point_value_usd)):
+            raise ValueError("Instrument tick and point values must be finite and positive")
         expected = self.tick_size * self.point_value_usd
         if abs(expected - self.tick_value_usd) > max(1e-8, self.tick_value_usd * 1e-6):
             raise ValueError(
@@ -52,14 +53,14 @@ class Bar:
             raise DataValidationError("Bar timestamp must include a timezone offset")
         if not self.symbol.strip():
             raise DataValidationError("Bar symbol cannot be empty")
-        if min(self.open, self.high, self.low, self.close) <= 0:
-            raise DataValidationError("OHLC prices must be positive")
+        if not all(isfinite(value) for value in (self.open, self.high, self.low, self.close)):
+            raise DataValidationError("OHLC prices must be finite numbers")
         if self.high < max(self.open, self.close, self.low):
             raise DataValidationError("High must be >= open, close, and low")
         if self.low > min(self.open, self.close, self.high):
             raise DataValidationError("Low must be <= open, close, and high")
-        if self.volume < 0:
-            raise DataValidationError("Volume cannot be negative")
+        if not isfinite(self.volume) or self.volume < 0:
+            raise DataValidationError("Volume must be a finite, non-negative number")
 
 
 @dataclass(frozen=True, slots=True)
