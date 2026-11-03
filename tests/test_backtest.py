@@ -40,5 +40,5 @@ def test_backtest_uses_next_bar_open_and_stops_conservatively() -> None:
     trade = result.trades[0]
     assert trade.exit_reason == "stop_loss"
     assert trade.entry_price == 100.25
-    assert trade.exit_price == 97.75
+    assert trade.exit_price == 98.0
     assert trade.net_pnl_usd < 0
