@@ -5,11 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from tradingbot.models import Side
+from tradingbot.models import Instrument, Side
 
 
 class ExecutionPort(Protocol):
     """Minimal market-order interface. Live implementations are intentionally absent."""
+
+    instrument: Instrument
 
     def submit_market(
         self,
