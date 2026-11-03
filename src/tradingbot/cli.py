@@ -106,27 +106,14 @@ def main() -> None:
         point_value_usd=float(raw_instrument["point_value_usd"]),
     )
     raw_risk = risk_config["risk"]
-    limits = RiskLimits(
-        starting_balance_usd=float(raw_risk["starting_balance_usd"]),
-        max_daily_loss_usd=float(raw_risk["max_daily_loss_usd"]),
-        max_total_drawdown_usd=float(raw_risk["max_total_drawdown_usd"]),
-        max_risk_per_trade_usd=float(raw_risk["max_risk_per_trade_usd"]),
-        max_contracts=int(raw_risk["max_contracts"]),
-        max_trades_per_day=int(raw_risk["max_trades_per_day"]),
-    )
-    guard = RiskGuard(
-        limits,
-        commission_per_contract_per_side_usd=float(
-            raw_risk["commission_per_contract_per_side_usd"]
-        ),
-        slippage_ticks_per_side=int(raw_risk["slippage_ticks_per_side"]),
-    )
-    bars = load_bars(args.csv, expected_symbol=instrument.symbol)
-    strategy = EmaCrossStrategy(args.fast, args.slow)
-    compliance_gate = None
+
+    profile = None
     if args.firm_rules:
         profile_data = _load_toml(args.firm_rules)["profile"]
-        parse_time = lambda value: time.fromisoformat(value) if value else None
+
+        def parse_time(value: str) -> time | None:
+            return time.fromisoformat(value) if value else None
+
         profile = FirmRuleProfile(
             firm_name=str(profile_data["firm_name"]),
             account_model=str(profile_data["account_model"]),
@@ -144,7 +131,39 @@ def main() -> None:
             max_total_drawdown_usd=float(profile_data["max_total_drawdown_usd"]) or None,
             no_overnight=bool(profile_data["no_overnight"]),
         )
-        compliance_gate = FirmComplianceGate(profile)
+
+    # Keep the local research limits at least as strict as a populated firm profile.
+    # Exact trailing/EOD drawdown semantics still require account-model-specific code.
+    firm_daily = profile.max_daily_loss_usd if profile else None
+    firm_total = profile.max_total_drawdown_usd if profile else None
+    firm_contracts = profile.max_contracts if profile else None
+    limits = RiskLimits(
+        starting_balance_usd=float(raw_risk["starting_balance_usd"]),
+        max_daily_loss_usd=min(
+            float(raw_risk["max_daily_loss_usd"]),
+            firm_daily if firm_daily is not None else float(raw_risk["max_daily_loss_usd"]),
+        ),
+        max_total_drawdown_usd=min(
+            float(raw_risk["max_total_drawdown_usd"]),
+            firm_total if firm_total is not None else float(raw_risk["max_total_drawdown_usd"]),
+        ),
+        max_risk_per_trade_usd=float(raw_risk["max_risk_per_trade_usd"]),
+        max_contracts=min(
+            int(raw_risk["max_contracts"]),
+            firm_contracts if firm_contracts is not None else int(raw_risk["max_contracts"]),
+        ),
+        max_trades_per_day=int(raw_risk["max_trades_per_day"]),
+    )
+    guard = RiskGuard(
+        limits,
+        commission_per_contract_per_side_usd=float(
+            raw_risk["commission_per_contract_per_side_usd"]
+        ),
+        slippage_ticks_per_side=int(raw_risk["slippage_ticks_per_side"]),
+    )
+    bars = load_bars(args.csv, expected_symbol=instrument.symbol)
+    strategy = EmaCrossStrategy(args.fast, args.slow)
+    compliance_gate = FirmComplianceGate(profile) if profile else None
 
     engine = BacktestEngine(
         instrument=instrument,
