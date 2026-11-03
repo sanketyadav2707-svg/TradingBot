@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from math import isfinite
 from uuid import uuid4
 
 from tradingbot.models import Instrument, Side
@@ -42,8 +43,8 @@ class PaperBroker:
     ) -> PaperFill:
         if side == Side.FLAT:
             raise ValueError("A market order must be LONG or SHORT")
-        if quantity < 1 or reference_price <= 0:
-            raise ValueError("Quantity and reference price must be positive")
+        if quantity < 1 or not isfinite(reference_price):
+            raise ValueError("Quantity must be positive and reference price must be finite")
         if timestamp.tzinfo is None or timestamp.utcoffset() is None:
             raise ValueError("Paper order timestamp must be timezone-aware")
         if quantity > 100:
