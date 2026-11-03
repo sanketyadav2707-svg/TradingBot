@@ -72,7 +72,7 @@ No contract has been selected as the live target. Start with MES and MNQ side-by
 
 ## Prop-firm approach
 
-The execution layer is intentionally abstracted. Do not hardwire one firm's API or copy firm-specific limits into a strategy. See [Prop-Firm Policy Matrix](docs/PROP_FIRM_POLICY_MATRIX.md). FundedNext Futures currently appears more compatible with bot-based 3–15 minute futures trading than Topstep's current API/live-account arrangement, but this is a provisional research conclusion, not an endorsement or eligibility guarantee.
+The execution layer is intentionally abstracted. Do not hardwire one firm's API or copy firm-specific limits into a strategy. See [Prop-Firm Policy Matrix](docs/PROP_FIRM_POLICY_MATRIX.md). MFFU and FundedNext Futures are the two strongest current policy candidates to investigate. MFFU's published rules explicitly allow personalised automation (subject to CME rules in live accounts); FundedNext explicitly permits bots on challenge and funded accounts through a Tradovate-connected integration. Neither has yet had its exact API route and India eligibility confirmed in writing. See the full [Prop-Firm Policy Matrix](docs/PROP_FIRM_POLICY_MATRIX.md).
 
 ## Data
 
