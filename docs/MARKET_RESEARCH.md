@@ -27,12 +27,20 @@ CME's September 2026 monthly report cited:
 - MES average daily volume: 1.1 million contracts.
 - MCL average daily volume: 240,000 contracts.
 
-Source: https://www.cmegroup.com/investor/ news-releases/news-release-details/cme-group-reports-record-average-daily-volume-september-and-q3
+Source: https://www.cmegroup.com/media-room/press-releases/2026/10/02/cme_group_reportsrecordaveragedailyvolumeforseptemberandq3driven.html
 
-CME reported Micro Gold futures ADV of 378,000 contracts in September 2026 (up 21% year over year). This is the cleaner same-month comparison for our shortlist.
+CME's September 2026 ADV report also shows Micro Gold at 378,000 contracts (up 21% year over year). The same report confirms the volume figures above.
 Source: https://www.cmegroup.com/media-room/press-releases/2026/10/02/cme_group_reportsrecordaveragedailyvolumeforseptemberandq3driven.html
 
 These are market-wide exchange statistics, not proof that a specific contract month has tight spreads at every time of day. We still need to measure bid/ask spread, depth, slippage and trade frequency in the precise US session we intend to use. CME's September 2026 report lists E-mini S&P 500 ADV of 1.8m, which is the full-size ES contract and must not be confused with MES at 1.1m. Public reports found in this pass do not provide a comparable verified ADV series for M2K and MYM, so they remain secondary until measured.
+
+## Prop-firm symbol cross-check
+
+FundedNext Futures' current published futures symbol list includes all six shortlisted micros: MES, MNQ, M2K, MYM, MGC and MCL. Tradeify's supported-products list also includes all six. This establishes only product-list availability, not the contract limit or API permission for every account model. Topstep symbol access must be checked in the account's current platform/product list.
+
+Sources:
+- FundedNext: https://helpfutures.fundednext.com/en/articles/17225740-which-symbols-instruments-can-i-trade-on-fundednext-futures
+- Tradeify: https://help.tradeify.co/en/articles/10468222-rules-supported-trading-products-assets
 
 ## Preliminary research order
 
