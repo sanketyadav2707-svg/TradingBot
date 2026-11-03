@@ -1,0 +1,1 @@
+"""Fail-closed prop-firm and session compliance checks."""
