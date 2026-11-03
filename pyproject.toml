@@ -12,6 +12,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+marketdata = ["databento>=0.50", "pandas>=2.2"]
 
 [project.scripts]
 tradingbot = "tradingbot.cli:main"
