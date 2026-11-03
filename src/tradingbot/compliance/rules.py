@@ -31,11 +31,11 @@ class FirmRuleProfile:
 
     def __post_init__(self) -> None:
         ZoneInfo(self.timezone)
-        if self.max_contracts is not None and self.max_contracts < 1:
-            raise ValueError("max_contracts must be positive")
+        if self.max_contracts is not None and self.max_contracts < 0:
+            raise ValueError("max_contracts cannot be negative")
         for value in (self.max_daily_loss_usd, self.max_total_drawdown_usd):
-            if value is not None and value <= 0:
-                raise ValueError("Firm loss limits must be positive when supplied")
+            if value is not None and value < 0:
+                raise ValueError("Firm loss limits cannot be negative")
 
     def completeness_error(self) -> str | None:
         required_text = (
@@ -53,9 +53,14 @@ class FirmRuleProfile:
             return "allowed_symbols_missing"
         if self.latest_entry_time is None or self.flatten_time is None:
             return "session_cutoff_missing"
-        if self.max_contracts is None:
+        if self.max_contracts is None or self.max_contracts < 1:
             return "max_contracts_missing"
-        if self.max_daily_loss_usd is None or self.max_total_drawdown_usd is None:
+        if (
+            self.max_daily_loss_usd is None
+            or self.max_daily_loss_usd <= 0
+            or self.max_total_drawdown_usd is None
+            or self.max_total_drawdown_usd <= 0
+        ):
             return "loss_limits_missing"
         return None
 
