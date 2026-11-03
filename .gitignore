@@ -4,7 +4,11 @@ __pycache__/
 .env
 .env.*
 !.env.example
-data/
+data/**
+!data/sample/
+data/sample/*
+!data/sample/README.md
+!data/sample/MES_5m_sample.csv
 logs/
 *.db
 .DS_Store
