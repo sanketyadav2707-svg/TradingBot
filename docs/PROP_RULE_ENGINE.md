@@ -1,6 +1,6 @@
 # Prop-firm rule engine design
 
-The rule gate in src/tradingbot/compliance/rules.py is intentionally fail-closed.
+The rule gate in src/tradingbot/compliance/rules.py is intentionally fail-closed. The CLI also caps local daily loss, total drawdown and max-contract settings to the stricter of the local research config and any populated profile values.
 
 ## Why it exists
 
@@ -16,7 +16,7 @@ The same strategy can be compliant at one firm/account stage and prohibited at a
 - The bot can determine when the mandatory flatten time has been reached.
 - The profile must specify verified loss limits and source/version metadata.
 
-The included config/prop_firm_rules.example.toml is deliberately invalid and cannot enable trading.
+The included config/prop_firm_rules.example.toml is deliberately invalid and cannot enable entries. The generic RiskGuard currently models realized daily PnL and peak closed-equity drawdown; it does not yet reproduce every firm's exact intraday trailing threshold, end-of-day update, unrealized PnL, loss-limit buffer, or payout consistency logic.
 
 ## What remains before this can drive a paper or live session
 
@@ -25,7 +25,7 @@ The included config/prop_firm_rules.example.toml is deliberately invalid and can
 3. Confirm India purchase, payout and live-stage eligibility in writing.
 4. Confirm the platform API and automation permission at each account stage.
 5. Fill every rule field from the exact current terms.
-6. Add exact trailing/static drawdown logic, consistency calculations, news restrictions, max positions, order rate and daily session calendar.
+6. Add exact intraday trailing/static drawdown logic, unrealized PnL monitoring, consistency calculations, news restrictions, max positions, order rate and daily session calendar.
 7. Add tests against a rulebook-specific fixture and have the configuration independently reviewed.
 
 No live order interface exists. The rule gate is a control foundation, not proof of compliance by itself.
