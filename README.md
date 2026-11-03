@@ -31,11 +31,21 @@ Open the TradingBot folder in VS Code. In its integrated Terminal:
 ```bash
 source .venv/bin/activate
 python --version
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev]"  # tests and base tooling
 pytest
 python -m tradingbot --help
 python -m tradingbot backtest --csv data/sample/MES_5m_sample.csv --symbol MES
 ```
+
+Optional Databento historical import (only after you have created an account and stored the key locally in your shell environment; no key is needed for the sample backtest):
+
+```bash
+export DATABENTO_API_KEY="your-key-on-your-own-machine"
+python -m pip install -e ".[marketdata]"
+python -m tradingbot fetch-databento --symbol MES --start 2026-01-05T00:00:00Z --end 2026-01-06T00:00:00Z --output data/raw/MES_1m.csv
+```
+
+The importer also writes a `.metadata.json` file containing the continuous-contract instrument mapping. Review the data license, available credits, dataset entitlement and returned contract mappings before analysis.
 
 If the editable install is not available, run the commands from the repository root after activating .venv.
 
@@ -65,7 +75,7 @@ The execution layer is intentionally abstracted. Do not hardwire one firm's API 
 
 ## Data
 
-CSV is the first supported source so the system can be developed without subscriptions. CME website quotes are at least 10 minutes delayed and described by CME as reference-only. Databento currently grants new accounts $125 in data credits, but this is a one-time trial credit, not a permanently free feed. See [Data Sources](docs/DATA_SOURCES.md).
+CSV is the first supported source. An optional Databento historical 1-minute importer is included for research when an account and data credits are available. It requires a user-supplied local `DATABENTO_API_KEY` and optional dependencies (`python -m pip install -e ".[marketdata]"`). The credit currently advertised to new accounts is a one-time allowance, not a permanently free feed. CME website quotes are at least 10 minutes delayed and reference-only. See [Data Sources](docs/DATA_SOURCES.md).
 
 ## Development principles
 
