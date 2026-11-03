@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from tradingbot.compliance.rules import FirmComplianceGate
 from tradingbot.models import BacktestResult, Bar, Instrument, Side, Trade
 from tradingbot.risk.limits import RiskGuard
 from tradingbot.strategy.ema_cross import EmaCrossStrategy
@@ -47,11 +48,13 @@ class BacktestEngine:
         risk_guard: RiskGuard,
         strategy: EmaCrossStrategy,
         config: BacktestConfig | None = None,
+        compliance_gate: FirmComplianceGate | None = None,
     ) -> None:
         self.instrument = instrument
         self.risk_guard = risk_guard
         self.strategy = strategy
         self.config = config or BacktestConfig()
+        self.compliance_gate = compliance_gate
 
     def run(self, bars: list[Bar]) -> BacktestResult:
         if len(bars) < 3:
@@ -117,6 +120,14 @@ class BacktestEngine:
                 daily_pnl = 0.0
                 trades_today = 0
 
+            if position is not None and self.compliance_gate is not None:
+                flatten_decision = self.compliance_gate.must_flatten(bar.timestamp)
+                if flatten_decision.allowed:
+                    trades.append(
+                        close_position(position, bar, bar.open, flatten_decision.reason, index)
+                    )
+                    position = None
+
             signal = signals[index - 1] if previous_day == bar_day else None
             if position is not None and signal is not None and signal.side == Side(-int(position.side)):
                 trades.append(close_position(position, bar, bar.open, "opposite_signal", index))
@@ -131,6 +142,14 @@ class BacktestEngine:
                     daily_pnl_usd=daily_pnl,
                     trades_today=trades_today,
                 )
+                if decision.approved and self.compliance_gate is not None:
+                    compliance = self.compliance_gate.check_entry(
+                        timestamp=bar.timestamp,
+                        symbol=self.instrument.symbol,
+                        quantity=decision.quantity,
+                    )
+                    if not compliance.allowed:
+                        decision = type(decision)(False, 0, compliance.reason)
                 if decision.approved:
                     direction = int(signal.side)
                     entry_price = bar.open + direction * slip_price
