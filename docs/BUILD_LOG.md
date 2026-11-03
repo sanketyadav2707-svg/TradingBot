@@ -13,6 +13,8 @@ Initial foundation added directly to private GitHub repository:
 - Pytest suite and GitHub Actions workflow (CI validated through commit e576ccee60f57228d10f3a71c9d28f2a66d7ffaf; newer changes are running through CI).
 - Optional Databento Historical API importer for 1-minute OHLCV, with local environment-key requirement and continuous-contract mapping sidecar.
 - Fail-closed rule profile gate; CLI caps generic risk limits to stricter populated account-profile limits.
+- Paper-only execution router with broker protocol, risk/compliance gates, instrument-match check and emergency halt; live mode explicitly rejected.
+- Updated policy research for MFFU, FundedNext, Tradeify, Topstep, TradeDay and Apex; MFFU/FundedNext remain candidates pending API and India confirmation.
 - Credentials and local market data excluded from Git; tiny synthetic fixture included explicitly.
 
 Outstanding:
