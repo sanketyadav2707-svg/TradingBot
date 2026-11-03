@@ -63,3 +63,13 @@ def test_router_can_require_verified_firm_profile() -> None:
     )
     with pytest.raises(OrderRejected, match="verified_firm_profile_required"):
         router.submit_entry(_intent(), _account())
+
+
+def test_router_rejects_broker_symbol_mismatch() -> None:
+    instrument = Instrument("MNQ", 0.25, 0.5, 2.0)
+    router = ExecutionRouter(
+        broker=PaperBroker(instrument),
+        risk_guard=RiskGuard(RiskLimits()),
+    )
+    with pytest.raises(OrderRejected, match="broker_instrument_mismatch"):
+        router.submit_entry(_intent(), _account())
