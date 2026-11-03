@@ -1,0 +1,19 @@
+# TEMPLATE ONLY. Entries must be blocked until every field is verified for the exact account model.
+# Do not fill this from generic firm marketing pages. Use the account agreement and official rulebook.
+
+[profile]
+firm_name = "UNSELECTED"
+account_model = "UNSELECTED"
+verified = false
+verified_on = ""
+source_url = ""
+bots_permitted = false
+platform = "UNCONFIRMED"
+timezone = "America/Chicago"
+allowed_symbols = []
+latest_entry_time = ""
+flatten_time = ""
+max_contracts = 0
+max_daily_loss_usd = 0.0
+max_total_drawdown_usd = 0.0
+no_overnight = true
