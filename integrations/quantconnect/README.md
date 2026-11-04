@@ -96,3 +96,14 @@ MNQ's mean absolute movement was about 45.0%, 45.4%, 46.0% and 46.4% higher than
 **Statistical caveat:** these first samples use overlapping windows. Adjacent 3-minute returns share two of their three minutes, so the reported sample counts are not independent observations and must not be used as independent sample sizes for significance testing. This is why the current probe adds non-overlapping windows and conditional continuation statistics. Rerun the updated `main.py` before interpreting the new continuation fields.
 
 No spread, bid/ask, tick-level liquidity, commissions, slippage, order fills or strategy P&L are included in this movement profile.
+
+
+## Non-overlapping continuation diagnostics (latest probe version)
+
+The latest `main.py` additionally forms exact, non-overlapping horizon windows for 3, 5, 10 and 15 minutes. A window is reset when the exact elapsed interval is skipped, so it does not bridge larger gaps or session breaks. For each horizon it compares the sign of consecutive completed windows and reports:
+
+- `<ROOT> <HORIZON>m nonoverlap pairs`: count of valid consecutive-window direction pairs.
+- `<ROOT> <HORIZON>m continuation after up pct`: among pairs where the preceding window was positive, percentage where the next window was also positive.
+- `<ROOT> <HORIZON>m continuation after down pct`: among pairs where the preceding window was negative, percentage where the next window was also negative.
+
+Use 50% as a descriptive no-directional-persistence reference, not as a formal significance threshold. The pairs are based on non-overlapping horizon returns, but adjacent pair observations still share one window; do not treat every pair as statistically independent. Any apparent persistence must be checked out of sample, by session and across separate regimes, then tested against spread, commissions, slippage and realistic order fills. These fields are diagnostics, not a trading signal.
