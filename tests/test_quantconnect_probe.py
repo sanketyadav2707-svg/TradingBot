@@ -148,20 +148,23 @@ def test_probe_updates_nonoverlap_state_for_each_horizon() -> None:
         node for node in algorithm.body
         if isinstance(node, ast.FunctionDef) and node.name == "on_data"
     )
-    horizon_loop = next(
+    horizon_loops = [
         node for node in ast.walk(on_data)
         if isinstance(node, ast.For)
         and isinstance(node.target, ast.Name)
         and node.target.id == "horizon"
         and isinstance(node.iter, ast.Attribute)
         and node.iter.attr == "HORIZONS_MINUTES"
-    )
+    ]
     assert any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "_update_nonoverlap"
-        for statement in horizon_loop.body
-        for node in ast.walk(statement)
+        any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_update_nonoverlap"
+            for statement in loop.body
+            for node in ast.walk(statement)
+        )
+        for loop in horizon_loops
     )
 
 
