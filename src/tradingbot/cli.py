@@ -10,6 +10,7 @@ from pathlib import Path
 
 from tradingbot.backtest.engine import BacktestConfig, BacktestEngine
 from tradingbot.compliance.rules import FirmComplianceGate, FirmRuleProfile
+from tradingbot.data.audit import audit_bars
 from tradingbot.data.csv_loader import load_bars
 from tradingbot.models import Instrument
 from tradingbot.risk.limits import RiskGuard, RiskLimits
@@ -46,6 +47,12 @@ def _build_parser() -> argparse.ArgumentParser:
     validate = sub.add_parser("validate-data", help="Validate a CSV file without trading")
     validate.add_argument("--csv", required=True, type=Path)
     validate.add_argument("--symbol")
+
+    audit = sub.add_parser("audit-data", help="Report OHLCV dataset coverage and time gaps")
+    audit.add_argument("--csv", required=True, type=Path)
+    audit.add_argument("--symbol")
+    audit.add_argument("--expected-interval-seconds", type=int)
+    audit.add_argument("--max-gap-examples", type=int, default=10)
 
     databento = sub.add_parser(
         "fetch-databento",
@@ -89,6 +96,17 @@ def main() -> None:
                 indent=2,
             )
         )
+        return
+
+    if args.command == "audit-data":
+        bars = load_bars(args.csv, expected_symbol=args.symbol)
+        report = audit_bars(
+            bars,
+            expected_interval_seconds=args.expected_interval_seconds,
+            max_gap_examples=args.max_gap_examples,
+        )
+        report["file"] = str(args.csv)
+        print(json.dumps(report, indent=2))
         return
 
     config_dir: Path = args.config_dir
