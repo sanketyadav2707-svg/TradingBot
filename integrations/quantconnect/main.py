@@ -79,6 +79,19 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                     }
                     for horizon in self.HORIZONS_MINUTES
                 },
+                "nonoverlap": {
+                    horizon: {
+                        "anchor_time": None,
+                        "anchor_close": None,
+                        "previous_return_bps": None,
+                        "pairs": 0,
+                        "after_up": 0,
+                        "after_up_continued": 0,
+                        "after_down": 0,
+                        "after_down_continued": 0,
+                    }
+                    for horizon in self.HORIZONS_MINUTES
+                },
             }
 
         self.set_runtime_statistic("Probe mode", "NO ORDERS")
@@ -139,6 +152,44 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                 if timestamp < cutoff:
                     del close_history[timestamp]
 
+            # Non-overlapping horizon windows: after each completed window,
+            # move the anchor forward by exactly one horizon. Reset on gaps
+            # rather than filling bars or bridging session breaks.
+            nonoverlap = stats["nonoverlap"][horizon]
+            anchor_time = nonoverlap["anchor_time"]
+            if anchor_time is None:
+                nonoverlap["anchor_time"] = current_time
+                nonoverlap["anchor_close"] = bar.close
+            else:
+                elapsed_seconds = (current_time - anchor_time).total_seconds()
+                target_seconds = horizon * 60
+                if elapsed_seconds == target_seconds:
+                    anchor_close = nonoverlap["anchor_close"]
+                    segment_return = (
+                        (bar.close - anchor_close) / abs(anchor_close) * 10_000
+                        if anchor_close != 0
+                        else 0.0
+                    )
+                    previous_return = nonoverlap["previous_return_bps"]
+                    if previous_return is not None and previous_return != 0:
+                        nonoverlap["pairs"] += 1
+                        if previous_return > 0:
+                            nonoverlap["after_up"] += 1
+                            if segment_return > 0:
+                                nonoverlap["after_up_continued"] += 1
+                        else:
+                            nonoverlap["after_down"] += 1
+                            if segment_return < 0:
+                                nonoverlap["after_down_continued"] += 1
+
+                    nonoverlap["previous_return_bps"] = segment_return
+                    nonoverlap["anchor_time"] = current_time
+                    nonoverlap["anchor_close"] = bar.close
+                elif elapsed_seconds > target_seconds:
+                    nonoverlap["anchor_time"] = current_time
+                    nonoverlap["anchor_close"] = bar.close
+                    nonoverlap["previous_return_bps"] = None
+
             stats["last_end_time"] = bar.end_time
 
     def on_end_of_algorithm(self) -> None:
@@ -190,6 +241,29 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                 )
                 self.set_runtime_statistic(
                     f"{prefix} positive pct", f"{positive_pct:.2f}"
+                )
+
+                nonoverlap = stats["nonoverlap"][horizon]
+                self.set_runtime_statistic(
+                    f"{prefix} nonoverlap pairs", nonoverlap["pairs"]
+                )
+                after_up = nonoverlap["after_up"]
+                after_down = nonoverlap["after_down"]
+                up_continuation = (
+                    100.0 * nonoverlap["after_up_continued"] / after_up
+                    if after_up else 0.0
+                )
+                down_continuation = (
+                    100.0 * nonoverlap["after_down_continued"] / after_down
+                    if after_down else 0.0
+                )
+                self.set_runtime_statistic(
+                    f"{prefix} continuation after up pct",
+                    f"{up_continuation:.2f}",
+                )
+                self.set_runtime_statistic(
+                    f"{prefix} continuation after down pct",
+                    f"{down_continuation:.2f}",
                 )
 
         self.set_runtime_statistic("Orders sent", 0)
