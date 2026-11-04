@@ -59,3 +59,12 @@ The user ran the cloud-only `MES_MNQ_DataProbe` on QuantConnect Free Plan with t
 - Orders sent: 0.
 
 This confirms that QuantConnect delivered historical minute bars for both continuous futures subscriptions over the tested window. The gaps are diagnostics only and include normal futures session closures/maintenance; they are not automatically missing-data defects. This result does not establish tick/quote availability, executable spread/slippage, strategy profitability, live data availability, or challenge readiness.
+
+
+## Short-horizon movement diagnostics added
+
+- Updated the QuantConnect historical probe to calculate exact timestamp-matched close-to-close movement summaries at 3, 5, 10 and 15 minutes for MES and MNQ.
+- Runtime statistics include sample count, average absolute movement in basis points, population standard deviation in basis points, and percentage of positive observations.
+- Missing timestamps and session breaks are skipped instead of forward-filled or bridged.
+- No raw prices are logged, plotted, persisted or exported; no orders are placed.
+- GitHub Actions: updated test suite passed on commit `29da9ebf9a4ccebd67d16c90cbb6075afa946746` (run 41876154863).
