@@ -10,6 +10,24 @@
   Source: https://ranaroussi.github.io/yfinance/reference/yfinance.price_history.html
 - A free broker practice account may be useful for platform testing, but the actual feed, API permission, exchange data entitlement and delayed/live status must be checked individually.
 
+## Free historical research candidate: QuantConnect
+
+QuantConnect's current public pricing page lists Futures data and unlimited backtesting in the Free Plan. Its Futures dataset documentation states that trailing history is one year at minute resolution, two months at second resolution, and one month at tick resolution; daily/hourly history is listed as all historical data. This is a useful zero-cost route for initial 1-minute futures research and backtests, subject to confirming the specific symbol, contract-chain, date coverage and bar fields in an actual project.
+
+Important limitation: the current Free Plan comparison does not include QuantConnect-hosted Futures Live Feed or QuantConnect Futures paper-trading deployment. The paper-trading row in the plan table is for Equities, Forex and Cryptocurrencies, not Futures. Therefore QuantConnect solves part of the historical research problem, not continuous real-time futures paper execution. Its Free Plan also has finite platform limits (including a 10,000-order-per-backtest limit and one backtest node), so "unlimited backtesting" should not be read as unlimited compute or unlimited orders.
+
+Official references:
+- https://www.quantconnect.com/pricing
+- https://www.quantconnect.com/docs/v2/cloud-platform/datasets/quantconnect/futures
+
+## Free simulator candidate: NinjaTrader
+
+NinjaTrader states that its simulator can be used without a time limit. Its free demo includes 14 days of live-streaming futures market data. After that, simulated trading can continue using delayed data, or a live feed/account can be used. Delayed data is not a substitute for contemporaneous fills when validating a 3–15 minute strategy. NinjaTrader's current pricing page also notes exchange, clearing and NFA fees apply to real trades.
+
+Official references:
+- https://ninjatrader.com/trading-platform/trading-simulator/
+- https://ninjatrader.com/pricing/
+
 ## Optional Databento historical importer
 
 The repository includes tradingbot fetch-databento for 1-minute historical futures OHLCV through the Historical API. It requests the continuous symbology form {ROOT}.v.0 with stype_in="continuous" and preserves returned instrument_id and contract symbol in extra CSV columns plus a JSON metadata sidecar. Continuous symbology maps a root to the current volume-ranked contract. That is a convenient research series, not a substitute for explicit contract-level roll and fill modelling.
@@ -53,3 +71,10 @@ Official references:
 - Separate training, validation and untouched out-of-sample periods.
 
 A 64-row synthetic fixture in data/sample/ exists only to verify code execution. It is not market data and cannot establish strategy performance.
+
+
+## Project verification status (4 November 2026)
+
+- Historical research: a promising free route exists through QuantConnect Free Plan minute futures history (documented one-year trailing window). It still needs an actual symbol/date/resolution verification and repeatable export/research workflow.
+- Continuous live futures paper data: not solved. QuantConnect Free Plan does not include Futures Live Feed or Futures paper deployment; NinjaTrader's free real-time demo is 14 days only.
+- Decision: continue development at ₹0, but do not state that continuous real-time futures paper validation or challenge readiness has been achieved.
