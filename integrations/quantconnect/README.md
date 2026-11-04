@@ -107,3 +107,20 @@ The latest `main.py` additionally forms exact, non-overlapping horizon windows f
 - `<ROOT> <HORIZON>m continuation after down pct`: among pairs where the preceding window was negative, percentage where the next window was also negative.
 
 Use 50% as a descriptive no-directional-persistence reference, not as a formal significance threshold. The pairs are based on non-overlapping horizon returns, but adjacent pair observations still share one window; do not treat every pair as statistically independent. Any apparent persistence must be checked out of sample, by session and across separate regimes, then tested against spread, commissions, slippage and realistic order fills. These fields are diagnostics, not a trading signal.
+
+
+## Correction and hardened continuation probe (5 November 2026)
+
+The first continuation run is **not valid for interpretation**. Its log shows that QuantConnect's custom runtime-statistics ceiling of 50 was exceeded, so later fields were ignored. Code inspection also found that the non-overlap update was executed only for the final horizon (15 minutes), because the horizon loop variable was reused after a loop. The displayed zero pair counts for 3/5/10 minutes therefore did not mean no continuation existed; those horizons were not being updated. Do not use any continuation values from that run.
+
+The probe has now been corrected:
+
+- Every 3/5/10/15-minute horizon maintains its own independent non-overlapping state on every bar.
+- Each horizon resets after any missing one-minute bar or continuous-contract mapping change.
+- Overlapping close-to-close movement history is also cleared after gaps/roll changes, so a matching endpoint cannot silently bridge a missing intermediate bar.
+- Runtime output is condensed to one profile per root/horizon to remain comfortably below the 50 custom-statistic limit. Each profile includes sample count, mean absolute move, standard deviation, positive percentage, non-overlap pair count, continuation-after-up and continuation-after-down.
+- The helper has direct unit tests for consecutive rising windows and gap resets, plus a structural test confirming each horizon is updated.
+
+Replace the QuantConnect cloud project's `main.py` with the latest repository version and rerun. Read the compact statistics named `MES 3m profile`, `MES 5m profile`, `MES 10m profile`, `MES 15m profile`, and corresponding MNQ profiles. Values are formatted as `n=...; abs=...bps; sd=...bps; up=...%; pairs=...; contUp=...%; contDn=...%`.
+
+The patch is committed, but its latest GitHub Actions run is still pending at the time of this note. Do not treat the update as test-verified until that run completes successfully.
