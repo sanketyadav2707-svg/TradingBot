@@ -37,6 +37,16 @@ These are candidates, not endorsements or proof of adequacy:
 
 CME public delayed quotes are not suitable for validating a 3–15 minute executable strategy. A free trial, one-time credit or limited sample is not a permanent free data solution.
 
+## Dataset audit command
+
+After syncing the repository, run from the VS Code integrated Terminal at the project root:
+
+\`\`\`bash
+python -m tradingbot audit-data --csv path/to/your_data.csv --symbol MES --expected-interval-seconds 60
+\`\`\`
+
+The command reports timestamp coverage, bar-interval distribution, large time jumps, zero-volume rows and price diagnostics. It does not decide whether a gap is a data error because futures sessions include overnight closures, maintenance breaks and holidays. Verify all reported jumps against the exchange calendar and the source's contract/session metadata.
+
 ## Pass/fail criteria
 
 ### Gate A: Historical research
