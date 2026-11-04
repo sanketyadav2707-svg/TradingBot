@@ -58,3 +58,14 @@ The probe uses 1-minute continuous-futures subscriptions, no fill-forward, exten
 ## Next step after the probe
 
 Use the same free QuantConnect cloud environment for initial futures strategy research and backtests, with costs, slippage, contract mapping and separate out-of-sample periods. Keep the local TradingBot risk/compliance implementation as the system-of-record for rules and safety. Do not claim continuous real-time paper validation or challenge readiness until those separate requirements have been demonstrated.
+
+
+## Observed MES/MNQ coverage run (4 November 2026)
+
+The user ran the cloud-only `MES_MNQ_DataProbe` on QuantConnect Free Plan with the default window 2025-11-04 through 2026-11-03. The visible Runtime Statistics confirmed:
+
+- MES: `DATA RECEIVED`; 267,325 one-minute bars; 238 active dates; 3 continuous-contract mapping changes; 229 time gaps greater than 90 seconds; 197 gaps greater than 30 minutes.
+- MNQ: `DATA RECEIVED`; 267,349 one-minute bars; 238 active dates; 3 continuous-contract mapping changes; 209 time gaps greater than 90 seconds; 197 gaps greater than 30 minutes.
+- Orders sent: 0.
+
+This confirms that QuantConnect delivered historical minute bars for both continuous futures subscriptions over the tested window. The gaps are diagnostics only and include normal futures session closures/maintenance; they are not automatically missing-data defects. This result does not establish tick/quote availability, executable spread/slippage, strategy profitability, live data availability, or challenge readiness.
