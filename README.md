@@ -74,6 +74,10 @@ No contract has been selected as the live target. Start with MES and MNQ side-by
 
 The execution layer is intentionally abstracted. Do not hardwire one firm's API or copy firm-specific limits into a strategy. See [Prop-Firm Policy Matrix](docs/PROP_FIRM_POLICY_MATRIX.md). MFFU and FundedNext Futures are the two strongest current policy candidates to investigate. MFFU's published rules explicitly allow personalised automation (subject to CME rules in live accounts); FundedNext explicitly permits bots on challenge and funded accounts through a Tradovate-connected integration. Neither has yet had its exact API route and India eligibility confirmed in writing. See the full [Prop-Firm Policy Matrix](docs/PROP_FIRM_POLICY_MATRIX.md).
 
+## Zero-budget feasibility gate
+
+Before strategy work expands, follow [Free Data Feasibility Gate](docs/FREE_DATA_FEASIBILITY_GATE.md). QuantConnect currently lists futures data and unlimited cloud backtesting in its free plan, with minute history documented as one trailing year. Its free plan does not include the hosted futures live feed or futures paper-trading deployment. NinjaTrader offers a no-time-limit simulator, but its live-streaming demo is limited to 14 days; after that, its simulator can continue with delayed data or a paid/funded live feed. Do not confuse an unlimited simulator with unlimited real-time market data.
+
 ## Data
 
 CSV is the first supported source. An optional Databento historical 1-minute importer is included for research when an account and data credits are available. It requires a user-supplied local `DATABENTO_API_KEY` and optional dependencies (`python -m pip install -e ".[marketdata]"`). The credit currently advertised to new accounts is a one-time allowance, not a permanently free feed. CME website quotes are at least 10 minutes delayed and reference-only. See [Data Sources](docs/DATA_SOURCES.md).
