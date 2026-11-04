@@ -44,6 +44,11 @@ def test_quantconnect_probe_reports_aggregate_metrics_not_raw_prices() -> None:
     assert "avg abs move bps" in source
     assert "move stdev bps" in source
     assert "positive pct" in source
+    assert "nonoverlap pairs" in source
+    assert "continuation after up pct" in source
+    assert "continuation after down pct" in source
+    assert 'elapsed_seconds == target_seconds' in source
+    assert 'elapsed_seconds > target_seconds' in source
     assert "self.log(" not in source
     assert "self.plot(" not in source
 
