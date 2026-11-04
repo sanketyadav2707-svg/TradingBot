@@ -30,8 +30,8 @@ class FuturesDataCoverageProbe(QCAlgorithm):
         if unknown:
             raise ValueError(f"Unsupported root(s): {', '.join(unknown)}")
 
-        start_text = self.get_parameter("start") or "2026-01-01"
-        end_text = self.get_parameter("end") or "2026-10-31"
+        start_text = self.get_parameter("start") or "2025-11-04"
+        end_text = self.get_parameter("end") or "2026-11-03"
         start = datetime.strptime(start_text, "%Y-%m-%d")
         end = datetime.strptime(end_text, "%Y-%m-%d")
         if start >= end:
@@ -61,6 +61,8 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                 "zero_volume_bars": 0,
                 "gaps_over_90_seconds": 0,
                 "gaps_over_30_minutes": 0,
+                "mapping_changes": 0,
+                "last_mapped_symbol": None,
                 "active_dates": set(),
                 "last_end_time": None,
             }
@@ -76,6 +78,14 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                 continue
 
             stats = self._stats[root]
+            mapped_symbol = future.mapped
+            if mapped_symbol is not None:
+                mapped_text = str(mapped_symbol)
+                previous_mapping = stats["last_mapped_symbol"]
+                if previous_mapping is not None and mapped_text != previous_mapping:
+                    stats["mapping_changes"] += 1
+                stats["last_mapped_symbol"] = mapped_text
+
             stats["bars"] += 1
             stats["active_dates"].add(bar.end_time.date())
 
@@ -106,6 +116,9 @@ class FuturesDataCoverageProbe(QCAlgorithm):
             )
             self.set_runtime_statistic(
                 f"{root} gaps >30 min", stats["gaps_over_30_minutes"]
+            )
+            self.set_runtime_statistic(
+                f"{root} contract mapping changes", stats["mapping_changes"]
             )
             self.set_runtime_statistic(
                 f"{root} feed result",
