@@ -100,3 +100,8 @@ CSV is the first supported source. An optional Databento historical 1-minute imp
 ## Disclaimer
 
 Futures are leveraged and can cause losses greater than expected. Simulated results do not establish future performance and may materially differ from real execution. Prop-firm programs may provide simulated accounts, change their rules, deny payouts, or end access under their agreements. Obtain qualified advice on Indian FEMA, tax, and cross-border payment treatment before paying for or participating in an overseas program.
+
+
+## Verified historical futures data
+
+On 4 November 2026, the QuantConnect Free Plan cloud coverage probe successfully received 1-minute continuous-futures bars for both MES and MNQ over 2025-11-04 to 2026-11-03. It counted 267,325 MES bars and 267,349 MNQ bars across 238 active dates each, with 3 contract-mapping changes per root and zero orders. This verifies a usable historical minute-data research path, not live data, spread/slippage quality, or profitable strategy performance. See [QuantConnect integration notes](integrations/quantconnect/README.md).
