@@ -167,6 +167,6 @@ def test_probe_updates_nonoverlap_state_for_each_horizon() -> None:
 
 def test_probe_compacts_runtime_statistics_and_resets_gaps() -> None:
     source = _probe_source()
-    assert "m} profile" in source
+    assert 'f"{root} {horizon}m profile"' in source
     assert 'if not is_contiguous:' in source
     assert "close_history.clear()" in source
