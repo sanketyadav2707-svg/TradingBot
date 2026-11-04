@@ -40,3 +40,11 @@ Outstanding:
 - Reports row counts, symbols, UTC coverage, inferred/declared bar interval, interval distribution, large time jumps, zero-volume rows and negative closes.
 - Large time jumps are explicitly diagnostic only; the tool does not call normal exchange closures missing data and does not delete or repair rows.
 - Added tests for gap reporting, explicit intervals, single-row inputs, invalid settings and historically valid negative futures prices.
+
+
+## QuantConnect cloud research path added
+
+- Added a no-trade MES/MNQ QuantConnect probe using continuous futures subscriptions and 1-minute resolution.
+- It reports aggregate bar counts, active dates, zero-volume bars, gap counts and mapping changes, without recording raw OHLCV values or placing orders.
+- Added setup/interpretation instructions. QuantConnect Free Plan currently lists futures data, minute resolution and unlimited backtesting; documented minute history is one trailing year. The Free Plan does not include hosted Futures Live Feed.
+- The GitHub Actions checks for the probe are pending at the time of this entry; do not report them as passed until verified.
