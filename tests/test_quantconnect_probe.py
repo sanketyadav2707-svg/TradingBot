@@ -41,9 +41,9 @@ def test_quantconnect_probe_reports_aggregate_metrics_not_raw_prices() -> None:
     source = _probe_source()
     tree = ast.parse(source)
     assert "HORIZONS_MINUTES = (3, 5, 10, 15)" in source
-    assert "avg abs move bps" in source
-    assert "move stdev bps" in source
-    assert "positive pct" in source
+    assert "abs={average_abs_bps:.3f}bps" in source
+    assert "sd={stddev_bps:.3f}bps" in source
+    assert "up={positive_pct:.2f}%" in source
     assert "nonoverlap pairs" in source
     assert "continuation after up pct" in source
     assert "continuation after down pct" in source
