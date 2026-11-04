@@ -32,3 +32,11 @@ Outstanding:
 - Rechecked QuantConnect's current pricing and futures documentation: free plan lists futures data and unlimited backtesting; minute history is documented as one trailing year. The free plan does not include QuantConnect-hosted futures live data or futures paper deployment.
 - Rechecked NinjaTrader's current simulator documentation: simulated trading has no time limit, while the free live-streaming demo is 14 days. Delayed data remains available after the live-data trial, but it is not suitable for realistic validation of a 3–15 minute strategy.
 - The historical-data gate and continuous real-time paper-data gate remain separate. No claim of challenge readiness is made.
+
+
+## Dataset audit tool added
+
+- Added `tradingbot audit-data` and `tradingbot.data.audit.audit_bars`.
+- Reports row counts, symbols, UTC coverage, inferred/declared bar interval, interval distribution, large time jumps, zero-volume rows and negative closes.
+- Large time jumps are explicitly diagnostic only; the tool does not call normal exchange closures missing data and does not delete or repair rows.
+- Added tests for gap reporting, explicit intervals, single-row inputs, invalid settings and historically valid negative futures prices.
