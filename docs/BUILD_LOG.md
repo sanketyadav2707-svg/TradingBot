@@ -48,3 +48,14 @@ Outstanding:
 - It reports aggregate bar counts, active dates, zero-volume bars, gap counts and mapping changes, without recording raw OHLCV values or placing orders.
 - Added setup/interpretation instructions. QuantConnect Free Plan currently lists futures data, minute resolution and unlimited backtesting; documented minute history is one trailing year. The Free Plan does not include hosted Futures Live Feed.
 - The GitHub Actions checks for the probe are pending at the time of this entry; do not report them as passed until verified.
+
+
+## Observed MES/MNQ coverage run (4 November 2026)
+
+The user ran the cloud-only `MES_MNQ_DataProbe` on QuantConnect Free Plan with the default window 2025-11-04 through 2026-11-03. The visible Runtime Statistics confirmed:
+
+- MES: `DATA RECEIVED`; 267,325 one-minute bars; 238 active dates; 3 continuous-contract mapping changes; 229 time gaps greater than 90 seconds; 197 gaps greater than 30 minutes.
+- MNQ: `DATA RECEIVED`; 267,349 one-minute bars; 238 active dates; 3 continuous-contract mapping changes; 209 time gaps greater than 90 seconds; 197 gaps greater than 30 minutes.
+- Orders sent: 0.
+
+This confirms that QuantConnect delivered historical minute bars for both continuous futures subscriptions over the tested window. The gaps are diagnostics only and include normal futures session closures/maintenance; they are not automatically missing-data defects. This result does not establish tick/quote availability, executable spread/slippage, strategy profitability, live data availability, or challenge readiness.
