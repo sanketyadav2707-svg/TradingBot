@@ -8,6 +8,7 @@ A personal, research-first futures trading system being developed for eventual p
 
 - Python 3.12+ project scaffold
 - CSV historical-data input with strict timestamp/OHLC validation
+- Dataset audit command for interval distribution, large time jumps, zero-volume bars and price-range diagnostics
 - Configurable micro-futures instrument metadata
 - Conservative bar-based backtester
 - Risk guard with daily-loss, drawdown, position-size, and trade-count limits
@@ -34,6 +35,8 @@ python --version
 python -m pip install -e ".[dev]"  # tests and base tooling
 pytest
 python -m tradingbot --help
+python -m tradingbot validate-data --csv data/sample/MES_5m_sample.csv --symbol MES
+python -m tradingbot audit-data --csv data/sample/MES_5m_sample.csv --symbol MES --expected-interval-seconds 300
 python -m tradingbot backtest --csv data/sample/MES_5m_sample.csv --symbol MES
 ```
 
@@ -58,7 +61,7 @@ data/sample/            Tiny synthetic fixture only; not market data
 docs/                   Research, firm rules, data and safety notes
 src/tradingbot/
   backtest/              Bar-based research simulator
-  data/                  CSV ingestion and validation
+  data/                  CSV ingestion, validation and dataset diagnostics
   paper/                 Local simulated broker
   risk/                  Pre-trade and account risk checks
   strategy/              Research strategies
