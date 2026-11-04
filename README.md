@@ -105,3 +105,6 @@ Futures are leveraged and can cause losses greater than expected. Simulated resu
 ## Verified historical futures data
 
 On 4 November 2026, the QuantConnect Free Plan cloud coverage probe successfully received 1-minute continuous-futures bars for both MES and MNQ over 2025-11-04 to 2026-11-03. It counted 267,325 MES bars and 267,349 MNQ bars across 238 active dates each, with 3 contract-mapping changes per root and zero orders. This verifies a usable historical minute-data research path, not live data, spread/slippage quality, or profitable strategy performance. See [QuantConnect integration notes](integrations/quantconnect/README.md).
+
+
+The QuantConnect probe now also reports exact 3-, 5-, 10- and 15-minute close-to-close movement summaries for MES/MNQ (sample count, average absolute move, standard deviation and positive-observation percentage). See [integration instructions](integrations/quantconnect/README.md). These are descriptive research statistics, not a strategy or profit estimate.
