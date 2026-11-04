@@ -183,7 +183,7 @@ class FuturesDataCoverageProbe(QCAlgorithm):
             # close-to-close returns across that mapping boundary.
             current_time = bar.end_time
             close_history = stats["close_history"]
-            if mapping_changed:
+            if not is_contiguous:
                 close_history.clear()
             for horizon in self.HORIZONS_MINUTES:
                 previous_time = current_time - timedelta(minutes=horizon)
