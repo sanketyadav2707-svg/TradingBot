@@ -15,6 +15,54 @@ from datetime import datetime, timedelta
 from math import sqrt
 
 
+def _update_nonoverlap(
+    state: dict,
+    horizon_minutes: int,
+    current_time: datetime,
+    close: float,
+    is_contiguous: bool,
+) -> None:
+    """Advance one horizon's non-overlapping windows without bridging gaps."""
+    anchor_time = state["anchor_time"]
+    if anchor_time is None or not is_contiguous:
+        state["anchor_time"] = current_time
+        state["anchor_close"] = close
+        state["previous_return_bps"] = None
+        return
+
+    elapsed_seconds = (current_time - anchor_time).total_seconds()
+    target_seconds = horizon_minutes * 60
+    if elapsed_seconds < target_seconds:
+        return
+    if elapsed_seconds > target_seconds:
+        state["anchor_time"] = current_time
+        state["anchor_close"] = close
+        state["previous_return_bps"] = None
+        return
+
+    anchor_close = state["anchor_close"]
+    if anchor_close is None or anchor_close == 0:
+        segment_return = 0.0
+    else:
+        segment_return = (close - anchor_close) / abs(anchor_close) * 10_000
+
+    previous_return = state["previous_return_bps"]
+    if previous_return is not None and previous_return != 0:
+        state["pairs"] += 1
+        if previous_return > 0:
+            state["after_up"] += 1
+            if segment_return > 0:
+                state["after_up_continued"] += 1
+        else:
+            state["after_down"] += 1
+            if segment_return < 0:
+                state["after_down_continued"] += 1
+
+    state["previous_return_bps"] = segment_return
+    state["anchor_time"] = current_time
+    state["anchor_close"] = close
+
+
 class FuturesDataCoverageProbe(QCAlgorithm):
     HORIZONS_MINUTES = (3, 5, 10, 15)
 
@@ -106,11 +154,13 @@ class FuturesDataCoverageProbe(QCAlgorithm):
 
             stats = self._stats[root]
             mapped_symbol = future.mapped
+            mapping_changed = False
             if mapped_symbol is not None:
                 mapped_text = str(mapped_symbol)
                 previous_mapping = stats["last_mapped_symbol"]
                 if previous_mapping is not None and mapped_text != previous_mapping:
                     stats["mapping_changes"] += 1
+                    mapping_changed = True
                 stats["last_mapped_symbol"] = mapped_text
 
             stats["bars"] += 1
@@ -120,17 +170,21 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                 stats["zero_volume_bars"] += 1
 
             previous = stats["last_end_time"]
+            is_contiguous = False
             if previous is not None:
                 gap_seconds = (bar.end_time - previous).total_seconds()
                 if gap_seconds > 90:
                     stats["gaps_over_90_seconds"] += 1
                 if gap_seconds > 1_800:
                     stats["gaps_over_30_minutes"] += 1
+                is_contiguous = gap_seconds == 60 and not mapping_changed
 
-            # Measure exact close-to-close moves over 3/5/10/15 minutes.
-            # Exact timestamp matching skips missing minutes and session breaks.
+            # A roll changes the underlying raw-price contract. Do not form
+            # close-to-close returns across that mapping boundary.
             current_time = bar.end_time
             close_history = stats["close_history"]
+            if mapping_changed:
+                close_history.clear()
             for horizon in self.HORIZONS_MINUTES:
                 previous_time = current_time - timedelta(minutes=horizon)
                 previous_close = close_history.get(previous_time)
@@ -152,43 +206,16 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                 if timestamp < cutoff:
                     del close_history[timestamp]
 
-            # Non-overlapping horizon windows: after each completed window,
-            # move the anchor forward by exactly one horizon. Reset on gaps
-            # rather than filling bars or bridging session breaks.
-            nonoverlap = stats["nonoverlap"][horizon]
-            anchor_time = nonoverlap["anchor_time"]
-            if anchor_time is None:
-                nonoverlap["anchor_time"] = current_time
-                nonoverlap["anchor_close"] = bar.close
-            else:
-                elapsed_seconds = (current_time - anchor_time).total_seconds()
-                target_seconds = horizon * 60
-                if elapsed_seconds == target_seconds:
-                    anchor_close = nonoverlap["anchor_close"]
-                    segment_return = (
-                        (bar.close - anchor_close) / abs(anchor_close) * 10_000
-                        if anchor_close != 0
-                        else 0.0
-                    )
-                    previous_return = nonoverlap["previous_return_bps"]
-                    if previous_return is not None and previous_return != 0:
-                        nonoverlap["pairs"] += 1
-                        if previous_return > 0:
-                            nonoverlap["after_up"] += 1
-                            if segment_return > 0:
-                                nonoverlap["after_up_continued"] += 1
-                        else:
-                            nonoverlap["after_down"] += 1
-                            if segment_return < 0:
-                                nonoverlap["after_down_continued"] += 1
-
-                    nonoverlap["previous_return_bps"] = segment_return
-                    nonoverlap["anchor_time"] = current_time
-                    nonoverlap["anchor_close"] = bar.close
-                elif elapsed_seconds > target_seconds:
-                    nonoverlap["anchor_time"] = current_time
-                    nonoverlap["anchor_close"] = bar.close
-                    nonoverlap["previous_return_bps"] = None
+            # Each horizon maintains its own non-overlapping sequence.
+            # Reset after any missing minute or contract-roll mapping change.
+            for horizon in self.HORIZONS_MINUTES:
+                _update_nonoverlap(
+                    stats["nonoverlap"][horizon],
+                    horizon,
+                    current_time,
+                    bar.close,
+                    is_contiguous,
+                )
 
             stats["last_end_time"] = bar.end_time
 
@@ -215,9 +242,10 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                 "DATA RECEIVED" if stats["bars"] else "NO BARS RECEIVED",
             )
 
+            # Keep below QuantConnect's 50 custom-runtime-statistic limit.
+            # One compact summary per root/horizon preserves every metric.
             for horizon, result in stats["horizon_returns"].items():
                 samples = result["samples"]
-                prefix = f"{root} {horizon}m"
                 if samples:
                     mean_bps = result["sum_bps"] / samples
                     variance = max(
@@ -232,21 +260,7 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                     average_abs_bps = 0.0
                     positive_pct = 0.0
 
-                self.set_runtime_statistic(f"{prefix} samples", samples)
-                self.set_runtime_statistic(
-                    f"{prefix} avg abs move bps", f"{average_abs_bps:.3f}"
-                )
-                self.set_runtime_statistic(
-                    f"{prefix} move stdev bps", f"{stddev_bps:.3f}"
-                )
-                self.set_runtime_statistic(
-                    f"{prefix} positive pct", f"{positive_pct:.2f}"
-                )
-
                 nonoverlap = stats["nonoverlap"][horizon]
-                self.set_runtime_statistic(
-                    f"{prefix} nonoverlap pairs", nonoverlap["pairs"]
-                )
                 after_up = nonoverlap["after_up"]
                 after_down = nonoverlap["after_down"]
                 up_continuation = (
@@ -257,13 +271,16 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                     100.0 * nonoverlap["after_down_continued"] / after_down
                     if after_down else 0.0
                 )
-                self.set_runtime_statistic(
-                    f"{prefix} continuation after up pct",
-                    f"{up_continuation:.2f}",
+                summary = (
+                    f"n={samples}; abs={average_abs_bps:.3f}bps; "
+                    f"sd={stddev_bps:.3f}bps; up={positive_pct:.2f}%; "
+                    f"pairs={nonoverlap['pairs']}; "
+                    f"contUp={up_continuation:.2f}%; "
+                    f"contDn={down_continuation:.2f}%"
                 )
                 self.set_runtime_statistic(
-                    f"{prefix} continuation after down pct",
-                    f"{down_continuation:.2f}",
+                    f"{root} {horizon}m profile",
+                    summary,
                 )
 
         self.set_runtime_statistic("Orders sent", 0)
