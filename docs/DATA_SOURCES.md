@@ -78,3 +78,10 @@ A 64-row synthetic fixture in data/sample/ exists only to verify code execution.
 - Historical research: a promising free route exists through QuantConnect Free Plan minute futures history (documented one-year trailing window). It still needs an actual symbol/date/resolution verification and repeatable export/research workflow.
 - Continuous live futures paper data: not solved. QuantConnect Free Plan does not include Futures Live Feed or Futures paper deployment; NinjaTrader's free real-time demo is 14 days only.
 - Decision: continue development at ₹0, but do not state that continuous real-time futures paper validation or challenge readiness has been achieved.
+
+
+## QuantConnect cloud research probe
+
+The repository includes `integrations/quantconnect/main.py`, a no-order MES/MNQ coverage probe. It runs in QuantConnect's cloud Python project and reports counts, active dates, zero-volume bars, large time jumps and continuous-contract mapping changes. It does not log or export OHLCV prices. Follow `integrations/quantconnect/README.md` for setup.
+
+Current verified plan boundary (4 November 2026): QuantConnect's Free Plan lists Futures data, minute resolution and unlimited backtesting; documented Futures minute history is one trailing year. The Free Plan does not include QuantConnect-hosted Futures Live Feed. Therefore use this for historical backtesting/research, not continuous real-time futures paper trading.
