@@ -81,6 +81,10 @@ The execution layer is intentionally abstracted. Do not hardwire one firm's API 
 
 Before strategy work expands, follow [Free Data Feasibility Gate](docs/FREE_DATA_FEASIBILITY_GATE.md). QuantConnect currently lists futures data and unlimited cloud backtesting in its free plan, with minute history documented as one trailing year. Its free plan does not include the hosted futures live feed or futures paper-trading deployment. NinjaTrader offers a no-time-limit simulator, but its live-streaming demo is limited to 14 days; after that, its simulator can continue with delayed data or a paid/funded live feed. Do not confuse an unlimited simulator with unlimited real-time market data.
 
+## QuantConnect free-cloud research
+
+A no-trade MES/MNQ historical futures coverage probe is available in [integrations/quantconnect](integrations/quantconnect/README.md). QuantConnect's Free Plan currently lists Futures data, minute resolution and unlimited backtesting; documented minute history is one trailing year. Its hosted Futures Live Feed is not included in the Free Plan. This is a cloud-only research route, not a raw-data export or a continuous live-paper feed.
+
 ## Data
 
 CSV is the first supported source. An optional Databento historical 1-minute importer is included for research when an account and data credits are available. It requires a user-supplied local `DATABENTO_API_KEY` and optional dependencies (`python -m pip install -e ".[marketdata]"`). The credit currently advertised to new accounts is a one-time allowance, not a permanently free feed. CME website quotes are at least 10 minutes delayed and reference-only. See [Data Sources](docs/DATA_SOURCES.md).
