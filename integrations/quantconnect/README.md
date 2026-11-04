@@ -78,3 +78,21 @@ The current `main.py` version also calculates exact close-to-close historical mo
 To run this update, replace the QuantConnect cloud project's `main.py` with the current version in this repository and rerun the backtest. Look for runtime-statistic keys such as `MES 3m samples`, `MES 3m avg abs move bps`, `MES 3m move stdev bps`, and equivalent MES/MNQ values for 5m, 10m and 15m.
 
 These are descriptive market-movement statistics, not a strategy, expected profit, or executable spread/slippage estimate.
+
+
+## First movement-profile result (original overlapping windows, 4 November 2026)
+
+The user's first completed 1-minute MES/MNQ probe reported these descriptive statistics:
+
+| Horizon | MES mean absolute move (bps) | MES positive observations | MNQ mean absolute move (bps) | MNQ positive observations |
+|---:|---:|---:|---:|---:|
+| 3 min | 2.664 | 47.01% | 3.864 | 49.64% |
+| 5 min | 3.446 | 47.79% | 5.012 | 49.87% |
+| 10 min | 4.865 | 48.76% | 7.102 | 50.14% |
+| 15 min | 5.961 | 49.29% | 8.729 | 50.32% |
+
+MNQ's mean absolute movement was about 45.0%, 45.4%, 46.0% and 46.4% higher than MES at 3, 5, 10 and 15 minutes respectively. That shows a larger historical movement scale, not better tradability or higher net profitability. The positive-observation rates were close to 50%; they do not show a reliable unconditional directional edge.
+
+**Statistical caveat:** these first samples use overlapping windows. Adjacent 3-minute returns share two of their three minutes, so the reported sample counts are not independent observations and must not be used as independent sample sizes for significance testing. This is why the current probe adds non-overlapping windows and conditional continuation statistics. Rerun the updated `main.py` before interpreting the new continuation fields.
+
+No spread, bid/ask, tick-level liquidity, commissions, slippage, order fills or strategy P&L are included in this movement profile.
