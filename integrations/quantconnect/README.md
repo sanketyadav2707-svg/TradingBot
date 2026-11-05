@@ -184,7 +184,7 @@ The current probe uses 46 custom runtime-statistic fields (including initializat
 
 ### Next run instructions
 
-Replace the QuantConnect cloud project's `main.py` with the newest file from this repository and rerun once. In Runtime Statistics, read keys beginning `V2 MES`, `V2 MNQ`, and `SESSION`. In Logs, capture complete lines beginning `PROFILE|` and `SESSION|`. Do not combine statistics from different backtest tabs or runs.
+Replace the QuantConnect cloud project's `main.py` with the newest file from this repository and rerun once. In Runtime Statistics, read keys beginning `V2 MES`, `V2 MNQ`, and `SESSION`. Do not rely on Logs for market-derived metrics. In the backtest Overview tab, use Download Results to retrieve the JSON containing runtime statistics; do not export raw dataset rows. Do not combine statistics from different backtest tabs or runs.
 
 These are descriptive historical movement/persistence metrics, not strategy PnL, spread, slippage or trade-fill evidence.
 
@@ -212,3 +212,10 @@ Official time-model references:
 ## Next research action
 
 Rerun the latest code after syncing the QuantConnect cloud `main.py` from the repository. Capture the eight V2 root/horizon profile lines and all SESSION lines from Logs. The latest code explicitly classifies the minute interval start, uses Chicago time, resets windows across session/gap/roll boundaries, and has passing boundary tests. Do not select a trading strategy or market from the preliminary session profile alone.
+
+
+## Runtime-statistics handling (5 November 2026)
+
+The probe no longer writes market-derived profile/session summaries to the QuantConnect debug log. It exposes all aggregate outputs through custom Runtime Statistics only. To inspect complete values without the UI's narrow banner truncation, use the backtest results Overview tab and its **Download Results** action; the JSON contains runtime statistics. Do not export or request raw OHLCV data. QuantConnect documents that the Results page includes Runtime Statistics and supports downloading results, and cautions against logging dataset information.
+
+Official docs: https://www.quantconnect.com/docs/v2/cloud-platform/backtesting/results and https://www.quantconnect.com/docs/v2/cloud-platform/projects/debugging
