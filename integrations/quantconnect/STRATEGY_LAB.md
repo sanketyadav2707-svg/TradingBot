@@ -81,3 +81,8 @@ A result is **not** a completed strategy backtest, profit factor, equity curve, 
 ## Entry cutoff
 
 No new signal is accepted at or after 14:15 CT. This ensures the longest 15-minute forward outcome can finish by 14:30 CT, before the cash-equity session close. The rule is tested locally in `tests/test_strategy_lab.py`.
+
+
+## Results and first screened candidate
+
+The first uploaded run is recorded in `docs/STRATEGY_SCREEN_2026-11-05.md`. It nominates MNQ ORB15 at 15m as the only candidate positive under all three slippage assumptions. Subsequent code changes after that run must be rerun before treating the result as repeatable. The updated algorithm now uses mapped raw-contract bars and inclusive one-tick thresholds.
