@@ -345,7 +345,6 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                     f"V2 {root} {horizon}m profile",
                     summary,
                 )
-                self.log(f"PROFILE|{root}|{horizon}m|{summary}")
 
             for bucket in self.SESSION_BUCKETS:
                 for horizon in self.SESSION_HORIZONS_MINUTES:
@@ -364,9 +363,6 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                     self.set_runtime_statistic(
                         f"SESSION {root} {bucket} {horizon}m",
                         session_summary,
-                    )
-                    self.log(
-                        f"SESSION|{root}|{bucket}|{horizon}m|{session_summary}"
                     )
 
         self.set_runtime_statistic("Orders sent", 0)
