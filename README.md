@@ -139,3 +139,8 @@ The user must still rerun the corrected `main.py` in QuantConnect Cloud. The pre
 ## Strategy research lab
 
 The next research phase is implemented in [QuantConnect MES/MNQ Strategy Signal Lab](integrations/quantconnect/STRATEGY_LAB.md). It compares ORB15, VWAP pullback and compression breakout with next-bar-open outcome studies, 3/5/10/15-minute horizons, explicit reference commissions and 0/1/2-tick-per-side slippage stress. It sends no orders and is not a full P&L/backtest or proof of profitability.
+
+
+## First strategy screen results (5 November 2026)
+
+The first QuantConnect strategy signal screen is documented in [docs/STRATEGY_SCREEN_2026-11-05.md](docs/STRATEGY_SCREEN_2026-11-05.md). MNQ ORB15 at a 15-minute forward exit is the only candidate positive under the screen's 0/1/2-tick-per-side scenarios. This is a limited research signal, not a validated profitable strategy or full P&L backtest. The 90-day organization holdout is preserved.
