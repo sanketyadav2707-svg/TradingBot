@@ -188,3 +188,14 @@ Official docs: https://www.quantconnect.com/docs/v2/cloud-platform/backtesting/r
 - Costs: $1.14 round-turn IB reference commission plus 0/1/2 tick adverse slippage per side. Not an exact prop-firm fee schedule and no spread/order-book model.
 - Added 14:15 CT latest entry cutoff so 15-minute outcomes complete by 14:30 CT.
 - Tests pass on commit c75cbe1; the latest entry-cutoff patch has CI in progress at the time of this note.
+
+
+## First strategy screen JSON analysed (5 November 2026)
+
+- Added detailed results and limitations: `docs/STRATEGY_SCREEN_2026-11-05.md`.
+- QuantConnect run `Pensive Magenta Camel` completed without runtime error, with 268,285 MES and 268,309 MNQ minute bars and zero orders (expected for no-order screen).
+- The JSON's out-of-sample config reports 90 days and a max backtest end of 7 August 2026. This matches QuantConnect's organisation-level holdout behaviour; keep the 90-day period reserved for final validation.
+- Only MNQ ORB15 at 15-minute horizon remained positive across 0/1/2-tick-per-side slippage assumptions: +0.889 / +0.702 / +0.514 bps net mean, n=197. This is screening evidence only.
+- MES ORB15, both VWAP variants and both compression variants were negative after zero-tick fees. MNQ ORB15 10m was near zero at one tick and negative at two ticks.
+- After this JSON, updated code to use mapped raw contract bars and inclusive exactly-one-tick breakout comparisons. Tests pass (53 tests) on commit `2e36f512f63a91f3c7cefae2de33394855889b54`, CI run 42016061030.
+- Next step: rerun updated `strategy_lab.py` once, download Results JSON, then freeze MNQ ORB15-15m for deeper chronological and execution-risk validation if the corrected run is consistent.
