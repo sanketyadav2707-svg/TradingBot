@@ -18,12 +18,14 @@ from math import sqrt
 def _session_bucket(end_time: datetime) -> str:
     """Classify a CME equity-index futures bar by Chicago exchange time."""
     local_time = end_time.time()
-    if time(8, 30) <= local_time < time(9, 30):
+    if time(8, 30) <= local_time < time(9, 0):
         return "RTH_OPEN"
-    if time(9, 30) <= local_time < time(14, 30):
+    if time(9, 0) <= local_time < time(14, 30):
         return "RTH_CORE"
     if time(14, 30) <= local_time < time(15, 0):
         return "RTH_CLOSE"
+    if time(15, 0) <= local_time < time(16, 0):
+        return "FUTURES_LATE_RTH"
     return "GLOBEX_OTHER"
 
 
@@ -86,7 +88,13 @@ def _update_nonoverlap(
 class FuturesDataCoverageProbe(QCAlgorithm):
     HORIZONS_MINUTES = (3, 5, 10, 15)
     SESSION_HORIZONS_MINUTES = (5, 15)
-    SESSION_BUCKETS = ("RTH_OPEN", "RTH_CORE", "RTH_CLOSE", "GLOBEX_OTHER")
+    SESSION_BUCKETS = (
+        "RTH_OPEN",
+        "RTH_CORE",
+        "RTH_CLOSE",
+        "FUTURES_LATE_RTH",
+        "GLOBEX_OTHER",
+    )
 
     ROOTS = {
         "MES": Futures.Indices.MICRO_SP_500_E_MINI,
@@ -110,6 +118,9 @@ class FuturesDataCoverageProbe(QCAlgorithm):
         if start >= end:
             raise ValueError("The start parameter must be earlier than the end parameter")
 
+        # MES/MNQ futures are timestamped in the America/Chicago exchange zone.
+        # Set this explicitly so all algorithm-time diagnostics are unambiguous.
+        self.set_time_zone(TimeZones.CHICAGO)
         self.set_start_date(start.year, start.month, start.day)
         self.set_end_date(end.year, end.month, end.day)
         self.set_cash(100_000)
