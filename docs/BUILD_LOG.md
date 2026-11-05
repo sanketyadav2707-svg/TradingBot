@@ -220,3 +220,7 @@ Official docs: https://www.quantconnect.com/docs/v2/cloud-platform/backtesting/r
 ## Event-simulator result-formatting check (5 November 2026)
 
 A source review caught a formatting defect in the first GitHub upload of the event simulator: currency runtime-statistic f-strings contained escaped opening braces and would have displayed literal placeholders. The strings were corrected in commit `a364f3b6432603b7297d27efbc49bfd05624a2b3`. A regression test was added and corrected in commit `8e5723de16ef27227879e9ddcb4e4eb9d7ccf80e`. The focused local test file now passes 11 tests. Do not use the earlier simulator revision; sync the latest main branch before copying it into QuantConnect.
+
+## RTH-only daily risk series correction (5 November 2026)
+
+A follow-up review found that the first simulator draft could count overnight Globex-only calendar dates as zero-PnL daily observations, despite the signal operating only in the US cash session. Daily PnL observations are now created only for dates with received MNQ bars from 08:30–15:00 CT. The five-observation block bootstrap therefore uses RTH session calendar dates, with no-trade RTH dates retained as zero. The correction is in commit `be812bb025c68ef03da607cc4ccb967c0e9541a1`; the regression test is in `c593a497eba7a1b51663f87d8b2cf57232065395`. The latest focused local suite passed 12 tests.
