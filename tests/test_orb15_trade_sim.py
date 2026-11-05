@@ -220,3 +220,9 @@ def test_virtual_trade_enters_next_open_and_exits_on_exact_15m_close(monkeypatch
     assert trade["mae_points"] == 0.25
     assert state["invalidated"] == 0
     assert all("order" not in str(call).lower() for call in algorithm.plots)
+
+def test_runtime_statistic_currency_values_are_interpolated():
+    text = source()
+    assert "$" + "{{" not in text
+    assert 'f"total=$' + "{metrics[" in text
+    assert 'f"mean=$' + "{metrics[" in text
