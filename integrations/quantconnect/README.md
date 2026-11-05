@@ -131,3 +131,21 @@ The patch is committed, but its latest GitHub Actions run is still pending at th
 The corrected probe and regression tests passed GitHub Actions on commit `b81d3f997b9704546dd0bc1a3e1df00b604bc78c` (run 41907615334). The updated tests cover consecutive positive non-overlapping windows, reset behaviour after a gap, and the presence of the updater inside a horizon loop. The algorithm's runtime output is reduced to one compact profile per root/horizon and now has 26 custom runtime-statistic fields at its current configuration, below QuantConnect's 50-field limit.
 
 The user must still rerun the corrected `main.py` in QuantConnect Cloud. The previous continuation results must not be used; no new continuation values have been observed yet.
+
+
+## QuantConnect Free compute-node operating rule
+
+The QuantConnect Free organization has a quota of one backtesting node. Free organizations cannot run concurrent backtests on separate nodes. The free B-MICRO node has a documented 20-second launch delay and a limit of 200 backtests per day. Treat the node as a sequential shared resource and do not repeatedly click Backtest while a run is pending.
+
+If the IDE reports `There are no spare nodes available in your cluster`:
+1. Open the Resources panel from the right navigation bar of the IDE (the chip/processor icon).
+2. Inspect the Backtesting node and its `In Use By` project/owner.
+3. If it is occupied by one of your own unfinished runs, use the stop icon next to that node, then wait until the node is available.
+4. If it is already free or no run is shown, do not edit code or upgrade the plan. Check the official status page and retry one time after a short interval. If it persists with the node free, submit a QuantConnect support/community issue with the timestamp, project name and exact error.
+5. Never stop a node used by another member unless you have permission and know the task can safely be interrupted.
+
+Official docs: https://www.quantconnect.com/docs/v2/cloud-platform/backtesting/deployment and https://www.quantconnect.com/docs/v2/cloud-platform/projects/ide
+Official status: https://status.quantconnect.com/
+
+For our 30-day sprint, QuantConnect runs must be sequential. Use local unit tests and code review between cloud runs; do not rely on parallel cloud backtests or purchase extra nodes under the ₹0 budget.
+
