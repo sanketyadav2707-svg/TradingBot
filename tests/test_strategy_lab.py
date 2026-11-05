@@ -103,3 +103,10 @@ def test_strategy_lab_has_common_candidate_matrix_and_3_cost_scenarios() -> None
     assert "HORIZONS = (3, 5, 10, 15)" in source
     assert "SLIPPAGE_SCENARIOS = (0, 1, 2)" in source
     assert 'for name, state in stats["strategies"].items()' in source
+
+
+
+def test_strategy_lab_stops_new_entries_early_enough_for_15m_exit() -> None:
+    source = _source()
+    assert "LAST_ENTRY_TIME = time(14, 15)" in source
+    assert "if bar_start.time() >= self.LAST_ENTRY_TIME:" in source
