@@ -21,7 +21,10 @@ def _load_function(name: str):
         if isinstance(item, ast.FunctionDef) and item.name == name
     )
     module = ast.Module(body=[node], type_ignores=[])
-    namespace = {"time": __import__("datetime").time}
+    namespace = {
+        "time": __import__("datetime").time,
+        "ROUND_TURN_COMMISSION_USD": 1.14,
+    }
     exec(compile(module, str(LAB), "exec"), namespace)
     return namespace[name]
 
