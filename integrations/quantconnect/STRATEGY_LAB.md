@@ -76,3 +76,8 @@ A result is **not** a completed strategy backtest, profit factor, equity curve, 
 - Do not pick a strategy based on win percentage alone.
 - Treat weak, negative or inconclusive results as valid outcomes.
 - Do not proceed to a paid challenge or live execution based only on this screen.
+
+
+## Entry cutoff
+
+No new signal is accepted at or after 14:15 CT. This ensures the longest 15-minute forward outcome can finish by 14:30 CT, before the cash-equity session close. The rule is tested locally in `tests/test_strategy_lab.py`.
