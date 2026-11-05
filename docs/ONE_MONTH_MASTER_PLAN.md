@@ -205,3 +205,10 @@ Official docs: https://www.quantconnect.com/docs/v2/cloud-platform/backtesting/r
 The first combined screening implementation is now in `integrations/quantconnect/strategy_lab.py`. It compares three fixed hypotheses (ORB15, VWAP pullback, compression breakout) for MES and MNQ, with next-minute-open entry benchmark, exact forward exits at 3/5/10/15 minutes, gap/roll resets, and commission plus 0/1/2-tick-per-side slippage stress. It places no orders. See `integrations/quantconnect/STRATEGY_LAB.md` for definitions and limitations.
 
 The next user cloud run should use `strategy_lab.py` in the existing QuantConnect Python project, then download the Backtest Results JSON once and upload it here. This replaces another round of screenshots. Do not call this study a completed P&L backtest or proof of profitability.
+
+
+## Updated instrument/session baseline (5 November 2026)
+
+The corrected interval-start V2 session run reports RTH core 15-minute mean absolute movement of 9.577 bps MES and 14.010 bps MNQ; both around 51.5% positive. Other bucket values are recorded in `integrations/quantconnect/README.md`. This supports researching RTH core first but does not establish directionality or net profitability.
+
+The next single QuantConnect run should use `integrations/quantconnect/strategy_lab.py`, not the old coverage probe. It screens three fixed candidates with costs/slippage. Replace main.py once, run one backtest, then upload the Results JSON (not multiple screenshots).
