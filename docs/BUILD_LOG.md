@@ -172,3 +172,19 @@ Official docs: https://www.quantconnect.com/docs/v2/cloud-platform/backtesting/r
 - Initial test run had one test-harness failure because the helper's default argument referenced a module constant. Test namespace was fixed; GitHub Actions passed on commit `c75cbe1b216def4475bdddbd54c4dc3f993691c5` (run 42011506629).
 - Added methodology and run instructions in `integrations/quantconnect/STRATEGY_LAB.md`.
 - This is a signal/forward-outcome screening study, not a completed portfolio backtest, risk validation, live-paper validation or proof of edge.
+
+
+## Corrected V2 session run results (5 November 2026)
+
+- Latest user screenshot run: `Logical Light Brown Donkey`, after interval-start session classification correction.
+- 15-minute RTH core avg absolute movement: MES 9.577 bps (61,050 samples, 51.51% positive); MNQ 14.010 bps (61,050, 51.35% positive).
+- Other 15-minute session values captured in `integrations/quantconnect/README.md`.
+- MNQ remained more volatile than MES in every displayed bucket. No directional edge was established.
+
+## Strategy lab first pass (5 November 2026)
+
+- Added no-order signal study for ORB15, VWAP pullback and compression breakout across MES/MNQ.
+- Next one-minute bar open is the entry benchmark; exact 3/5/10/15-minute closes are forward outcomes.
+- Costs: $1.14 round-turn IB reference commission plus 0/1/2 tick adverse slippage per side. Not an exact prop-firm fee schedule and no spread/order-book model.
+- Added 14:15 CT latest entry cutoff so 15-minute outcomes complete by 14:30 CT.
+- Tests pass on commit c75cbe1; the latest entry-cutoff patch has CI in progress at the time of this note.
