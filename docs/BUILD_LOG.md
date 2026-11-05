@@ -129,3 +129,28 @@ For our 30-day sprint, QuantConnect runs must be sequential. Use local unit test
 - Global runtime keys use a V2 prefix; compact profile and session records are written to Logs for complete values.
 - Updated helper and session-boundary tests. GitHub Actions passed on commit `632d1cd758a94f8b210eb809c437c87a4cec84d0` (run 42003590970).
 - Next action: user replaces QuantConnect cloud main.py with the latest repository file and reruns once; capture V2/SESSION runtime values and PROFILE/SESSION logs.
+
+
+## First V2 session-profile observations (5 November 2026; preliminary boundary convention)
+
+The user's screenshots from completed QuantConnect run `Ugly Fluorescent Yellow Llama` showed these 15-minute same-session close-to-close profiles:
+
+| Chicago session bucket | MES samples | MES avg abs move | MES up % | MNQ samples | MNQ avg abs move | MNQ up % | MNQ vs MES movement |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| RTH open | 2,954 | 6.548 bps | 48.17% | 2,954 | 9.285 bps | 49.15% | +41.8% |
+| RTH core | 61,059 | 9.573 bps | 51.50% | 61,059 | 14.006 bps | 51.35% | +46.3% |
+| RTH close | 2,820 | 6.952 bps | 45.99% | 2,820 | 9.611 bps | 44.54% | +38.2% |
+| Futures late RTH | 8,460 | 7.902 bps | 46.04% | 8,460 | 10.678 bps | 48.68% | +35.1% |
+| Other Globex | 175,319 | 4.434 bps | 48.98% | 175,501 | 6.609 bps | 50.43% | +49.1% |
+
+Interpretation is descriptive only. The 15-minute average absolute movement was highest in RTH core for both instruments. MNQ moved more than MES in every displayed bucket, but its direction-up proportions remained near 50%; this is not a directional edge or a profit signal. The large sample counts are overlapping minute-return observations and are not independent trades. Up percentages must not be read as strategy win rates.
+
+**Boundary correction:** QuantConnect's documentation says a TradeBar's `EndTime` is the end of its aggregation period, and the bar is emitted at that time. Therefore a bar ending at 09:00 CT represents 08:59–09:00 CT and must be classified using `bar.end_time - 1 minute`. The V2 screenshots above were run before this final interval-start correction, so session boundary labels/counts are preliminary and must be rerun. The correction is committed in `integrations/quantconnect/main.py` and has boundary regression tests.
+
+Official time-model references:
+- https://www.quantconnect.com/docs/v2/writing-algorithms/key-concepts/time-modeling/periods
+- https://www.quantconnect.com/docs/v2/writing-algorithms/key-concepts/time-modeling/time-zones
+
+## Next research action
+
+Rerun the latest code after syncing the QuantConnect cloud `main.py` from the repository. Capture the eight V2 root/horizon profile lines and all SESSION lines from Logs. The latest code explicitly classifies the minute interval start, uses Chicago time, resets windows across session/gap/roll boundaries, and has passing boundary tests. Do not select a trading strategy or market from the preliminary session profile alone.
