@@ -119,3 +119,13 @@ Official status: https://status.quantconnect.com/
 
 For our 30-day sprint, QuantConnect runs must be sequential. Use local unit tests and code review between cloud runs; do not rely on parallel cloud backtests or purchase extra nodes under the ₹0 budget.
 
+
+
+## V2 session-aware historical probe added (5 November 2026)
+
+- Added explicit Chicago algorithm timezone.
+- Added five exchange-time buckets: RTH opening half-hour, RTH core, cash close, futures-only late RTH, and other Globex hours.
+- Added same-session 5m/15m movement summaries and reset rules at session changes.
+- Global runtime keys use a V2 prefix; compact profile and session records are written to Logs for complete values.
+- Updated helper and session-boundary tests. GitHub Actions passed on commit `632d1cd758a94f8b210eb809c437c87a4cec84d0` (run 42003590970).
+- Next action: user replaces QuantConnect cloud main.py with the latest repository file and reruns once; capture V2/SESSION runtime values and PROFILE/SESSION logs.
