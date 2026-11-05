@@ -222,3 +222,25 @@ def test_nonoverlap_helper_resets_when_session_bucket_changes() -> None:
     assert state["previous_return_bps"] is None
     assert state["session_bucket"] == "RTH_CORE"
     assert state["pairs"] == 0
+
+
+
+def test_session_bucket_uses_bar_interval_start_not_end_time() -> None:
+    from datetime import datetime, timedelta
+
+    classify = _load_session_bucket_helper()
+    # A bar ending at 09:00 CT covers 08:59-09:00 and belongs to RTH_OPEN.
+    end_time = datetime(2026, 1, 5, 9, 0)
+    assert classify(end_time - timedelta(minutes=1)) == "RTH_OPEN"
+    # A bar ending at 09:01 CT covers 09:00-09:01 and belongs to RTH_CORE.
+    end_time = datetime(2026, 1, 5, 9, 1)
+    assert classify(end_time - timedelta(minutes=1)) == "RTH_CORE"
+    # Similarly, 14:30 is the start of the cash-close bucket, not its previous minute.
+    end_time = datetime(2026, 1, 5, 14, 31)
+    assert classify(end_time - timedelta(minutes=1)) == "RTH_CLOSE"
+
+
+def test_probe_classifies_bar_by_interval_start() -> None:
+    source = _probe_source()
+    assert "bar_start_time = current_time - timedelta(minutes=1)" in source
+    assert "_session_bucket(bar_start_time)" in source
