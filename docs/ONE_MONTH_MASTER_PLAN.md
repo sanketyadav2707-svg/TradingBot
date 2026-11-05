@@ -88,6 +88,43 @@ Release package: approved strategy spec, QuantConnect run IDs and permitted aggr
 
 Gate 4: a green backtest alone is not challenge-ready. Require positive untouched chronological results after costs, stability beyond one narrow regime/parameter, passed risk tests, a separately proven paper route, exact firm API/account-stage permission, and independent India eligibility/payout/legal review.
 
+## Daily execution map (30 days)
+
+| Day | Date | Main task | Required output |
+|---:|---|---|---|
+| 1 | 6 Nov | Replace QC probe with latest code and rerun | All 8 compact profiles, logs, run ID |
+| 2 | 7 Nov | Verify pair counts, sample counts and gap resets | Data calculation sanity report |
+| 3 | 8 Nov | Confirm exchange timezone, DST and session boundaries | Session/timezone specification |
+| 4 | 9 Nov | Split RTH vs overnight vs opening/closing windows | Session movement comparison |
+| 5 | 10 Nov | Check QC second/tick availability and fields | High-resolution access report |
+| 6 | 11 Nov | Inspect continuous-contract mapping transitions | Roll audit and exclusions |
+| 7 | 12 Nov | Gate 1 review | Continue or pause decision |
+| 8 | 13 Nov | Write opening-range strategy specification | Frozen hypothesis and parameters |
+| 9 | 14 Nov | Write VWAP pullback specification | Frozen hypothesis and parameters |
+| 10 | 15 Nov | Write volatility-compression specification | Frozen hypothesis and parameters |
+| 11 | 16 Nov | Gemini critique and Claude red-team review | Ranked objections and revisions |
+| 12 | 17 Nov | Implement first approved strategy via ChatGPT/Codex | Small patch plus unit tests |
+| 13 | 18 Nov | Verify no-look-ahead, session and rollover behavior | Edge-case test report |
+| 14 | 19 Nov | Run common-cost baseline tests | Candidate A/B/C initial scorecards |
+| 15 | 20 Nov | Audit fees, tick values and slippage assumptions | Cost specification with sources |
+| 16 | 21 Nov | Add conservative stop-gap and no-fill scenarios | Execution model tests |
+| 17 | 22 Nov | Add MAE/MFE, holding time and rejection metrics | Expanded trade report |
+| 18 | 23 Nov | Add marked-to-market intraday equity | Unrealized PnL tests |
+| 19 | 24 Nov | Add EOD and trailing drawdown variants | Drawdown semantics tests |
+| 20 | 25 Nov | Add session flattening, DST/holiday and no-overnight rules | Calendar/compliance tests |
+| 21 | 26 Nov | Run full breach and emergency-halt test matrix | Gate 3 risk report |
+| 22 | 27 Nov | Lock chronological train/validation/test dates | Frozen split manifest |
+| 23 | 28 Nov | Run development and rolling walk-forward | Fold-by-fold results |
+| 24 | 29 Nov | Parameter perturbation and session breakdown | Robustness report |
+| 25 | 30 Nov | Out-of-sample run once only | Untouched test results |
+| 26 | 1 Dec | Stress 1/2 tick slippage and missed fills | Execution sensitivity table |
+| 27 | 2 Dec | Bootstrap by day/block and inspect concentration | Uncertainty report |
+| 28 | 3 Dec | Claude adversarial audit of final candidate and code | Severity-ranked findings |
+| 29 | 4 Dec | Fix critical issues; rerun tests and reproducibility check | Release-candidate package |
+| 30 | 5 Dec | Final go/no-go review | Reject / continue / paper-validation recommendation |
+
+Dates describe the intended sequence, not guaranteed completion. A failed gate pauses dependent work. We do not skip validation to hit Day 30.
+
 ## Who does what
 
 - ChatGPT: architect/integrator, source verification, repo updates, code review, tests and go/no-go decision.
