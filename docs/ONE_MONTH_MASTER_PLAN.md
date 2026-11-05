@@ -168,3 +168,21 @@ Trades; trades/day and session; gross PnL; commissions; slippage; net PnL; expec
 3. Save, Build, then run the single-arrow Backtest.
 4. Capture all eight compact horizon profiles and Logs.
 5. Do not select a strategy from those outputs alone.
+
+
+## QuantConnect Free compute-node operating rule
+
+The QuantConnect Free organization has a quota of one backtesting node. Free organizations cannot run concurrent backtests on separate nodes. The free B-MICRO node has a documented 20-second launch delay and a limit of 200 backtests per day. Treat the node as a sequential shared resource and do not repeatedly click Backtest while a run is pending.
+
+If the IDE reports `There are no spare nodes available in your cluster`:
+1. Open the Resources panel from the right navigation bar of the IDE (the chip/processor icon).
+2. Inspect the Backtesting node and its `In Use By` project/owner.
+3. If it is occupied by one of your own unfinished runs, use the stop icon next to that node, then wait until the node is available.
+4. If it is already free or no run is shown, do not edit code or upgrade the plan. Check the official status page and retry one time after a short interval. If it persists with the node free, submit a QuantConnect support/community issue with the timestamp, project name and exact error.
+5. Never stop a node used by another member unless you have permission and know the task can safely be interrupted.
+
+Official docs: https://www.quantconnect.com/docs/v2/cloud-platform/backtesting/deployment and https://www.quantconnect.com/docs/v2/cloud-platform/projects/ide
+Official status: https://status.quantconnect.com/
+
+For our 30-day sprint, QuantConnect runs must be sequential. Use local unit tests and code review between cloud runs; do not rely on parallel cloud backtests or purchase extra nodes under the ₹0 budget.
+
