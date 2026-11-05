@@ -227,7 +227,10 @@ class FuturesDataCoverageProbe(QCAlgorithm):
             # A roll changes the underlying raw-price contract. Do not form
             # close-to-close returns across that mapping boundary.
             current_time = bar.end_time
-            session_bucket = _session_bucket(current_time)
+            # QuantConnect intraday TradeBar.end_time is the start of the next
+            # period. Classify the minute by its actual interval start.
+            bar_start_time = current_time - timedelta(minutes=1)
+            session_bucket = _session_bucket(bar_start_time)
             close_history = stats["close_history"]
             if not is_contiguous:
                 close_history.clear()
