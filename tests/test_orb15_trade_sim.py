@@ -226,3 +226,7 @@ def test_runtime_statistic_currency_values_are_interpolated():
     assert "$" + "{{" not in text
     assert "total=$" + "{metrics[" in text
     assert "mean=$" + "{metrics[" in text
+
+def test_daily_metrics_only_include_rth_session_dates():
+    text = source()
+    assert "if time(8, 30) <= bar_start.time() < time(15, 0):" in text
