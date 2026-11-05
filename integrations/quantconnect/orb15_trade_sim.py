@@ -253,9 +253,10 @@ class MNQORB15EventDrivenBaseline(QCAlgorithm):
         bar_end = bar.end_time
         bar_start = bar_end - timedelta(minutes=1)
         day = bar_start.date()
-        state["daily_pnls"].setdefault(
-            day, {ticks: 0.0 for ticks in SLIPPAGE_TICKS_PER_SIDE}
-        )
+        if time(8, 30) <= bar_start.time() < time(15, 0):
+            state["daily_pnls"].setdefault(
+                day, {ticks: 0.0 for ticks in SLIPPAGE_TICKS_PER_SIDE}
+            )
 
         mapped_text = str(mapped)
         previous_mapping = state["last_mapped_symbol"]
