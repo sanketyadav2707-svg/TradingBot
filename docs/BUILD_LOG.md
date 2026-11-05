@@ -216,3 +216,7 @@ Official docs: https://www.quantconnect.com/docs/v2/cloud-platform/backtesting/r
 - It places no orders, has no stop/target and is not an actual fill or prop-firm drawdown emulator. It is designed to measure the time-exit distribution before separately specifying stop/target experiments.
 - Added `tests/test_orb15_trade_sim.py`; 10 focused tests passed locally, including synthetic next-open/exact-time-exit flow and no-order structure. GitHub Actions still needs to verify the combined branch after these additions.
 - Run instructions and limitations: `integrations/quantconnect/ORB15_EVENT_SIM.md`.
+
+## Event-simulator result-formatting check (5 November 2026)
+
+A source review caught a formatting defect in the first GitHub upload of the event simulator: currency runtime-statistic f-strings contained escaped opening braces and would have displayed literal placeholders. The strings were corrected in commit `a364f3b6432603b7297d27efbc49bfd05624a2b3`. A regression test was added and corrected in commit `8e5723de16ef27227879e9ddcb4e4eb9d7ccf80e`. The focused local test file now passes 11 tests. Do not use the earlier simulator revision; sync the latest main branch before copying it into QuantConnect.
