@@ -134,3 +134,8 @@ The patch is committed, but its latest GitHub Actions run is still pending at th
 The corrected probe and regression tests passed GitHub Actions on commit `b81d3f997b9704546dd0bc1a3e1df00b604bc78c` (run 41907615334). The updated tests cover consecutive positive non-overlapping windows, reset behaviour after a gap, and the presence of the updater inside a horizon loop. The algorithm's runtime output is reduced to one compact profile per root/horizon and now has 26 custom runtime-statistic fields at its current configuration, below QuantConnect's 50-field limit.
 
 The user must still rerun the corrected `main.py` in QuantConnect Cloud. The previous continuation results must not be used; no new continuation values have been observed yet.
+
+
+## Strategy research lab
+
+The next research phase is implemented in [QuantConnect MES/MNQ Strategy Signal Lab](integrations/quantconnect/STRATEGY_LAB.md). It compares ORB15, VWAP pullback and compression breakout with next-bar-open outcome studies, 3/5/10/15-minute horizons, explicit reference commissions and 0/1/2-tick-per-side slippage stress. It sends no orders and is not a full P&L/backtest or proof of profitability.
