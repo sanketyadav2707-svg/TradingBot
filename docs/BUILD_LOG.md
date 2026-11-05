@@ -199,3 +199,20 @@ Official docs: https://www.quantconnect.com/docs/v2/cloud-platform/backtesting/r
 - MES ORB15, both VWAP variants and both compression variants were negative after zero-tick fees. MNQ ORB15 10m was near zero at one tick and negative at two ticks.
 - After this JSON, updated code to use mapped raw contract bars and inclusive exactly-one-tick breakout comparisons. Tests pass (53 tests) on commit `2e36f512f63a91f3c7cefae2de33394855889b54`, CI run 42016061030.
 - Next step: rerun updated `strategy_lab.py` once, download Results JSON, then freeze MNQ ORB15-15m for deeper chronological and execution-risk validation if the corrected run is consistent.
+
+## Second MNQ ORB15 signal screen (5 November 2026)
+
+- Analysed the user-uploaded QuantConnect Results JSON from `Focused Red Orange Alpaca`.
+- Backtest completed without runtime error, with 265,103 MES and 265,127 MNQ mapped-contract minute bars, 90-day organization holdout intact, and zero orders as expected.
+- The only retained candidate is MNQ ORB15 at the 15-minute horizon: n=194, gross mean +1.081 bps, net +0.867 / +0.679 / +0.491 bps after commission and 0/1/2 ticks of slippage per side.
+- Compared with the earlier same-window run (n=197, gross +1.103 bps, 2-tick net +0.514 bps), the result is similar but is not an independent validation because the market period is the same.
+- Other strategy/instrument/horizon variants remain negative after commission at zero additional slippage or fail the slippage stress. They are paused rather than optimized.
+- Detailed report: `docs/STRATEGY_SCREEN_2026-11-05_SECOND_RUN.md`.
+
+## MNQ ORB15 event-driven virtual-trade baseline added (5 November 2026)
+
+- Added `integrations/quantconnect/orb15_trade_sim.py`: a one-contract virtual-trade ledger for frozen MNQ ORB15 with next-contiguous-minute-open entry and exact 15-minute time exit.
+- Includes 0/1/2 ticks of adverse slippage per side, $1.14 round-turn commission reference, per-trade MFE/MAE, daily PnL, win rate, profit factor, worst trade/day, daily-close drawdown, loss streak and a deterministic five-observation-day moving-block bootstrap interval.
+- It places no orders, has no stop/target and is not an actual fill or prop-firm drawdown emulator. It is designed to measure the time-exit distribution before separately specifying stop/target experiments.
+- Added `tests/test_orb15_trade_sim.py`; 10 focused tests passed locally, including synthetic next-open/exact-time-exit flow and no-order structure. GitHub Actions still needs to verify the combined branch after these additions.
+- Run instructions and limitations: `integrations/quantconnect/ORB15_EVENT_SIM.md`.
