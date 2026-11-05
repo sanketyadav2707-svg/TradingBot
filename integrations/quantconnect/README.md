@@ -219,3 +219,24 @@ Rerun the latest code after syncing the QuantConnect cloud `main.py` from the re
 The probe no longer writes market-derived profile/session summaries to the QuantConnect debug log. It exposes all aggregate outputs through custom Runtime Statistics only. To inspect complete values without the UI's narrow banner truncation, use the backtest results Overview tab and its **Download Results** action; the JSON contains runtime statistics. Do not export or request raw OHLCV data. QuantConnect documents that the Results page includes Runtime Statistics and supports downloading results, and cautions against logging dataset information.
 
 Official docs: https://www.quantconnect.com/docs/v2/cloud-platform/backtesting/results and https://www.quantconnect.com/docs/v2/cloud-platform/projects/debugging
+
+
+## Corrected V2 session run (5 November 2026)
+
+The user's later `Logical Light Brown Donkey` run, taken after the minute-bar-start boundary correction, showed these 15-minute same-bucket movement statistics:
+
+| Chicago bucket | MES n | MES avg abs move | MES up % | MNQ n | MNQ avg abs move | MNQ up % |
+|---|---:|---:|---:|---:|---:|---:|
+| RTH open | 2,955 | 6.406 bps | 48.12% | 2,955 | 9.094 bps | 49.14% |
+| RTH core | 61,050 | 9.577 bps | 51.51% | 61,050 | 14.010 bps | 51.35% |
+| RTH close | 2,820 | 6.955 bps | 46.21% | 2,820 | 9.615 bps | 45.07% |
+| Futures late RTH | 8,460 | 7.948 bps | 45.84% | 8,460 | 10.726 bps | 48.56% |
+| Other Globex | 175,327 | 4.433 bps | 48.98% | 175,509 | 6.608 bps | 50.44% |
+
+MNQ's mean absolute movement was approximately 35–49% higher across buckets. RTH core had the largest 15-minute average absolute move for both. Up percentages are near 50% and are not strategy win rates. Sample counts are overlapping forward-return observations and not independent trades.
+
+Visible 3-minute/10-minute global V2 profile fragments also showed: MES 3m (n=267,597, abs=2.660 bps, sd=4.284 bps, up=47.02%, 81,458 non-overlap pairs); MES 10m (n=266,055, abs=4.854 bps, sd=7.762 bps, up=48.78%, 23,661 pairs); MNQ 3m (n=267,673, abs=3.862 bps, sd=6.075 bps, up=49.65%, 86,057 pairs); MNQ 10m (n=266,198, abs=7.094 bps, sd=11.052 bps, up=50.15%, 24,365 pairs). The screenshots did not expose the end of all continuation fields or all 5m/15m global profiles, so no continuation edge is claimed.
+
+## Strategy signal lab
+
+The next implementation is `strategy_lab.py`. Follow `STRATEGY_LAB.md`. It tests ORB15, VWAP pullback and compression breakout with next-bar-open benchmark entries, exact forward outcomes, a $1.14 round-turn IB reference commission and 0/1/2 ticks per side. No orders are sent. New signals stop at 14:15 CT so 15-minute outcome windows can finish by the 14:30 cash close.
