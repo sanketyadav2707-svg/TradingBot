@@ -186,3 +186,8 @@ Official status: https://status.quantconnect.com/
 
 For our 30-day sprint, QuantConnect runs must be sequential. Use local unit tests and code review between cloud runs; do not rely on parallel cloud backtests or purchase extra nodes under the ₹0 budget.
 
+
+
+## Preliminary session-profile interpretation (5 November 2026)
+
+A first session run showed 15-minute average absolute movement highest in the RTH core bucket for both MES (9.573 bps) and MNQ (14.006 bps). MNQ was 35–49% more volatile than MES in the displayed buckets, while up percentages stayed around 44–52%. These are descriptive movement statistics, not a directional edge or strategy win rate. The run preceded the final bar-interval-start classification correction, so boundary buckets must be rerun before any final session conclusion.
