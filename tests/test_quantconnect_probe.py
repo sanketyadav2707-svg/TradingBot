@@ -49,7 +49,7 @@ def test_quantconnect_probe_reports_aggregate_metrics_not_raw_prices() -> None:
     assert "contDn=" in source
     assert "elapsed_seconds < target_seconds" in source
     assert "elapsed_seconds > target_seconds" in source
-    assert "PROFILE|" in source
+    assert "self.log(" not in source
     assert "self.plot(" not in source
 
     # Market prices may be read for calculations, but must not be passed
