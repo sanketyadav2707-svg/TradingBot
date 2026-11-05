@@ -149,3 +149,41 @@ Official status: https://status.quantconnect.com/
 
 For our 30-day sprint, QuantConnect runs must be sequential. Use local unit tests and code review between cloud runs; do not rely on parallel cloud backtests or purchase extra nodes under the ₹0 budget.
 
+
+
+## Latest probe version: V2 profiles and session breakdown
+
+The latest repository version has been updated after the first completed continuation-profile run.
+
+### Important observed values from the previous global-profile run (5 Nov 2026)
+
+| Root | Horizon | Matched overlapping returns | Mean absolute move | Std dev | Positive pct | Non-overlap pairs |
+|---|---:|---:|---:|---:|---:|---:|
+| MES | 5m | 267,213 | 3.439 bps | 5.520 bps | 47.80% | 50,654 |
+| MES | 15m | 265,027 | 5.947 bps | 9.476 bps | 49.28% | 16,979 |
+| MNQ | 3m | 267,733 | 3.862 bps | 6.075 bps | 49.64% | 87,977 |
+| MNQ | 10m | 266,258 | 7.094 bps | 11.051 bps | 50.14% | 26,277 |
+
+The screenshots did not expose all eight full strings or the end of the continuation percentages, so no continuation edge is claimed. Some standalone zero pair-count fields displayed alongside profiles were legacy runtime-statistic values from an earlier probe version; they are not emitted by the compact-profile calculation and must be ignored. Only the complete V2 profile strings from one completed run are authoritative.
+
+### V2 changes
+
+- Explicitly sets algorithm timezone to `TimeZones.CHICAGO`; QuantConnect documents futures bars' exchange timezone as America/Chicago.
+- Splits session buckets into:
+  - `RTH_OPEN`: 08:30–09:00 CT
+  - `RTH_CORE`: 09:00–14:30 CT
+  - `RTH_CLOSE`: 14:30–15:00 CT
+  - `FUTURES_LATE_RTH`: 15:00–16:00 CT (futures market remains in its regular session after the US cash-equity close)
+  - `GLOBEX_OTHER`: all other traded Globex bars; maintenance breaks have no synthetic bars
+- Resets non-overlapping windows when the session bucket changes.
+- Adds same-bucket 5-minute and 15-minute summaries by session for MES/MNQ.
+- Prefixes global runtime keys with `V2` to avoid confusion with older run output.
+- Writes compact `PROFILE|` and `SESSION|` lines to the Logs tab, so long values are not truncated by the Runtime Statistics panel.
+
+The current probe uses 46 custom runtime-statistic fields (including initialization fields), below the QuantConnect 50-field limit. GitHub Actions passed on commit `632d1cd758a94f8b210eb809c437c87a4cec84d0` (run 42003590970).
+
+### Next run instructions
+
+Replace the QuantConnect cloud project's `main.py` with the newest file from this repository and rerun once. In Runtime Statistics, read keys beginning `V2 MES`, `V2 MNQ`, and `SESSION`. In Logs, capture complete lines beginning `PROFILE|` and `SESSION|`. Do not combine statistics from different backtest tabs or runs.
+
+These are descriptive historical movement/persistence metrics, not strategy PnL, spread, slippage or trade-fill evidence.
