@@ -198,3 +198,10 @@ A first session run showed 15-minute average absolute movement highest in the RT
 The probe no longer writes market-derived profile/session summaries to the QuantConnect debug log. It exposes all aggregate outputs through custom Runtime Statistics only. To inspect complete values without the UI's narrow banner truncation, use the backtest results Overview tab and its **Download Results** action; the JSON contains runtime statistics. Do not export or request raw OHLCV data. QuantConnect documents that the Results page includes Runtime Statistics and supports downloading results, and cautions against logging dataset information.
 
 Official docs: https://www.quantconnect.com/docs/v2/cloud-platform/backtesting/results and https://www.quantconnect.com/docs/v2/cloud-platform/projects/debugging
+
+
+## Strategy signal lab implementation (5 November 2026)
+
+The first combined screening implementation is now in `integrations/quantconnect/strategy_lab.py`. It compares three fixed hypotheses (ORB15, VWAP pullback, compression breakout) for MES and MNQ, with next-minute-open entry benchmark, exact forward exits at 3/5/10/15 minutes, gap/roll resets, and commission plus 0/1/2-tick-per-side slippage stress. It places no orders. See `integrations/quantconnect/STRATEGY_LAB.md` for definitions and limitations.
+
+The next user cloud run should use `strategy_lab.py` in the existing QuantConnect Python project, then download the Backtest Results JSON once and upload it here. This replaces another round of screenshots. Do not call this study a completed P&L backtest or proof of profitability.
