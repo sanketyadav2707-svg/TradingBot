@@ -161,3 +161,14 @@ Rerun the latest code after syncing the QuantConnect cloud `main.py` from the re
 The probe no longer writes market-derived profile/session summaries to the QuantConnect debug log. It exposes all aggregate outputs through custom Runtime Statistics only. To inspect complete values without the UI's narrow banner truncation, use the backtest results Overview tab and its **Download Results** action; the JSON contains runtime statistics. Do not export or request raw OHLCV data. QuantConnect documents that the Results page includes Runtime Statistics and supports downloading results, and cautions against logging dataset information.
 
 Official docs: https://www.quantconnect.com/docs/v2/cloud-platform/backtesting/results and https://www.quantconnect.com/docs/v2/cloud-platform/projects/debugging
+
+
+## MES/MNQ strategy signal lab committed (5 November 2026)
+
+- Added `integrations/quantconnect/strategy_lab.py`: a no-order research algorithm testing ORB15, VWAP pullback and compression breakout across MES/MNQ.
+- Signals use completed minute bars, require contiguous next-bar open entry, evaluate exact 3/5/10/15-minute closes, and reset state over gaps, calendar-day boundaries and mapped-contract changes.
+- Cost stress: 0/1/2 ticks adverse slippage per side plus $1.14 round-turn reference commission. The commission is derived from QuantConnect's IB fee model ($0.25 base + $0.30 exchange + $0.02 regulatory per side) and is explicitly not a prop-firm/broker quote.
+- Added isolated strategy-function and no-order tests in `tests/test_strategy_lab.py`.
+- Initial test run had one test-harness failure because the helper's default argument referenced a module constant. Test namespace was fixed; GitHub Actions passed on commit `c75cbe1b216def4475bdddbd54c4dc3f993691c5` (run 42011506629).
+- Added methodology and run instructions in `integrations/quantconnect/STRATEGY_LAB.md`.
+- This is a signal/forward-outcome screening study, not a completed portfolio backtest, risk validation, live-paper validation or proof of edge.
