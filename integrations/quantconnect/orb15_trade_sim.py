@@ -385,19 +385,19 @@ class MNQORB15EventDrivenBaseline(QCAlgorithm):
                 else f"{metrics['profit_factor']:.3f}"
             )
             summary = (
-                f"trades={metrics['trade_count']}; total=${{metrics['total_net_dollars']:.2f}; "
-                f"avg=${{metrics['average_net_dollars']:.2f}; "
+                f"trades={metrics['trade_count']}; total=${metrics['total_net_dollars']:.2f}; "
+                f"avg=${metrics['average_net_dollars']:.2f}; "
                 f"win={metrics['win_rate_pct']:.1f}%; PF={pf_text}; "
-                f"worstTrade=${{metrics['worst_trade_dollars']:.2f}; "
-                f"worstDay=${{metrics['worst_day_dollars']:.2f}; "
-                f"maxDailyCloseDD=${{metrics['max_daily_close_drawdown_dollars']:.2f}; "
+                f"worstTrade=${metrics['worst_trade_dollars']:.2f}; "
+                f"worstDay=${metrics['worst_day_dollars']:.2f}; "
+                f"maxDailyCloseDD=${metrics['max_daily_close_drawdown_dollars']:.2f}; "
                 f"lossStreak={metrics['max_consecutive_losses']}"
             )
             self.set_runtime_statistic(f"MNQ ORB15 {ticks}t", summary)
             self.set_runtime_statistic(
                 f"Daily mean CI {ticks}t",
-                f"mean=${{metrics['mean_daily_net_dollars']:.3f}; "
-                f"5d-block95=[${{metrics['block_ci_low']:.3f},${{metrics['block_ci_high']:.3f}]"
+                f"mean=${metrics['mean_daily_net_dollars']:.3f}; "
+                f"5d-block95=[${metrics['block_ci_low']:.3f},${metrics['block_ci_high']:.3f}]"
             )
 
         self.set_runtime_statistic("Orders sent", 0)
