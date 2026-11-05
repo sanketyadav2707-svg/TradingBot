@@ -51,9 +51,9 @@ def test_strategy_lab_never_places_orders() -> None:
 
 def test_opening_range_breakout_requires_one_tick_clearance() -> None:
     fn = _load_function("opening_range_direction")
-    assert fn(101.25, 101.0, 99.0, 0.25) == 0
-    assert fn(101.26, 101.0, 99.0, 0.25) == 1
-    assert fn(98.74, 101.0, 99.0, 0.25) == -1
+    assert fn(101.0, 101.0, 99.0, 0.25) == 0
+    assert fn(101.25, 101.0, 99.0, 0.25) == 1
+    assert fn(98.75, 101.0, 99.0, 0.25) == -1
 
 
 def test_vwap_pullback_requires_trend_and_reclaim() -> None:
@@ -68,9 +68,9 @@ def test_compression_breakout_uses_only_previous_bars() -> None:
     ranges = [2.0] * 40 + [1.0] * 20
     highs = [100.0] * 60
     lows = [98.0] * 60
-    assert fn(100.1, ranges, highs, lows, 0.25) == 0
-    assert fn(100.26, ranges, highs, lows, 0.25) == 1
-    assert fn(97.74, ranges, highs, lows, 0.25) == -1
+    assert fn(100.0, ranges, highs, lows, 0.25) == 0
+    assert fn(100.25, ranges, highs, lows, 0.25) == 1
+    assert fn(97.75, ranges, highs, lows, 0.25) == -1
     assert fn(100.26, [2.0] * 60, highs, lows, 0.25) == 0
 
 
@@ -110,3 +110,19 @@ def test_strategy_lab_stops_new_entries_early_enough_for_15m_exit() -> None:
     source = _source()
     assert "LAST_ENTRY_TIME = time(14, 15)" in source
     assert "if bar_start.time() >= self.LAST_ENTRY_TIME:" in source
+
+
+
+def test_strategy_lab_uses_mapped_raw_contract_bars_not_continuous_bars() -> None:
+    source = _source()
+    assert "mapped = future.mapped" in source
+    assert "bar = slice.bars.get(mapped)" in source
+    assert "slice.bars.get(future.symbol)" not in source
+
+
+def test_one_tick_breakout_threshold_is_inclusive_and_tick_aligned() -> None:
+    source = _source()
+    assert "close >= range_high + tick_size" in source
+    assert "close <= range_low - tick_size" in source
+    assert "close >= prior_high + tick_size" in source
+    assert "close <= prior_low - tick_size" in source
