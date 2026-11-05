@@ -6,6 +6,8 @@ A personal, research-first futures trading system being developed for eventual p
 
 ## Current status
 
+- [30-Day Master Build Plan](docs/ONE_MONTH_MASTER_PLAN.md): 6 Nov to 5 Dec 2026 roadmap, daily milestones, strategy research, risk/compliance gates and multi-AI workflow.
+
 - Python 3.12+ project scaffold
 - CSV historical-data input with strict timestamp/OHLC validation
 - Dataset audit command for interval distribution, large time jumps, zero-volume bars and price-range diagnostics
