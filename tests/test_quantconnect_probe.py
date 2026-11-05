@@ -49,7 +49,7 @@ def test_quantconnect_probe_reports_aggregate_metrics_not_raw_prices() -> None:
     assert "contDn=" in source
     assert "elapsed_seconds < target_seconds" in source
     assert "elapsed_seconds > target_seconds" in source
-    assert "self.log(" not in source
+    assert "PROFILE|" in source
     assert "self.plot(" not in source
 
     # Market prices may be read for calculations, but must not be passed
@@ -88,6 +88,7 @@ def _window_state() -> dict:
         "anchor_time": None,
         "anchor_close": None,
         "previous_return_bps": None,
+        "session_bucket": None,
         "pairs": 0,
         "after_up": 0,
         "after_up_continued": 0,
@@ -103,11 +104,11 @@ def test_nonoverlap_helper_counts_consecutive_up_windows() -> None:
     state = _window_state()
     start = datetime(2026, 1, 5, 9, 30)
 
-    update(state, 3, start, 100.0, False)
+    update(state, 3, start, 100.0, False, "RTH_OPEN")
     for minute in range(1, 7):
         # Two non-overlapping 3-minute price rises.
         close = 100.0 + minute * 0.1
-        update(state, 3, start + timedelta(minutes=minute), close, True)
+        update(state, 3, start + timedelta(minutes=minute), close, True, "RTH_OPEN")
 
     assert state["pairs"] == 1
     assert state["after_up"] == 1
@@ -121,18 +122,18 @@ def test_nonoverlap_helper_resets_after_gap() -> None:
     state = _window_state()
     start = datetime(2026, 1, 5, 9, 30)
 
-    update(state, 3, start, 100.0, False)
-    update(state, 3, start + timedelta(minutes=1), 100.1, True)
-    update(state, 3, start + timedelta(minutes=2), 100.2, True)
-    update(state, 3, start + timedelta(minutes=3), 100.3, True)
+    update(state, 3, start, 100.0, False, "RTH_OPEN")
+    update(state, 3, start + timedelta(minutes=1), 100.1, True, "RTH_OPEN")
+    update(state, 3, start + timedelta(minutes=2), 100.2, True, "RTH_OPEN")
+    update(state, 3, start + timedelta(minutes=3), 100.3, True, "RTH_OPEN")
     assert state["previous_return_bps"] is not None
 
     # A gap invalidates the prior sequence, so a pair cannot bridge it.
-    update(state, 3, start + timedelta(minutes=5), 100.4, False)
+    update(state, 3, start + timedelta(minutes=5), 100.4, False, "RTH_OPEN")
     assert state["previous_return_bps"] is None
-    update(state, 3, start + timedelta(minutes=6), 100.5, True)
-    update(state, 3, start + timedelta(minutes=7), 100.6, True)
-    update(state, 3, start + timedelta(minutes=8), 100.7, True)
+    update(state, 3, start + timedelta(minutes=6), 100.5, True, "RTH_OPEN")
+    update(state, 3, start + timedelta(minutes=7), 100.6, True, "RTH_OPEN")
+    update(state, 3, start + timedelta(minutes=8), 100.7, True, "RTH_OPEN")
 
     assert state["pairs"] == 0
 
@@ -170,6 +171,54 @@ def test_probe_updates_nonoverlap_state_for_each_horizon() -> None:
 
 def test_probe_compacts_runtime_statistics_and_resets_gaps() -> None:
     source = _probe_source()
-    assert 'f"{root} {horizon}m profile"' in source
+    assert 'f"V2 {root} {horizon}m profile"' in source
+    assert 'f"SESSION {root} {bucket} {horizon}m"' in source
+    assert "self.set_time_zone(TimeZones.CHICAGO)" in source
     assert 'if not is_contiguous:' in source
     assert "close_history.clear()" in source
+
+
+def _load_session_bucket_helper():
+    from datetime import datetime, time
+
+    tree = ast.parse(_probe_source())
+    helper = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_session_bucket"
+    )
+    module = ast.Module(body=[helper], type_ignores=[])
+    namespace = {"datetime": datetime, "time": time}
+    exec(compile(module, str(QC_PROBE), "exec"), namespace)
+    return namespace["_session_bucket"]
+
+
+def test_session_bucket_uses_cme_chicago_windows() -> None:
+    from datetime import datetime
+
+    classify = _load_session_bucket_helper()
+    assert classify(datetime(2026, 1, 5, 8, 30)) == "RTH_OPEN"
+    assert classify(datetime(2026, 1, 5, 8, 59)) == "RTH_OPEN"
+    assert classify(datetime(2026, 1, 5, 9, 0)) == "RTH_CORE"
+    assert classify(datetime(2026, 1, 5, 14, 29)) == "RTH_CORE"
+    assert classify(datetime(2026, 1, 5, 14, 30)) == "RTH_CLOSE"
+    assert classify(datetime(2026, 1, 5, 14, 59)) == "RTH_CLOSE"
+    assert classify(datetime(2026, 1, 5, 15, 0)) == "FUTURES_LATE_RTH"
+    assert classify(datetime(2026, 1, 5, 15, 59)) == "FUTURES_LATE_RTH"
+    assert classify(datetime(2026, 1, 5, 16, 0)) == "GLOBEX_OTHER"
+
+
+def test_nonoverlap_helper_resets_when_session_bucket_changes() -> None:
+    from datetime import datetime, timedelta
+
+    update = _load_window_helper()
+    state = _window_state()
+    start = datetime(2026, 1, 5, 8, 57)
+
+    update(state, 3, start, 100.0, False, "RTH_OPEN")
+    update(state, 3, start + timedelta(minutes=1), 100.1, True, "RTH_OPEN")
+    update(state, 3, start + timedelta(minutes=2), 100.2, True, "RTH_OPEN")
+    update(state, 3, start + timedelta(minutes=3), 100.3, True, "RTH_CORE")
+
+    assert state["previous_return_bps"] is None
+    assert state["session_bucket"] == "RTH_CORE"
+    assert state["pairs"] == 0
