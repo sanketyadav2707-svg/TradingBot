@@ -47,7 +47,7 @@ Outstanding:
 - Added a no-trade MES/MNQ QuantConnect probe using continuous futures subscriptions and 1-minute resolution.
 - It reports aggregate bar counts, active dates, zero-volume bars, gap counts and mapping changes, without recording raw OHLCV values or placing orders.
 - Added setup/interpretation instructions. QuantConnect Free Plan currently lists futures data, minute resolution and unlimited backtesting; documented minute history is one trailing year. The Free Plan does not include hosted Futures Live Feed.
-- The GitHub Actions checks for the probe are pending at the time of this entry; do not report them as passed until verified.
+- The initial QuantConnect probe and test checks later passed GitHub Actions. The corrected non-overlapping continuation probe and regression tests passed on commit `b81d3f997b9704546dd0bc1a3e1df00b604bc78c` (run 41907615334).
 
 
 ## Observed MES/MNQ coverage run (4 November 2026)
@@ -92,3 +92,12 @@ The patch is committed, but its latest GitHub Actions run is still pending at th
 The corrected probe and regression tests passed GitHub Actions on commit `b81d3f997b9704546dd0bc1a3e1df00b604bc78c` (run 41907615334). The updated tests cover consecutive positive non-overlapping windows, reset behaviour after a gap, and the presence of the updater inside a horizon loop. The algorithm's runtime output is reduced to one compact profile per root/horizon and now has 26 custom runtime-statistic fields at its current configuration, below QuantConnect's 50-field limit.
 
 The user must still rerun the corrected `main.py` in QuantConnect Cloud. The previous continuation results must not be used; no new continuation values have been observed yet.
+
+
+## 30-day master build plan committed (5 November 2026)
+
+- Added `docs/ONE_MONTH_MASTER_PLAN.md` with a 6 November–5 December 2026 execution calendar.
+- Plan assigns separate roles to ChatGPT, Codex, Gemini Pro, Claude and the user; includes reusable prompts and a review/implementation workflow for external AI-generated code.
+- Strategy research is bounded to three falsifiable families before any expansion: opening-range breakout, VWAP trend pullback and volatility compression-to-expansion.
+- Includes data/session/roll validation, execution-cost stress, intraday mark-to-market risk, prop-firm compliance tests, chronological walk-forward validation and explicit stop/go gates.
+- No paid data/API/VPS or challenge purchase is planned during the 30-day development window. A negative or inconclusive strategy result is an acceptable outcome.
