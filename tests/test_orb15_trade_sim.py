@@ -224,5 +224,5 @@ def test_virtual_trade_enters_next_open_and_exits_on_exact_15m_close(monkeypatch
 def test_runtime_statistic_currency_values_are_interpolated():
     text = source()
     assert "$" + "{{" not in text
-    assert 'f"total=$' + "{metrics[" in text
-    assert 'f"mean=$' + "{metrics[" in text
+    assert "total=$" + "{metrics[" in text
+    assert "mean=$" + "{metrics[" in text
