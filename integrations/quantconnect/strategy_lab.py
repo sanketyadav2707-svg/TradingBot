@@ -33,9 +33,9 @@ def session_bucket(bar_start: datetime) -> str:
 
 def opening_range_direction(close: float, range_high: float, range_low: float,
                              tick_size: float) -> int:
-    if close > range_high + tick_size:
+    if close >= range_high + tick_size:
         return 1
-    if close < range_low - tick_size:
+    if close <= range_low - tick_size:
         return -1
     return 0
 
@@ -59,9 +59,9 @@ def compression_breakout_direction(close: float, ranges: list, highs: list,
         return 0
     prior_high = max(highs[-20:])
     prior_low = min(lows[-20:])
-    if close > prior_high + tick_size:
+    if close >= prior_high + tick_size:
         return 1
-    if close < prior_low - tick_size:
+    if close <= prior_low - tick_size:
         return -1
     return 0
 
@@ -348,7 +348,12 @@ class FuturesStrategySignalLab(QCAlgorithm):
 
     def on_data(self, slice: Slice) -> None:
         for root, future in self._futures.items():
-            bar = slice.bars.get(future.symbol)
+            # Use the mapped underlying contract's raw TradeBar for tradable
+            # prices. The continuous symbol is a stitched research series.
+            mapped = future.mapped
+            if mapped is None:
+                continue
+            bar = slice.bars.get(mapped)
             if bar is None:
                 continue
 
@@ -357,8 +362,7 @@ class FuturesStrategySignalLab(QCAlgorithm):
             bar_start = bar_end - timedelta(minutes=1)
             bucket = session_bucket(bar_start)
 
-            mapped = future.mapped
-            mapped_text = str(mapped) if mapped is not None else None
+            mapped_text = str(mapped)
             previous_mapped = stats["last_mapped_symbol"]
             mapping_changed = (
                 mapped_text is not None
