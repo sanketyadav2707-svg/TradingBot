@@ -47,7 +47,7 @@ For each slippage case the algorithm reports:
 - Maximum consecutive losing trades.
 - Mean daily net PnL and a 95% moving-block bootstrap percentile interval using five-observation-day blocks and 1,000 deterministic resamples.
 
-The daily series includes observed MNQ trading dates with zero PnL on days when there was no completed trade. The block bootstrap preserves short sequences of adjacent trading-day observations; it does not establish that returns are stationary or independent.
+The daily series includes one value for each RTH calendar date on which a mapped MNQ bar was received, including zero-PnL dates with no completed trade. Overnight Globex-only dates are excluded. The five-session block bootstrap preserves short sequences of adjacent RTH-date observations; it does not establish that returns are stationary or independent.
 
 The algorithm invalidates an open virtual trade if a missing minute, date boundary or mapped-contract change prevents the exact exit from being observed. It never silently substitutes a later close. Check the ORB15 invalidated statistic. A meaningful invalidation count makes the resulting performance summary incomplete and requires data-quality review.
 
