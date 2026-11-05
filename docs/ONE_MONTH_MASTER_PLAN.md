@@ -212,3 +212,8 @@ The next user cloud run should use `strategy_lab.py` in the existing QuantConnec
 The corrected interval-start V2 session run reports RTH core 15-minute mean absolute movement of 9.577 bps MES and 14.010 bps MNQ; both around 51.5% positive. Other bucket values are recorded in `integrations/quantconnect/README.md`. This supports researching RTH core first but does not establish directionality or net profitability.
 
 The next single QuantConnect run should use `integrations/quantconnect/strategy_lab.py`, not the old coverage probe. It screens three fixed candidates with costs/slippage. Replace main.py once, run one backtest, then upload the Results JSON (not multiple screenshots).
+
+
+## First QuantConnect strategy-screen results (5 November 2026)
+
+See `docs/STRATEGY_SCREEN_2026-11-05.md`. The only candidate that remained positive in the initial 0/1/2-tick-per-side fixed-horizon screen was MNQ ORB15 at a 15-minute close (+0.889, +0.702, +0.514 bps net mean; n=197). Do not call this profitability. The run has zero broker orders by design and excludes the organisation's last 90-day out-of-sample holdout. The next code version uses mapped raw-contract bars and exact one-tick inclusive breakout thresholds; rerun once before moving to deeper validation.
