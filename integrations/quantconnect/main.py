@@ -11,8 +11,20 @@ around QuantConnect's data-export restrictions.
 
 from AlgorithmImports import *
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from math import sqrt
+
+
+def _session_bucket(end_time: datetime) -> str:
+    """Classify a CME equity-index futures bar by Chicago exchange time."""
+    local_time = end_time.time()
+    if time(8, 30) <= local_time < time(9, 30):
+        return "RTH_OPEN"
+    if time(9, 30) <= local_time < time(14, 30):
+        return "RTH_CORE"
+    if time(14, 30) <= local_time < time(15, 0):
+        return "RTH_CLOSE"
+    return "GLOBEX_OTHER"
 
 
 def _update_nonoverlap(
@@ -21,13 +33,19 @@ def _update_nonoverlap(
     current_time: datetime,
     close: float,
     is_contiguous: bool,
+    session_bucket: str,
 ) -> None:
     """Advance one horizon's non-overlapping windows without bridging gaps."""
     anchor_time = state["anchor_time"]
-    if anchor_time is None or not is_contiguous:
+    if (
+        anchor_time is None
+        or not is_contiguous
+        or state["session_bucket"] != session_bucket
+    ):
         state["anchor_time"] = current_time
         state["anchor_close"] = close
         state["previous_return_bps"] = None
+        state["session_bucket"] = session_bucket
         return
 
     elapsed_seconds = (current_time - anchor_time).total_seconds()
@@ -38,6 +56,7 @@ def _update_nonoverlap(
         state["anchor_time"] = current_time
         state["anchor_close"] = close
         state["previous_return_bps"] = None
+        state["session_bucket"] = session_bucket
         return
 
     anchor_close = state["anchor_close"]
@@ -61,10 +80,13 @@ def _update_nonoverlap(
     state["previous_return_bps"] = segment_return
     state["anchor_time"] = current_time
     state["anchor_close"] = close
+    state["session_bucket"] = session_bucket
 
 
 class FuturesDataCoverageProbe(QCAlgorithm):
     HORIZONS_MINUTES = (3, 5, 10, 15)
+    SESSION_HORIZONS_MINUTES = (5, 15)
+    SESSION_BUCKETS = ("RTH_OPEN", "RTH_CORE", "RTH_CLOSE", "GLOBEX_OTHER")
 
     ROOTS = {
         "MES": Futures.Indices.MICRO_SP_500_E_MINI,
@@ -132,6 +154,7 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                         "anchor_time": None,
                         "anchor_close": None,
                         "previous_return_bps": None,
+                        "session_bucket": None,
                         "pairs": 0,
                         "after_up": 0,
                         "after_up_continued": 0,
@@ -139,6 +162,17 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                         "after_down_continued": 0,
                     }
                     for horizon in self.HORIZONS_MINUTES
+                },
+                "session_returns": {
+                    bucket: {
+                        horizon: {
+                            "samples": 0,
+                            "sum_abs_bps": 0.0,
+                            "positive": 0,
+                        }
+                        for horizon in self.SESSION_HORIZONS_MINUTES
+                    }
+                    for bucket in self.SESSION_BUCKETS
                 },
             }
 
@@ -182,13 +216,17 @@ class FuturesDataCoverageProbe(QCAlgorithm):
             # A roll changes the underlying raw-price contract. Do not form
             # close-to-close returns across that mapping boundary.
             current_time = bar.end_time
+            session_bucket = _session_bucket(current_time)
             close_history = stats["close_history"]
             if not is_contiguous:
                 close_history.clear()
             for horizon in self.HORIZONS_MINUTES:
                 previous_time = current_time - timedelta(minutes=horizon)
-                previous_close = close_history.get(previous_time)
-                if previous_close is None or previous_close == 0:
+                previous_entry = close_history.get(previous_time)
+                if previous_entry is None:
+                    continue
+                previous_close, previous_bucket = previous_entry
+                if previous_close == 0:
                     continue
 
                 move_bps = (bar.close - previous_close) / abs(previous_close) * 10_000
@@ -200,7 +238,17 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                 if move_bps > 0:
                     result["positive"] += 1
 
-            close_history[current_time] = bar.close
+                if (
+                    horizon in self.SESSION_HORIZONS_MINUTES
+                    and previous_bucket == session_bucket
+                ):
+                    session_result = stats["session_returns"][session_bucket][horizon]
+                    session_result["samples"] += 1
+                    session_result["sum_abs_bps"] += abs(move_bps)
+                    if move_bps > 0:
+                        session_result["positive"] += 1
+
+            close_history[current_time] = (bar.close, session_bucket)
             cutoff = current_time - timedelta(minutes=max(self.HORIZONS_MINUTES) + 2)
             for timestamp in list(close_history):
                 if timestamp < cutoff:
@@ -215,6 +263,7 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                     current_time,
                     bar.close,
                     is_contiguous,
+                    session_bucket,
                 )
 
             stats["last_end_time"] = bar.end_time
@@ -279,8 +328,31 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                     f"contDn={down_continuation:.2f}%"
                 )
                 self.set_runtime_statistic(
-                    f"{root} {horizon}m profile",
+                    f"V2 {root} {horizon}m profile",
                     summary,
                 )
+                self.log(f"PROFILE|{root}|{horizon}m|{summary}")
+
+            for bucket in self.SESSION_BUCKETS:
+                for horizon in self.SESSION_HORIZONS_MINUTES:
+                    session_result = stats["session_returns"][bucket][horizon]
+                    samples = session_result["samples"]
+                    average_abs_bps = (
+                        session_result["sum_abs_bps"] / samples if samples else 0.0
+                    )
+                    positive_pct = (
+                        100.0 * session_result["positive"] / samples if samples else 0.0
+                    )
+                    session_summary = (
+                        f"n={samples}; abs={average_abs_bps:.3f}bps; "
+                        f"up={positive_pct:.2f}%"
+                    )
+                    self.set_runtime_statistic(
+                        f"SESSION {root} {bucket} {horizon}m",
+                        session_summary,
+                    )
+                    self.log(
+                        f"SESSION|{root}|{bucket}|{horizon}m|{session_summary}"
+                    )
 
         self.set_runtime_statistic("Orders sent", 0)
