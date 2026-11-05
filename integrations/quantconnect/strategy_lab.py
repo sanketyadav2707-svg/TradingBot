@@ -146,6 +146,7 @@ class FuturesStrategySignalLab(QCAlgorithm):
     TICK_SIZE = 0.25
     POINT_VALUES = {"MES": 5.0, "MNQ": 2.0}
     CANDIDATES = ("ORB15", "VWAP_PULLBACK", "COMPRESSION_BREAKOUT")
+    LAST_ENTRY_TIME = time(14, 15)  # Allows the longest 15m outcome to end by 14:30 CT.
 
     def initialize(self) -> None:
         self.set_time_zone(TimeZones.CHICAGO)
@@ -400,6 +401,8 @@ class FuturesStrategySignalLab(QCAlgorithm):
 
                 # Never generate signals outside the regular cash-session window.
                 if bucket not in ("RTH_OPEN", "RTH_CORE", "RTH_CLOSE"):
+                    continue
+                if bar_start.time() >= self.LAST_ENTRY_TIME:
                     continue
                 if state["active"] is not None or state["pending"] is not None:
                     continue
