@@ -265,3 +265,17 @@ def test_runtime_statistic_currency_values_are_interpolated():
 def test_daily_metrics_only_include_rth_session_dates():
     text = source()
     assert "if time(8, 30) <= bar_start.time() < time(15, 0):" in text
+
+def test_time_audit_uses_algorithm_and_exchange_time_zones():
+    text = source()
+    assert 'self.set_runtime_statistic("Algorithm time zone", str(self.time_zone))' in text
+    assert 'self.securities[self._future.symbol].exchange.hours.time_zone' in text
+    assert 'self.utc_time.strftime' in text
+    assert 'bar.time.strftime' in text
+    assert 'bar.end_time.strftime' in text
+
+
+def test_excursion_chart_labels_values_as_index_points_not_dollars():
+    text = source()
+    assert 'Series("MFE points", SeriesType.LINE, "MNQ index points")' in text
+    assert 'Series("MAE points", SeriesType.LINE, "MNQ index points")' in text
