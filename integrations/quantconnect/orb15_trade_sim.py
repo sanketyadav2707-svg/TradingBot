@@ -184,7 +184,10 @@ class MNQORB15EventDrivenBaseline(QCAlgorithm):
             "last_trade_time_samples": [],
         }
         self.set_runtime_statistic("Algorithm time zone", str(self.time_zone))
-        self.set_runtime_statistic("MNQ exchange time zone", str(self._future.exchange.time_zone))
+        self.set_runtime_statistic(
+            "MNQ exchange time zone",
+            str(self.securities[self._future.symbol].exchange.hours.time_zone)
+        )
         self.set_runtime_statistic("Study mode", "VIRTUAL TRADES / NO ORDERS")
         self.set_runtime_statistic("Candidate", "MNQ ORB15 / 15M TIME EXIT")
         self.set_runtime_statistic("Entry assumption", "NEXT CONTIGUOUS 1M BAR OPEN")
