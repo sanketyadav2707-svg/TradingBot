@@ -224,3 +224,13 @@ A source review caught a formatting defect in the first GitHub upload of the eve
 ## RTH-only daily risk series correction (5 November 2026)
 
 A follow-up review found that the first simulator draft could count overnight Globex-only calendar dates as zero-PnL daily observations, despite the signal operating only in the US cash session. Daily PnL observations are now created only for dates with received MNQ bars from 08:30–15:00 CT. The five-observation block bootstrap therefore uses RTH session calendar dates, with no-trade RTH dates retained as zero. The correction is in commit `be812bb025c68ef03da607cc4ccb967c0e9541a1`; the regression test is in `c593a497eba7a1b51663f87d8b2cf57232065395`. The latest focused local suite passed 12 tests.
+
+## First MNQ ORB15 virtual-trade result and timing audit (6 November 2026)
+
+- Analysed the user's uploaded QuantConnect run `Emotional Black Fish`. Backtest completed without runtime error; 194 signals, 194 entries, 194 completed virtual trades, zero cancellations/invalidations and zero real orders.
+- At the 2-tick-per-side slippage assumption plus $1.14 round-turn commission: virtual PnL $582.34 total, $3.00 average/trade, 51.5% win rate, 1.103 profit factor, $1,092.42 max daily-close drawdown and five-trade maximum losing streak.
+- Mean MFE 34.664 points and mean MAE 31.513 points. Daily five-session block-bootstrap 95% mean-PnL interval [-$8.416,+$14.484] includes zero. The candidate remains inconclusive; do not optimize it or connect live execution.
+- Full result review: `docs/ORB15_EVENT_SIM_FIRST_RUN_2026-11-06.md`.
+- A chart-time audit found that the first JSON's chart x-axis epoch values appeared inconsistent with the coded Chicago session windows. Added algorithm/exchange time-zone fields, first RTH bar timestamp audit, and first/last trade timestamp samples to the simulator. Added explicit MNQ index-point units to MFE/MAE chart series.
+- The first GitHub Actions attempts correctly caught missing time attributes in the synthetic bar test fixture. The fixture now includes its bar start time and the test suite passed on commit `0bc54fd287c0d46173ede0511eff4bec13d38550` (run 42228033570; 67 tests passed).
+- Next QuantConnect run must use the latest simulator and compare the audit timestamps before any session-window changes. Keep the 90-day OOS holdout unchanged.
