@@ -249,3 +249,15 @@ The latest research candidate is MNQ ORB15 with a fixed 15-minute exit. The next
 - `ORB15_EVENT_SIM.md`: full definitions, limitations and QuantConnect run instructions.
 
 This algorithm remains no-order and uses one-contract virtual accounting only. It does not yet model bid/ask fills, intraday mark-to-market drawdown, stop/target execution or prop-firm rules. Preserve the organization-level 90-day out-of-sample holdout. Download the QuantConnect Results JSON after the run and upload that file; screenshots are not needed.
+
+## First event-driven MNQ ORB15 simulation results (6 November 2026)
+
+The uploaded run `Emotional Black Fish` completed without runtime error, with 194 signals, 194 next-open entries, 194 completed one-contract virtual trades, zero cancellations/invalidations, and zero real orders. At 2 ticks of adverse slippage per side plus the $1.14 reference commission, total virtual net PnL was $582.34, average $3.00/trade, win rate 51.5%, and profit factor 1.103. The five-RTH-session block-bootstrap daily mean interval included zero. This is inconclusive research evidence, not a validated edge.
+
+The result audit is documented in `docs/ORB15_EVENT_SIM_FIRST_RUN_2026-11-06.md`.
+
+### Timing audit update
+
+The first JSON's chart point epoch values appeared inconsistent with the programmed Chicago opening-range and entry times. The next code revision adds algorithm/exchange time-zone fields, an 08:30 RTH bar time audit, and first/last three trade timestamp samples containing signal, entry, exit, algorithm and UTC times. The MFE/MAE chart series are also explicitly labelled in MNQ index points, not dollars.
+
+The audit revision and its regression tests passed GitHub Actions on commit `0bc54fd287c0d46173ede0511eff4bec13d38550` (run 42228033570; 67 tests passed). Do not alter the time windows until the new QuantConnect run's audit fields reconcile.
