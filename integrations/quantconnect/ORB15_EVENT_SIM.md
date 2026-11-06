@@ -90,3 +90,31 @@ Do not progress to stops/targets or paper execution merely because the output is
 6. The result is not being described as prop-firm-ready or live-profitable.
 
 No live adapter, real-money deployment, paid challenge or capital scaling is authorized by this research script.
+
+## First simulation result (6 November 2026)
+
+The uploaded run `Emotional Black Fish` completed without runtime error:
+
+- 194 signals, 194 next-open entries, 194 completed virtual trades.
+- Zero cancellations, zero gap/roll invalidations and zero submitted orders.
+- At 2 ticks of adverse slippage per side plus the $1.14 reference commission: total net PnL $582.34; average $3.00 per trade; win rate 51.5%; profit factor 1.103.
+- Maximum daily-close drawdown at that cost assumption: $1,092.42.
+- Five-RTH-session block-bootstrap 95% interval for mean daily net PnL: -$8.416 to +$14.484, which includes zero.
+- Mean MFE: 34.664 points; mean MAE: 31.513 points. The excursion distributions include materially larger adverse moves than the average net result.
+
+This is an inconclusive research result, not evidence of a validated edge. The full audit is recorded in `docs/ORB15_EVENT_SIM_FIRST_RUN_2026-11-06.md`.
+
+## Timestamp audit added
+
+The first Results JSON's chart-point epoch values appeared, after conversion to America/Chicago, around 08:01–09:25 CT. That appears inconsistent with the strategy's intended 08:30–08:45 CT opening range and 08:45–10:29 CT signal window. This is not enough to conclude the algorithm entered early: QuantConnect chart plots use algorithm time as the x-coordinate, while data-object times use the exchange time zone and can differ from the algorithm time zone.
+
+The latest script adds these runtime fields:
+
+- `Algorithm time zone`
+- `MNQ exchange time zone`
+- `First RTH time audit`: algorithm time, UTC time and the first 08:30 RTH bar start/end.
+- `First 3 trade times` and `Last 3 trade times`: signal-bar end, exchange-bar entry/exit, algorithm plot time and UTC plot time.
+
+The MFE/MAE chart series are explicitly defined with unit `MNQ index points`, not dollars. Compare the new timing fields before changing any session boundaries or drawing conclusions from the chart's x-axis.
+
+GitHub Actions passed on commit `0bc54fd287c0d46173ede0511eff4bec13d38550`, run 42228033570 (67 tests passed).
