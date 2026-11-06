@@ -140,15 +140,30 @@ def test_virtual_trade_enters_next_open_and_exits_on_exact_15m_close(monkeypatch
 
     class FakeFuture:
         mapped = "MNQ-CONTRACT"
+        symbol = "MNQ-CONTRACT"
 
         def set_filter(self, *_args):
             return None
+
+    class FakeSeries:
+        def __init__(self, *args): self.args = args
+
+    class FakeChart:
+        def __init__(self, name): self.name = name
+        def add_series(self, series): return None
 
     class FakeQCAlgorithm:
         def __init__(self):
             self.fake_future = FakeFuture()
             self.runtime = {}
             self.plots = []
+            self.time_zone = "America/Chicago"
+            self.time = dt.datetime(2026, 1, 5, 8, 30)
+            self.utc_time = dt.datetime(2026, 1, 5, 14, 30, tzinfo=dt.timezone.utc)
+            exchange = types.SimpleNamespace(
+                hours=types.SimpleNamespace(time_zone="America/Chicago")
+            )
+            self.securities = {"MNQ-CONTRACT": types.SimpleNamespace(exchange=exchange)}
 
         def set_time_zone(self, *_args): pass
         def get_parameter(self, _name): return None
@@ -157,6 +172,7 @@ def test_virtual_trade_enters_next_open_and_exits_on_exact_15m_close(monkeypatch
         def set_cash(self, *_args): pass
         def add_future(self, *_args, **_kwargs): return self.fake_future
         def set_runtime_statistic(self, name, value): self.runtime[name] = value
+        def add_chart(self, chart): return None
         def plot(self, *args): self.plots.append(args)
 
     fake = types.ModuleType("AlgorithmImports")
@@ -169,6 +185,9 @@ def test_virtual_trade_enters_next_open_and_exits_on_exact_15m_close(monkeypatch
     )
     fake.DataMappingMode = types.SimpleNamespace(OPEN_INTEREST="OpenInterest")
     fake.DataNormalizationMode = types.SimpleNamespace(RAW="Raw")
+    fake.Chart = FakeChart
+    fake.Series = FakeSeries
+    fake.SeriesType = types.SimpleNamespace(LINE="Line")
     monkeypatch.setitem(sys.modules, "AlgorithmImports", fake)
 
     spec = importlib.util.spec_from_file_location("orb15_event_module", SCRIPT)
@@ -192,9 +211,13 @@ def test_virtual_trade_enters_next_open_and_exits_on_exact_15m_close(monkeypatch
     start = dt.datetime(2026, 1, 5, 8, 30)
     for minute in range(15):
         bar_start = start + dt.timedelta(minutes=minute)
+        algorithm.time = bar_start + dt.timedelta(minutes=1)
+        algorithm.utc_time = (algorithm.time + dt.timedelta(hours=6)).replace(tzinfo=dt.timezone.utc)
         algorithm.on_data(SliceStub(Bar(bar_start, 99.5, 100.0, 99.0, 99.5)))
 
     signal_start = start + dt.timedelta(minutes=15)
+    algorithm.time = signal_start + dt.timedelta(minutes=1)
+    algorithm.utc_time = (algorithm.time + dt.timedelta(hours=6)).replace(tzinfo=dt.timezone.utc)
     algorithm.on_data(SliceStub(Bar(signal_start, 100.0, 100.5, 99.75, 100.25)))
     assert algorithm._state["signals"] == 1
     assert algorithm._state["entries"] == 0
@@ -203,6 +226,8 @@ def test_virtual_trade_enters_next_open_and_exits_on_exact_15m_close(monkeypatch
     for minute in range(15):
         bar_start = entry_start + dt.timedelta(minutes=minute)
         close = 101.0 if minute == 14 else 100.75
+        algorithm.time = bar_start + dt.timedelta(minutes=1)
+        algorithm.utc_time = (algorithm.time + dt.timedelta(hours=6)).replace(tzinfo=dt.timezone.utc)
         algorithm.on_data(
             SliceStub(Bar(bar_start, 100.5, 101.25, 100.25, close))
         )
@@ -220,6 +245,16 @@ def test_virtual_trade_enters_next_open_and_exits_on_exact_15m_close(monkeypatch
     assert trade["mae_points"] == 0.25
     assert state["invalidated"] == 0
     assert all("order" not in str(call).lower() for call in algorithm.plots)
+
+    assert "First RTH time audit" not in algorithm.runtime
+    algorithm.on_end_of_algorithm()
+    assert "Algorithm time zone" in algorithm.runtime
+    assert algorithm.runtime["MNQ exchange time zone"] == "America/Chicago"
+    assert "First RTH time audit" in algorithm.runtime
+    assert "First 3 trade times" in algorithm.runtime
+    assert "sigEnd=01-05 08:46" in algorithm.runtime["First 3 trade times"]
+    assert "entry=08:46" in algorithm.runtime["First 3 trade times"]
+    assert "exit=09:01" in algorithm.runtime["First 3 trade times"]
 
 def test_runtime_statistic_currency_values_are_interpolated():
     text = source()
