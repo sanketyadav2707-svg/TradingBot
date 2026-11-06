@@ -159,6 +159,10 @@ class MNQORB15EventDrivenBaseline(QCAlgorithm):
             contract_depth_offset=0,
         )
         self._future.set_filter(0, 90)
+        excursion_chart = Chart("ORB15 Trade Excursions")
+        self.add_chart(excursion_chart)
+        excursion_chart.add_series(Series("MFE points", SeriesType.LINE, "MNQ index points"))
+        excursion_chart.add_series(Series("MAE points", SeriesType.LINE, "MNQ index points"))
         self._state = {
             "last_end_time": None,
             "last_mapped_symbol": None,
@@ -175,7 +179,12 @@ class MNQORB15EventDrivenBaseline(QCAlgorithm):
             "invalidated": 0,
             "trades": [],
             "daily_pnls": {},
+            "time_audit": None,
+            "first_trade_time_samples": [],
+            "last_trade_time_samples": [],
         }
+        self.set_runtime_statistic("Algorithm time zone", str(self.time_zone))
+        self.set_runtime_statistic("MNQ exchange time zone", str(self._future.exchange.time_zone))
         self.set_runtime_statistic("Study mode", "VIRTUAL TRADES / NO ORDERS")
         self.set_runtime_statistic("Candidate", "MNQ ORB15 / 15M TIME EXIT")
         self.set_runtime_statistic("Entry assumption", "NEXT CONTIGUOUS 1M BAR OPEN")
@@ -216,6 +225,7 @@ class MNQORB15EventDrivenBaseline(QCAlgorithm):
             )["net_dollars"]
 
         trade = {
+            "signal_bar_end": active["signal_bar_end"],
             "entry_time": active["entry_time"],
             "exit_time": exit_time,
             "direction": direction,
@@ -227,6 +237,18 @@ class MNQORB15EventDrivenBaseline(QCAlgorithm):
             "mae_points": active["mae_points"],
         }
         state["trades"].append(trade)
+        time_sample = (
+            f"sigEnd={active['signal_bar_end'].strftime('%m-%d %H:%M')};"
+            f"entry={active['entry_time'].strftime('%H:%M')};"
+            f"exit={exit_time.strftime('%H:%M')};"
+            f"plotAlg={self.time.strftime('%H:%M')};"
+            f"plotUTC={self.utc_time.strftime('%H:%M')}"
+        )
+        if len(state["first_trade_time_samples"]) < 3:
+            state["first_trade_time_samples"].append(time_sample)
+        state["last_trade_time_samples"] = (
+            state["last_trade_time_samples"] + [time_sample]
+        )[-3:]
 
         day = active["entry_time"].date()
         daily = state["daily_pnls"].setdefault(
@@ -256,6 +278,13 @@ class MNQORB15EventDrivenBaseline(QCAlgorithm):
         if time(8, 30) <= bar_start.time() < time(15, 0):
             state["daily_pnls"].setdefault(
                 day, {ticks: 0.0 for ticks in SLIPPAGE_TICKS_PER_SIDE}
+            )
+        if state["time_audit"] is None and bar_start.time() == time(8, 30):
+            state["time_audit"] = (
+                f"algo={self.time.strftime('%Y-%m-%d %H:%M:%S')};"
+                f"utc={self.utc_time.strftime('%Y-%m-%dT%H:%M:%SZ')};"
+                f"bar={bar.time.strftime('%Y-%m-%d %H:%M:%S')}->"
+                f"{bar.end_time.strftime('%Y-%m-%d %H:%M:%S')}"
             )
 
         mapped_text = str(mapped)
@@ -290,6 +319,7 @@ class MNQORB15EventDrivenBaseline(QCAlgorithm):
             ):
                 state["active"] = {
                     "direction": pending["direction"],
+                    "signal_bar_end": pending["signal_time"],
                     "entry_time": bar_start,
                     "entry_price": float(bar.open),
                     "mfe_points": 0.0,
@@ -365,6 +395,18 @@ class MNQORB15EventDrivenBaseline(QCAlgorithm):
         self.set_runtime_statistic("ORB15 cancelled", state["cancelled"])
         self.set_runtime_statistic("ORB15 invalidated", state["invalidated"])
         self.set_runtime_statistic("Daily observations", len(daily_dates))
+        self.set_runtime_statistic(
+            "First RTH time audit",
+            state["time_audit"] or "No 08:30 CT bar received"
+        )
+        self.set_runtime_statistic(
+            "First 3 trade times",
+            " | ".join(state["first_trade_time_samples"]) or "No completed trades"
+        )
+        self.set_runtime_statistic(
+            "Last 3 trade times",
+            " | ".join(state["last_trade_time_samples"]) or "No completed trades"
+        )
 
         average_mfe = (
             sum(trade["mfe_points"] for trade in trades) / len(trades)
