@@ -52,6 +52,8 @@ python -m tradingbot audit-data --csv data/sample/MES_5m_sample.csv --symbol MES
 python -m tradingbot backtest --csv data/sample/MES_5m_sample.csv --symbol MES
 ```
 
+**Cost caveat:** `config/risk.toml` currently sets `commission_per_contract_per_side_usd = 0.0` because no target broker/account fee schedule has been selected. Local backtest results therefore exclude commissions unless you explicitly configure the applicable fee. The default one-tick-per-side slippage assumption does not replace commission, spread, or fill modelling.
+
 Optional Databento historical import (only after you have created an account and stored the key locally in `.env`; no key is needed for the sample backtest):
 
 ```bash
@@ -134,16 +136,12 @@ The probe has now been corrected:
 - Runtime output is condensed to one profile per root/horizon to remain comfortably below the 50 custom-statistic limit. Each profile includes sample count, mean absolute move, standard deviation, positive percentage, non-overlap pair count, continuation-after-up and continuation-after-down.
 - The helper has direct unit tests for consecutive rising windows and gap resets, plus a structural test confirming each horizon is updated.
 
-Replace the QuantConnect cloud project's `main.py` with the latest repository version and rerun. Read the compact statistics named `MES 3m profile`, `MES 5m profile`, `MES 10m profile`, `MES 15m profile`, and corresponding MNQ profiles. Values are formatted as `n=...; abs=...bps; sd=...bps; up=...%; pairs=...; contUp=...%; contDn=...%`.
-
-The patch is committed, but its latest GitHub Actions run is still pending at the time of this note. Do not treat the update as test-verified until that run completes successfully.
+The corrected continuation probe and its regression tests passed GitHub Actions on 5 November 2026 (run 41907615334). The corrected code is test-verified; the user still needs to rerun the updated QuantConnect cloud project before using new continuation statistics.
 
 
 ## Validation of continuation-probe repair (5 November 2026)
 
 The corrected probe and regression tests passed GitHub Actions on commit `b81d3f997b9704546dd0bc1a3e1df00b604bc78c` (run 41907615334). The updated tests cover consecutive positive non-overlapping windows, reset behaviour after a gap, and the presence of the updater inside a horizon loop. The algorithm's runtime output is reduced to one compact profile per root/horizon and now has 26 custom runtime-statistic fields at its current configuration, below QuantConnect's 50-field limit.
-
-The user must still rerun the corrected `main.py` in QuantConnect Cloud. The previous continuation results must not be used; no new continuation values have been observed yet.
 
 
 ## Strategy research lab
@@ -153,4 +151,4 @@ The next research phase is implemented in [QuantConnect MES/MNQ Strategy Signal 
 
 ## First strategy screen results (5 November 2026)
 
-The first QuantConnect strategy signal screen is documented in [docs/STRATEGY_SCREEN_2026-11-05.md](docs/STRATEGY_SCREEN_2026-11-05.md). MNQ ORB15 at a 15-minute forward exit is the only candidate positive under the screen's 0/1/2-tick-per-side scenarios. This is a limited research signal, not a validated profitable strategy or full P&L backtest. The 90-day organization holdout is preserved.
+The first QuantConnect strategy signal screen is documented in [docs/STRATEGY_SCREEN_2026-11-05.md](docs/STRATEGY_SCREEN_2026-11-05.md). MNQ ORB15 at a 15-minute forward exit is the only candidate positive under the screen's 0/1/2-tick-per-side scenarios. This is a limited research signal, not a validated profitable strategy or full P&L backtest. The 90-day organization out-of-sample holdout is preserved.

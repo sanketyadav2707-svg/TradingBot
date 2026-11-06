@@ -25,8 +25,9 @@ class BacktestConfig:
     session_timezone: str = "America/New_York"
 
     def __post_init__(self) -> None:
-        if min(self.stop_ticks, self.target_ticks, self.max_holding_bars) < 1:
-            raise ValueError("Stop, target, and max holding bars must be positive")
+        values = (self.stop_ticks, self.target_ticks, self.max_holding_bars)
+        if any(type(value) is not int or value < 1 for value in values):
+            raise ValueError("Stop, target, and max holding bars must be positive integers")
         ZoneInfo(self.session_timezone)
 
 
@@ -113,12 +114,17 @@ class BacktestEngine:
             bar_day = bar.timestamp.astimezone(session_tz).date()
             previous_day = bars[index - 1].timestamp.astimezone(session_tz).date()
             if current_day != bar_day:
-                if position is not None:
-                    trades.append(close_position(position, bar, bar.open, "session_day_change", index))
-                    position = None
-                current_day = bar_day
+                # Attribute an overnight position's opening-gap exit to the new
+                # session. Resetting after close would silently erase that day's PnL
+                # from the daily-loss gate.
                 daily_pnl = 0.0
                 trades_today = 0
+                current_day = bar_day
+                if position is not None:
+                    trades.append(
+                        close_position(position, bar, bar.open, "session_day_change", index)
+                    )
+                    position = None
 
             if position is not None and self.compliance_gate is not None:
                 flatten_decision = self.compliance_gate.must_flatten(bar.timestamp)

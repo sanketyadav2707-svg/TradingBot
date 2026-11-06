@@ -6,9 +6,17 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: python-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

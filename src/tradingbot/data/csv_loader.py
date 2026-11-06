@@ -27,13 +27,17 @@ def _parse_timestamp(raw: str) -> datetime:
 
 
 def load_bars(path: str | Path, expected_symbol: str | None = None) -> list[Bar]:
-    """Load chronological OHLCV rows. Duplicate or out-of-order bars are rejected."""
+    """Load OHLCV rows in per-symbol chronological order.
+
+    Multiple symbols may share timestamps. Duplicate or out-of-order timestamps are
+    rejected within each symbol series, rather than across the entire CSV.
+    """
     source = Path(path)
     if not source.is_file():
         raise FileNotFoundError(f"CSV file does not exist: {source}")
 
     bars: list[Bar] = []
-    previous_timestamp: datetime | None = None
+    previous_by_symbol: dict[str, datetime] = {}
     with source.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         columns = set(reader.fieldnames or [])
@@ -44,9 +48,10 @@ def load_bars(path: str | Path, expected_symbol: str | None = None) -> list[Bar]
         for line_number, row in enumerate(reader, start=2):
             try:
                 stamp = _parse_timestamp(row["timestamp"])
+                symbol = row["symbol"].strip().upper()
                 bar = Bar(
                     timestamp=stamp,
-                    symbol=row["symbol"].strip().upper(),
+                    symbol=symbol,
                     open=float(row["open"]),
                     high=float(row["high"]),
                     low=float(row["low"]),
@@ -61,11 +66,13 @@ def load_bars(path: str | Path, expected_symbol: str | None = None) -> list[Bar]
                     f"Row {line_number} symbol {bar.symbol} does not match "
                     f"requested {expected_symbol.upper()}"
                 )
+            previous_timestamp = previous_by_symbol.get(bar.symbol)
             if previous_timestamp is not None and bar.timestamp <= previous_timestamp:
                 raise DataValidationError(
-                    f"Rows must be strictly chronological; problem at line {line_number}"
+                    f"Rows for {bar.symbol} must be strictly chronological; "
+                    f"problem at line {line_number}"
                 )
-            previous_timestamp = bar.timestamp
+            previous_by_symbol[bar.symbol] = bar.timestamp
             bars.append(bar)
 
     if not bars:

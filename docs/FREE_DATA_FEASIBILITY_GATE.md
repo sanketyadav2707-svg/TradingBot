@@ -1,6 +1,6 @@
 # Milestone 0: Free-data and validation feasibility gate
 
-**Status:** Not yet passed  
+**Status:** Partially demonstrated. QuantConnect MES/MNQ historical minute-bar coverage was observed on 4 November 2026. The complete historical-research gate, continuous paper-data gate and challenge-readiness gate remain **not passed**.  
 **Budget rule:** ₹0 for development, research, backtesting and paper validation. Paid market-data, AI/API subscriptions, VPS and cloud compute are out of scope unless the user explicitly changes this rule.
 
 ## Purpose
@@ -30,7 +30,7 @@ Prove that the project can be researched and validated with legitimate free reso
 
 These are candidates, not endorsements or proof of adequacy:
 
-- QuantConnect free research/backtesting tier: test exact futures symbols, dates, resolution, contract mapping, export/reproducibility limits and current plan limits.
+- QuantConnect free research/backtesting tier: MES/MNQ 1-minute continuous-futures coverage was observed over 4 November 2025–3 November 2026 on 4 November 2026. Remaining checks include permitted data use/export, reproducibility, mapped-contract fill realism and chronological train/validation/out-of-sample sufficiency. Free-plan Futures Live Feed and Futures paper deployment are not included.
 - MarketParquet and Historical Futures Data: inspect the actual downloadable sample, contract identifiers, license/terms, date span and continuity.
 - Yahoo Finance/yfinance: treat as exploratory only; verify actual ticker coverage, timestamps, gaps, contract continuity and terms. Do not use as a substitute for exchange-authorized execution data.
 - Broker/platform demo or replay modes: verify whether data is live, delayed or replayed; whether it expires; which symbols are enabled; whether API access is included; and whether exchange fees or a paid entitlement are required.
@@ -41,9 +41,9 @@ CME public delayed quotes are not suitable for validating a 3–15 minute execut
 
 After syncing the repository, run from the VS Code integrated Terminal at the project root:
 
-\`\`\`bash
+```bash
 python -m tradingbot audit-data --csv path/to/your_data.csv --symbol MES --expected-interval-seconds 60
-\`\`\`
+```
 
 The command reports timestamp coverage, bar-interval distribution, large time jumps, zero-volume rows and price diagnostics. It does not decide whether a gap is a data error because futures sessions include overnight closures, maintenance breaks and holidays. Verify all reported jumps against the exchange calendar and the source's contract/session metadata.
 

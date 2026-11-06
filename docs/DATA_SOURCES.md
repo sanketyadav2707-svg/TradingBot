@@ -39,9 +39,9 @@ When you later choose to use this adapter:
 3. In the VS Code integrated Terminal, install the optional packages with python -m pip install -e ".[marketdata]".
 4. Run the command below from the VS Code integrated Terminal at the repository root:
 
-\`\`\`bash
+```bash
 python -m tradingbot fetch-databento --symbol MES --start 2026-01-05T00:00:00Z --end 2026-01-06T00:00:00Z --output data/raw/MES_1m.csv
-\`\`\`
+```
 
 The importer is historical-only. It does not connect to a live feed or submit orders. Check current credit balance, schema/dataset entitlement, data licensing and query cost before each request.
 
@@ -75,7 +75,7 @@ A 64-row synthetic fixture in data/sample/ exists only to verify code execution.
 
 ## Project verification status (4 November 2026)
 
-- Historical research: a promising free route exists through QuantConnect Free Plan minute futures history (documented one-year trailing window). It still needs an actual symbol/date/resolution verification and repeatable export/research workflow.
+- Historical coverage: the 4 November 2026 QuantConnect Free Plan probe verified 1-minute MES and MNQ continuous-futures bars over 4 November 2025–3 November 2026 (267,325 MES bars and 267,349 MNQ bars; 238 active dates each; three mapping changes per root). This proves the tested cloud subscriptions returned minute bars, but not raw-data export rights, bid/ask/tick execution quality, continuous live data or strategy profitability.
 - Continuous live futures paper data: not solved. QuantConnect Free Plan does not include Futures Live Feed or Futures paper deployment; NinjaTrader's free real-time demo is 14 days only.
 - Decision: continue development at ₹0, but do not state that continuous real-time futures paper validation or challenge readiness has been achieved.
 
