@@ -36,6 +36,14 @@ class FirmRuleProfile:
         for value in (self.max_daily_loss_usd, self.max_total_drawdown_usd):
             if value is not None and value < 0:
                 raise ValueError("Firm loss limits cannot be negative")
+        if any(not isinstance(symbol, str) or not symbol.strip() for symbol in self.allowed_symbols):
+            raise ValueError("allowed_symbols must contain non-empty symbol strings")
+        if (
+            self.latest_entry_time is not None
+            and self.flatten_time is not None
+            and self.latest_entry_time >= self.flatten_time
+        ):
+            raise ValueError("latest_entry_time must be earlier than flatten_time")
 
     def completeness_error(self) -> str | None:
         required_text = (

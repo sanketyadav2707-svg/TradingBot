@@ -3,8 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 
 from tradingbot.models import Instrument
+
+
+def _finite_number(value: object) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and isfinite(value)
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,10 +32,15 @@ class RiskLimits:
             self.max_total_drawdown_usd,
             self.max_risk_per_trade_usd,
         )
-        if any(value <= 0 for value in numeric):
-            raise ValueError("All balance and risk limits must be positive")
-        if self.max_contracts < 1 or self.max_trades_per_day < 1:
-            raise ValueError("Contract and trade limits must be at least 1")
+        if any(not _finite_number(value) or value <= 0 for value in numeric):
+            raise ValueError("All balance and risk limits must be finite and positive")
+        if (
+            type(self.max_contracts) is not int
+            or type(self.max_trades_per_day) is not int
+            or self.max_contracts < 1
+            or self.max_trades_per_day < 1
+        ):
+            raise ValueError("Contract and trade limits must be positive integers")
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,10 +59,15 @@ class RiskGuard:
         commission_per_contract_per_side_usd: float = 0.0,
         slippage_ticks_per_side: int = 1,
     ) -> None:
-        if commission_per_contract_per_side_usd < 0 or slippage_ticks_per_side < 0:
-            raise ValueError("Commission and slippage assumptions cannot be negative")
+        if (
+            not _finite_number(commission_per_contract_per_side_usd)
+            or commission_per_contract_per_side_usd < 0
+        ):
+            raise ValueError("Commission must be finite and non-negative")
+        if type(slippage_ticks_per_side) is not int or slippage_ticks_per_side < 0:
+            raise ValueError("Slippage ticks must be a non-negative integer")
         self.limits = limits
-        self.commission = commission_per_contract_per_side_usd
+        self.commission = float(commission_per_contract_per_side_usd)
         self.slippage_ticks = slippage_ticks_per_side
 
     def evaluate_entry(
@@ -61,8 +80,20 @@ class RiskGuard:
         daily_pnl_usd: float,
         trades_today: int,
     ) -> RiskDecision:
-        if stop_ticks < 1:
+        if type(stop_ticks) is not int or stop_ticks < 1:
             return RiskDecision(False, 0, "stop_distance_must_be_positive")
+
+        account_values = (equity_usd, peak_equity_usd, daily_pnl_usd)
+        if (
+            any(not _finite_number(value) for value in account_values)
+            or type(trades_today) is not int
+            or trades_today < 0
+            or peak_equity_usd < equity_usd
+        ):
+            return RiskDecision(False, 0, "invalid_account_snapshot")
+
+        if equity_usd <= 0:
+            return RiskDecision(False, 0, "non_positive_equity")
         if trades_today >= self.limits.max_trades_per_day:
             return RiskDecision(False, 0, "max_trades_per_day_reached")
 
@@ -73,15 +104,14 @@ class RiskGuard:
             return RiskDecision(False, 0, "maximum_total_drawdown_reached")
         if remaining_daily <= 0:
             return RiskDecision(False, 0, "maximum_daily_loss_reached")
-        if equity_usd <= 0:
-            return RiskDecision(False, 0, "non_positive_equity")
 
         slippage_risk = 2 * self.slippage_ticks * instrument.tick_value_usd
         stop_risk = stop_ticks * instrument.tick_value_usd
         round_trip_commission = 2 * self.commission
-        estimated_risk_per_contract = (
-            stop_risk + slippage_risk + round_trip_commission
-        )
+        estimated_risk_per_contract = stop_risk + slippage_risk + round_trip_commission
+        if not isfinite(estimated_risk_per_contract) or estimated_risk_per_contract <= 0:
+            return RiskDecision(False, 0, "invalid_risk_calculation")
+
         budget = min(
             self.limits.max_risk_per_trade_usd,
             remaining_daily,

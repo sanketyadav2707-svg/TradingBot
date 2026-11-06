@@ -1,3 +1,5 @@
+import pytest
+
 from tradingbot.models import Instrument
 from tradingbot.risk.limits import RiskGuard, RiskLimits
 
@@ -48,3 +50,43 @@ def test_risk_guard_accounts_for_remaining_drawdown_buffer() -> None:
     )
     assert decision.approved
     assert decision.quantity == 1
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_risk_limits_reject_non_finite_values(value: float) -> None:
+    with pytest.raises(ValueError, match="finite and positive"):
+        RiskLimits(max_daily_loss_usd=value)
+
+
+@pytest.mark.parametrize("value", [1.5, True, 0])
+def test_risk_limits_require_integer_contract_and_trade_counts(value: object) -> None:
+    with pytest.raises(ValueError, match="positive integers"):
+        RiskLimits(max_contracts=value)  # type: ignore[arg-type]
+
+
+def test_risk_guard_fails_closed_on_invalid_account_snapshot() -> None:
+    guard = RiskGuard(RiskLimits())
+    common = {
+        "instrument": _instrument(),
+        "stop_ticks": 8,
+        "daily_pnl_usd": 0,
+        "trades_today": 0,
+    }
+    invalid_snapshots = (
+        {"equity_usd": float("nan"), "peak_equity_usd": 50_000},
+        {"equity_usd": 50_001, "peak_equity_usd": 50_000},
+        {"equity_usd": 50_000, "peak_equity_usd": 50_000, "trades_today": -1},
+    )
+    for snapshot in invalid_snapshots:
+        args = {**common, "equity_usd": 50_000, "peak_equity_usd": 50_000}
+        args.update(snapshot)
+        decision = guard.evaluate_entry(**args)
+        assert not decision.approved
+        assert decision.reason == "invalid_account_snapshot"
+
+
+def test_risk_guard_rejects_non_finite_commission_and_fractional_slippage() -> None:
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        RiskGuard(RiskLimits(), commission_per_contract_per_side_usd=float("nan"))
+    with pytest.raises(ValueError, match="non-negative integer"):
+        RiskGuard(RiskLimits(), slippage_ticks_per_side=0.5)  # type: ignore[arg-type]

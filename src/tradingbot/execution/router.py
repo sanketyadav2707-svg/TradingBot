@@ -1,7 +1,7 @@
 """Risk- and compliance-gated order router.
 
-The router is intentionally restricted to the in-memory paper broker. A LIVE mode cannot
-be enabled by configuration; a future live adapter requires a separate, reviewed change.
+The router is intentionally restricted to the concrete in-memory paper broker. A LIVE mode
+or a custom broker implementation cannot be enabled by configuration.
 """
 
 from __future__ import annotations
@@ -9,10 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from math import isfinite
 
 from tradingbot.compliance.rules import FirmComplianceGate
-from tradingbot.execution.ports import ExecutionPort
 from tradingbot.models import Instrument, Side
+from tradingbot.paper.broker import PaperBroker
 from tradingbot.risk.limits import RiskGuard
 
 
@@ -43,17 +44,19 @@ class OrderIntent:
 
 
 class ExecutionRouter:
-    """Routes an order only after risk/compliance approval and only in paper mode."""
+    """Routes an order only after risk/compliance approval and only through PaperBroker."""
 
     def __init__(
         self,
         *,
-        broker: ExecutionPort,
+        broker: PaperBroker,
         risk_guard: RiskGuard,
         mode: ExecutionMode = ExecutionMode.PAPER,
         compliance_gate: FirmComplianceGate | None = None,
         require_firm_profile: bool = False,
     ) -> None:
+        if type(broker) is not PaperBroker:
+            raise TypeError("paper_broker_only: custom and live broker adapters are not supported")
         self.broker = broker
         self.risk_guard = risk_guard
         self.mode = mode
@@ -70,11 +73,33 @@ class ExecutionRouter:
             raise OrderRejected("emergency_halt_active")
         if self.mode != ExecutionMode.PAPER:
             raise OrderRejected("live_execution_not_implemented")
-        if intent.side == Side.FLAT:
-            raise OrderRejected("flat_side_cannot_be_submitted")
-        if intent.instrument.symbol.strip().upper() == "":
-            raise OrderRejected("instrument_symbol_missing")
-        if self.broker.instrument.symbol.upper() != intent.instrument.symbol.upper():
+        if not isinstance(intent.side, Side) or intent.side not in (Side.LONG, Side.SHORT):
+            raise OrderRejected("invalid_order_side")
+        if (
+            not isinstance(intent.timestamp, datetime)
+            or intent.timestamp.tzinfo is None
+            or intent.timestamp.utcoffset() is None
+        ):
+            raise OrderRejected("timestamp_must_be_timezone_aware")
+        if (
+            not isinstance(intent.reference_price, (int, float))
+            or isinstance(intent.reference_price, bool)
+            or not isfinite(intent.reference_price)
+        ):
+            raise OrderRejected("reference_price_must_be_finite")
+
+        broker_instrument = self.broker.instrument
+        requested_instrument = intent.instrument
+        same_contract = (
+            broker_instrument.symbol.strip().upper()
+            == requested_instrument.symbol.strip().upper()
+        )
+        same_specification = (
+            broker_instrument.tick_size == requested_instrument.tick_size
+            and broker_instrument.tick_value_usd == requested_instrument.tick_value_usd
+            and broker_instrument.point_value_usd == requested_instrument.point_value_usd
+        )
+        if not same_contract or not same_specification:
             raise OrderRejected("broker_instrument_mismatch")
         if self.require_firm_profile and self.compliance_gate is None:
             raise OrderRejected("verified_firm_profile_required")

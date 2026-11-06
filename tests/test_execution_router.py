@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
@@ -73,3 +74,35 @@ def test_router_rejects_broker_symbol_mismatch() -> None:
     )
     with pytest.raises(OrderRejected, match="broker_instrument_mismatch"):
         router.submit_entry(_intent(), _account())
+
+
+def test_router_rejects_custom_broker_implementations() -> None:
+    class CustomBroker:
+        instrument = Instrument("MES", 0.25, 1.25, 5.0)
+
+        def submit_market(self, **_kwargs):
+            raise AssertionError("A custom broker must never be called")
+
+    with pytest.raises(TypeError, match="paper_broker_only"):
+        ExecutionRouter(
+            broker=CustomBroker(),  # type: ignore[arg-type]
+            risk_guard=RiskGuard(RiskLimits()),
+        )
+
+
+def test_router_rejects_matching_symbol_with_different_instrument_metadata() -> None:
+    router = _setup()
+    altered = replace(_intent(), instrument=Instrument("MES", 0.5, 2.5, 5.0))
+    with pytest.raises(OrderRejected, match="broker_instrument_mismatch"):
+        router.submit_entry(altered, _account())
+
+
+def test_router_rejects_invalid_side_and_non_finite_reference_price() -> None:
+    router = _setup()
+    invalid_side = replace(_intent(), side=2)
+    with pytest.raises(OrderRejected, match="invalid_order_side"):
+        router.submit_entry(invalid_side, _account())
+
+    invalid_price = replace(_intent(), reference_price=float("nan"))
+    with pytest.raises(OrderRejected, match="reference_price_must_be_finite"):
+        router.submit_entry(invalid_price, _account())

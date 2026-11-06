@@ -2,6 +2,8 @@ from dataclasses import replace
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from tradingbot.compliance.rules import FirmComplianceGate, FirmRuleProfile
 
 
@@ -48,3 +50,13 @@ def test_entry_cutoff_and_flatten_time_are_enforced() -> None:
     flatten = datetime(2026, 11, 4, 15, 10, tzinfo=ZoneInfo("America/Chicago"))
     assert gate.check_entry(timestamp=cutoff, symbol="MES", quantity=1).reason == "entry_cutoff_reached"
     assert gate.must_flatten(flatten).allowed
+
+
+def test_profile_rejects_invalid_entry_and_flatten_order() -> None:
+    with pytest.raises(ValueError, match="latest_entry_time must be earlier"):
+        replace(_profile(), latest_entry_time=time(15, 11))
+
+
+def test_profile_rejects_blank_allowed_symbols() -> None:
+    with pytest.raises(ValueError, match="non-empty symbol strings"):
+        replace(_profile(), allowed_symbols=("MES", " "))

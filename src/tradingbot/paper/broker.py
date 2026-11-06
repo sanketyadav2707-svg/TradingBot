@@ -31,24 +31,37 @@ class PaperBroker:
         commission_per_contract_per_side_usd: float = 0.0,
         slippage_ticks_per_side: int = 1,
     ) -> None:
-        if commission_per_contract_per_side_usd < 0 or slippage_ticks_per_side < 0:
-            raise ValueError("Commission and slippage cannot be negative")
+        if (
+            not isinstance(commission_per_contract_per_side_usd, (int, float))
+            or isinstance(commission_per_contract_per_side_usd, bool)
+            or not isfinite(commission_per_contract_per_side_usd)
+            or commission_per_contract_per_side_usd < 0
+        ):
+            raise ValueError("Commission must be finite and non-negative")
+        if type(slippage_ticks_per_side) is not int or slippage_ticks_per_side < 0:
+            raise ValueError("Slippage ticks must be a non-negative integer")
         self.instrument = instrument
-        self.commission = commission_per_contract_per_side_usd
+        self.commission = float(commission_per_contract_per_side_usd)
         self.slippage_ticks = slippage_ticks_per_side
         self.fills: list[PaperFill] = []
 
     def submit_market(
         self, *, side: Side, quantity: int, reference_price: float, timestamp: datetime
     ) -> PaperFill:
-        if side == Side.FLAT:
-            raise ValueError("A market order must be LONG or SHORT")
-        if quantity < 1 or not isfinite(reference_price):
-            raise ValueError("Quantity must be positive and reference price must be finite")
-        if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        if not isinstance(side, Side) or side not in (Side.LONG, Side.SHORT):
+            raise ValueError("A market order side must be Side.LONG or Side.SHORT")
+        if type(quantity) is not int or quantity < 1 or quantity > 100:
+            raise ValueError("Quantity must be an integer between 1 and 100 contracts")
+        if (
+            not isinstance(reference_price, (int, float))
+            or isinstance(reference_price, bool)
+            or not isfinite(reference_price)
+        ):
+            raise ValueError("Reference price must be finite")
+        if not isinstance(timestamp, datetime) or timestamp.tzinfo is None or timestamp.utcoffset() is None:
             raise ValueError("Paper order timestamp must be timezone-aware")
-        if quantity > 100:
-            raise ValueError("Paper broker safety cap is 100 contracts")
+
+        # Negative futures prices are valid for some contracts; do not reject them.
         fill = reference_price + int(side) * self.slippage_ticks * self.instrument.tick_size
         record = PaperFill(
             order_id=str(uuid4()),
