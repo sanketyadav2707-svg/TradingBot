@@ -198,6 +198,7 @@ def test_virtual_trade_enters_next_open_and_exits_on_exact_15m_close(monkeypatch
 
     class Bar:
         def __init__(self, start, open_, high, low, close):
+            self.time = start
             self.end_time = start + dt.timedelta(minutes=1)
             self.open = open_
             self.high = high
