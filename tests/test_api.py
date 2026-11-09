@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from tradingbot.api.app import create_app
 from tradingbot.api.runtime import DashboardRuntime
-from tradingbot.api.schemas import PositionResponse
+from tradingbot.api.schemas import EquityPointResponse, Money, PositionResponse
 from tradingbot.execution.router import AccountRiskSnapshot
 from tradingbot.risk.limits import RiskGuard, RiskLimits
 
@@ -158,6 +158,35 @@ def test_invalid_account_snapshot_is_marked_as_error_and_blocks_risk() -> None:
     assert risk["gate"] == "BLOCK"
     assert "invalid_account_snapshot" in risk["reasons"]
 
+
+
+
+def test_injected_but_incomplete_runtime_keeps_its_source_name() -> None:
+    client = TestClient(create_app(DashboardRuntime(strategy_name="Research only")))
+
+    payload = client.get("/api/v1/dashboard/summary").json()
+
+    assert payload["meta"]["environment"] == "DISCONNECTED"
+    assert payload["meta"]["source"] == "injected-paper-runtime"
+    assert payload["strategy"]["name"] == "Research only"
+
+
+def test_equity_history_range_filters_persisted_points() -> None:
+    now = datetime.now(timezone.utc)
+    points = (
+        EquityPointResponse(
+            timestamp=now.replace(day=max(1, now.day - 2)),
+            equity=Money(amount="50000.00"),
+        ),
+        EquityPointResponse(timestamp=now, equity=Money(amount="50025.00")),
+    )
+    client = TestClient(create_app(DashboardRuntime(equity_points=points)))
+
+    recent = client.get("/api/v1/performance/equity?range=1d").json()
+    complete = client.get("/api/v1/performance/equity?range=all").json()
+
+    assert len(recent["items"]) == 1
+    assert len(complete["items"]) == 2
 
 def test_api_exposes_only_read_methods() -> None:
     client = TestClient(create_app())
