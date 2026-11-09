@@ -206,7 +206,7 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
                     reasons.append("entry_specific_risk_check_not_evaluated")
 
         return RiskSnapshotResponse(
-            meta=_meta(current, environment),
+            meta=_meta(current, environment, runtime_attached=request.app.state.dashboard_runtime_attached),
             gate=gate,  # type: ignore[arg-type]
             reasons=reasons,
             daily_loss_used=daily_loss_used,
@@ -256,7 +256,12 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
                 "EQUITY_HISTORY_UNAVAILABLE",
                 "No persisted equity history is attached to the API runtime.",
             )
-        return EquityHistoryResponse(items=list(current.equity_points))
+        days_by_range = {"1d": 1, "1w": 7, "1m": 30}
+        points = list(current.equity_points)
+        if range != "all":
+            cutoff = _utc_now() - timedelta(days=days_by_range[range])
+            points = [point for point in points if point.timestamp >= cutoff]
+        return EquityHistoryResponse(items=points)
 
     @app.get("/api/v1/events", response_model=PageResponse[OperationalEventResponse], tags=["operations"])
     def events(
