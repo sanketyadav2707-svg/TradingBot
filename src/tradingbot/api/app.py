@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from math import isfinite
 from typing import TypeVar
@@ -61,8 +61,8 @@ def _snapshot_is_valid(snapshot: object) -> bool:
     )
 
 
-def _meta(runtime: DashboardRuntime, environment: str) -> ApiMeta:
-    source = runtime.source_name if environment != "DISCONNECTED" else "no-runtime-attached"
+def _meta(runtime: DashboardRuntime, environment: str, *, runtime_attached: bool) -> ApiMeta:
+    source = runtime.source_name if runtime_attached else "no-runtime-attached"
     return ApiMeta(as_of=_utc_now(), environment=environment, source=source)  # type: ignore[arg-type]
 
 
@@ -102,7 +102,8 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
         docs_url="/docs",
         redoc_url=None,
     )
-    app.state.dashboard_runtime = runtime or DashboardRuntime()
+    app.state.dashboard_runtime = runtime if runtime is not None else DashboardRuntime()
+    app.state.dashboard_runtime_attached = runtime is not None
 
     configured_origins = os.getenv(
         "TRADINGBOT_CORS_ORIGINS",
@@ -147,7 +148,7 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
 
         market_update = current.market_data_last_update
         return DashboardSummaryResponse(
-            meta=_meta(current, environment),
+            meta=_meta(current, environment, runtime_attached=request.app.state.dashboard_runtime_attached),
             account=account_summary,
             strategy=StrategySummary(name=current.strategy_name, state=strategy_state),
             market_data=MarketDataSummary(
@@ -176,26 +177,33 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
         if account is not None and not valid_account:
             gate = "BLOCK"
             reasons.append("invalid_account_snapshot")
-        elif account is None or guard is None:
-            reasons.extend(["paper_runtime_not_attached", "account_snapshot_unavailable"])
         else:
-            limits = guard.limits
-            daily_loss_used = _money(max(0.0, -account.daily_pnl_usd))
-            daily_loss_limit = _money(limits.max_daily_loss_usd)
-            if account.equity_usd <= 0:
-                gate = "BLOCK"
-                reasons.append("non_positive_equity")
-            if account.peak_equity_usd - account.equity_usd >= limits.max_total_drawdown_usd:
-                gate = "BLOCK"
-                reasons.append("maximum_total_drawdown_reached")
-            if account.daily_pnl_usd <= -limits.max_daily_loss_usd:
-                gate = "BLOCK"
-                reasons.append("maximum_daily_loss_reached")
-            if account.trades_today >= limits.max_trades_per_day:
-                gate = "BLOCK"
-                reasons.append("max_trades_per_day_reached")
-            if gate != "BLOCK":
-                reasons.append("entry_specific_risk_check_not_evaluated")
+            if account is None:
+                reasons.append("account_snapshot_unavailable")
+            else:
+                daily_loss_used = _money(max(0.0, -account.daily_pnl_usd))
+
+            if guard is None:
+                reasons.append("risk_guard_not_attached")
+            else:
+                daily_loss_limit = _money(guard.limits.max_daily_loss_usd)
+
+            if account is not None and guard is not None:
+                limits = guard.limits
+                if account.equity_usd <= 0:
+                    gate = "BLOCK"
+                    reasons.append("non_positive_equity")
+                if account.peak_equity_usd - account.equity_usd >= limits.max_total_drawdown_usd:
+                    gate = "BLOCK"
+                    reasons.append("maximum_total_drawdown_reached")
+                if account.daily_pnl_usd <= -limits.max_daily_loss_usd:
+                    gate = "BLOCK"
+                    reasons.append("maximum_daily_loss_reached")
+                if account.trades_today >= limits.max_trades_per_day:
+                    gate = "BLOCK"
+                    reasons.append("max_trades_per_day_reached")
+                if gate != "BLOCK":
+                    reasons.append("entry_specific_risk_check_not_evaluated")
 
         return RiskSnapshotResponse(
             meta=_meta(current, environment),
