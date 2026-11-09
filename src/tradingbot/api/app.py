@@ -178,6 +178,8 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
             gate = "BLOCK"
             reasons.append("invalid_account_snapshot")
         else:
+            if not request.app.state.dashboard_runtime_attached:
+                reasons.append("paper_runtime_not_attached")
             if account is None:
                 reasons.append("account_snapshot_unavailable")
             else:
