@@ -137,6 +137,28 @@ def test_position_pagination_and_cursor_validation() -> None:
     assert invalid.json()["detail"]["code"] == "INVALID_CURSOR"
 
 
+
+def test_invalid_account_snapshot_is_marked_as_error_and_blocks_risk() -> None:
+    runtime = DashboardRuntime(
+        account_snapshot=AccountRiskSnapshot(
+            equity_usd=float("nan"),
+            peak_equity_usd=50_000.00,
+            daily_pnl_usd=0.0,
+            trades_today=0,
+        ),
+        risk_guard=RiskGuard(RiskLimits()),
+    )
+    client = TestClient(create_app(runtime))
+
+    summary = client.get("/api/v1/dashboard/summary").json()
+    risk = client.get("/api/v1/risk/snapshot").json()
+
+    assert summary["meta"]["environment"] == "ERROR"
+    assert summary["account"]["equity"] is None
+    assert risk["gate"] == "BLOCK"
+    assert "invalid_account_snapshot" in risk["reasons"]
+
+
 def test_api_exposes_only_read_methods() -> None:
     client = TestClient(create_app())
 
