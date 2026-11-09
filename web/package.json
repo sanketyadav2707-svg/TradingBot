@@ -26,5 +26,10 @@
     "tailwindcss": "^4.1.17",
     "typescript": "^5.9.3",
     "@eslint/eslintrc": "^3.3.1"
+  },
+  "overrides": {
+    "@typescript-eslint/scope-manager": "8.72.1",
+    "@typescript-eslint/types": "8.72.1",
+    "@typescript-eslint/visitor-keys": "8.72.1"
   }
 }
