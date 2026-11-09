@@ -29,7 +29,7 @@ export default function DashboardPage(){
  const rangeMinutes:Record<string,number>={"1m":1,"3m":3,"5m":5,"15m":15,"1h":60};
  const chart=useMemo(()=>chartOffsets.map((offset,i)=>{const minuteOfDay=9*60+30+i*(rangeMinutes[range]??5);return {t:`${String(Math.floor(minuteOfDay/60)%24).padStart(2,"0")}:${String(minuteOfDay%60).padStart(2,"0")}`,p:Number(selectedMarket[2].replace(/,/g,""))+offset*0.55};}),[range,instrument]);
  const filtered=useMemo(()=>markets.filter(m=>(m[0]+m[1]).toLowerCase().includes(filter.toLowerCase())),[filter]);
- const toastTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
+ const toastTimer=useRef<number|null>(null);
  const flash=(s:string)=>{if(toastTimer.current)window.clearTimeout(toastTimer.current);setToast(s);toastTimer.current=window.setTimeout(()=>setToast(""),2400)};
  useEffect(()=>()=>{if(toastTimer.current)window.clearTimeout(toastTimer.current)},[]);
  return <div className="min-h-screen bg-[#080d13] text-slate-200"><div className="flex min-h-screen">
