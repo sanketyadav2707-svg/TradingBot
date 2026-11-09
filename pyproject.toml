@@ -17,6 +17,7 @@ marketdata = ["databento>=0.50", "pandas>=2.2", "python-dotenv>=1.0"]
 
 [project.scripts]
 tradingbot = "tradingbot.cli:main"
+tradingbot-api = "tradingbot.api.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
