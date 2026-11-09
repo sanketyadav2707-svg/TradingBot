@@ -7,7 +7,6 @@ on:
       - "web/**"
       - ".github/workflows/web.yml"
   pull_request:
-    branches: [main, "feature/dashboard-foundation"]
     paths:
       - "web/**"
       - ".github/workflows/web.yml"

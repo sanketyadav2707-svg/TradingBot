@@ -20,7 +20,7 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_TRADINGBOT_API_URL ?? "";
+const API_BASE = process.env.NEXT_PUBLIC_TRADINGBOT_API_URL ?? "http://127.0.0.1:8000";
 
 async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
   let response: Response;
