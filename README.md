@@ -152,3 +152,7 @@ The next research phase is implemented in [QuantConnect MES/MNQ Strategy Signal 
 ## First strategy screen results (5 November 2026)
 
 The first QuantConnect strategy signal screen is documented in [docs/STRATEGY_SCREEN_2026-11-05.md](docs/STRATEGY_SCREEN_2026-11-05.md). MNQ ORB15 at a 15-minute forward exit is the only candidate positive under the screen's 0/1/2-tick-per-side scenarios. This is a limited research signal, not a validated profitable strategy or full P&L backtest. The 90-day organization out-of-sample holdout is preserved.
+
+## Web dashboard
+
+The planned hybrid TradingBot web dashboard is documented in [Dashboard Architecture](docs/DASHBOARD_ARCHITECTURE.md) and [Dashboard Implementation Plan](docs/DASHBOARD_IMPLEMENTATION_PLAN.md). The initial UI will be demo-only and read-only; it does not add live market data or live order capability.
