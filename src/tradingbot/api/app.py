@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from decimal import Decimal
+from math import isfinite
 from typing import TypeVar
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -38,6 +39,25 @@ def _utc_now() -> datetime:
 def _money(value: float | int) -> Money:
     amount = Decimal(str(value)).quantize(Decimal("0.01"))
     return Money(amount=format(amount, "f"))
+
+
+def _snapshot_is_valid(snapshot: object) -> bool:
+    if snapshot is None:
+        return False
+    try:
+        equity = snapshot.equity_usd  # type: ignore[attr-defined]
+        peak = snapshot.peak_equity_usd  # type: ignore[attr-defined]
+        daily_pnl = snapshot.daily_pnl_usd  # type: ignore[attr-defined]
+        trades_today = snapshot.trades_today  # type: ignore[attr-defined]
+    except AttributeError:
+        return False
+    numbers = (equity, peak, daily_pnl)
+    return (
+        all(isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value) for value in numbers)
+        and peak >= equity
+        and type(trades_today) is int
+        and trades_today >= 0
+    )
 
 
 def _meta(runtime: DashboardRuntime, environment: str) -> ApiMeta:
@@ -106,10 +126,15 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
         current: DashboardRuntime = request.app.state.dashboard_runtime
         account = current.account_snapshot
         risk_guard = current.risk_guard
-        environment = "PAPER" if account is not None and risk_guard is not None else "DISCONNECTED"
+        valid_account = _snapshot_is_valid(account)
+        environment = (
+            "ERROR" if account is not None and not valid_account
+            else "PAPER" if valid_account and risk_guard is not None
+            else "DISCONNECTED"
+        )
 
         account_summary = AccountSummary()
-        if account is not None:
+        if valid_account and account is not None:
             account_summary.equity = _money(account.equity_usd)
             account_summary.max_drawdown = _money(
                 max(0.0, account.peak_equity_usd - account.equity_usd)
@@ -136,13 +161,21 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
         current: DashboardRuntime = request.app.state.dashboard_runtime
         account = current.account_snapshot
         guard = current.risk_guard
-        environment = "PAPER" if account is not None and guard is not None else "DISCONNECTED"
+        valid_account = _snapshot_is_valid(account)
+        environment = (
+            "ERROR" if account is not None and not valid_account
+            else "PAPER" if valid_account and guard is not None
+            else "DISCONNECTED"
+        )
 
         reasons: list[str] = []
         daily_loss_used = None
         daily_loss_limit = None
         gate = "UNKNOWN"
-        if account is None or guard is None:
+        if account is not None and not valid_account:
+            gate = "BLOCK"
+            reasons.append("invalid_account_snapshot")
+        elif account is None or guard is None:
             reasons.extend(["paper_runtime_not_attached", "account_snapshot_unavailable"])
         else:
             limits = guard.limits
