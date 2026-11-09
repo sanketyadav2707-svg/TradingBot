@@ -21,6 +21,7 @@ from tradingbot.api.schemas import (
     HealthResponse,
     MarketDataSummary,
     Money,
+    OperationalEventResponse,
     PageResponse,
     PositionResponse,
     RiskSnapshotResponse,
