@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
@@ -175,7 +175,7 @@ def test_equity_history_range_filters_persisted_points() -> None:
     now = datetime.now(timezone.utc)
     points = (
         EquityPointResponse(
-            timestamp=now.replace(day=max(1, now.day - 2)),
+            timestamp=now - timedelta(days=2),
             equity=Money(amount="50000.00"),
         ),
         EquityPointResponse(timestamp=now, equity=Money(amount="50025.00")),
