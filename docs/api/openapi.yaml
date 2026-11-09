@@ -1,0 +1,189 @@
+openapi: 3.1.0
+info:
+  title: TradingBot Read-only Dashboard API
+  version: 1.0.0
+  description: >
+    Proposed contract for the local Python service. This specification is a
+    contract target, not a claim that these endpoints are already implemented.
+    All endpoints are read-only. No order placement or risk mutation exists.
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local development only
+paths:
+  /health:
+    get:
+      summary: Service health and version
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service health
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version, timestamp]
+                properties:
+                  status: { type: string, enum: [ok, degraded, error] }
+                  version: { type: string }
+                  timestamp: { type: string, format: date-time }
+  /api/v1/dashboard/summary:
+    get:
+      summary: Account and system summary
+      operationId: getDashboardSummary
+      responses:
+        "200":
+          description: Summary snapshot
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardSummary" }
+  /api/v1/positions:
+    get:
+      summary: Current paper positions
+      operationId: listPositions
+      responses:
+        "200":
+          description: Position page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PositionPage" }
+  /api/v1/trades:
+    get:
+      summary: Paginated paper trade ledger
+      operationId: listTrades
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+      responses:
+        "200":
+          description: Trade page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TradePage" }
+  /api/v1/performance/equity:
+    get:
+      summary: Persisted account equity observations
+      operationId: getEquityHistory
+      parameters:
+        - in: query
+          name: range
+          schema: { type: string, enum: [1d, 1w, 1m, all], default: 1d }
+      responses:
+        "200":
+          description: Equity series
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [timestamp, equity]
+                      properties:
+                        timestamp: { type: string, format: date-time }
+                        equity: { $ref: "#/components/schemas/Money" }
+  /api/v1/risk/snapshot:
+    get:
+      summary: Current server-calculated risk gate and limits
+      operationId: getRiskSnapshot
+      responses:
+        "200":
+          description: Risk snapshot
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RiskSnapshot" }
+  /api/v1/events:
+    get:
+      summary: Paginated operational and audit events
+      operationId: listEvents
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+      responses:
+        "200":
+          description: Event page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventPage" }
+components:
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: string
+          pattern: "^-?[0-9]+(\\.[0-9]+)?$"
+          description: Decimal string, never a binary floating-point JSON number.
+        currency: { type: string, const: USD }
+    ApiMeta:
+      type: object
+      required: [as_of, environment, source]
+      properties:
+        as_of: { type: string, format: date-time }
+        environment: { type: string, enum: [DEMO, PAPER, DISCONNECTED, STALE, ERROR] }
+        source: { type: string }
+    DashboardSummary:
+      type: object
+      required: [meta, account, strategy, market_data]
+      properties:
+        meta: { $ref: "#/components/schemas/ApiMeta" }
+        account:
+          type: object
+          properties:
+            balance: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+            equity: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+            realized_pnl: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+            unrealized_pnl: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+            net_pnl: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+            max_drawdown: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        strategy:
+          type: object
+          properties:
+            name: { oneOf: [{ type: string }, { type: "null" }] }
+            state: { type: string, enum: [IDLE, RUNNING, HALTED, ERROR, UNKNOWN] }
+        market_data:
+          type: object
+          properties:
+            connection: { type: string, enum: [CONNECTED, DISCONNECTED, DELAYED, UNKNOWN] }
+            last_update: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+            symbols: { type: array, items: { type: string } }
+    PositionPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { type: object } }
+        next_cursor: { oneOf: [{ type: string }, { type: "null" }] }
+    TradePage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { type: object } }
+        next_cursor: { oneOf: [{ type: string }, { type: "null" }] }
+    RiskSnapshot:
+      type: object
+      required: [meta, gate, reasons, open_positions]
+      properties:
+        meta: { $ref: "#/components/schemas/ApiMeta" }
+        gate: { type: string, enum: [PASS, BLOCK, UNKNOWN] }
+        reasons: { type: array, items: { type: string } }
+        daily_loss_used: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        daily_loss_limit: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+        open_positions: { type: integer, minimum: 0 }
+        max_positions: { oneOf: [{ type: integer, minimum: 0 }, { type: "null" }] }
+    EventPage:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { type: object } }
+        next_cursor: { oneOf: [{ type: string }, { type: "null" }] }
