@@ -153,6 +153,8 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
                 "quantity": item["quantity"],
                 "average_price": item["average_entry_price"],
                 "unrealized_pnl": _money(item["unrealized_pnl_usd"]),
+                "mark_price": item["mark_price"],
+                "mark_timestamp": item["mark_timestamp"],
                 "opened_at": item["opened_at"],
             }
             for item in store.list_positions()
