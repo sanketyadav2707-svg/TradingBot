@@ -204,6 +204,7 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
             "account_snapshot_unavailable",
             "position_state_unavailable",
             "risk_gate_has_not_been_evaluated_for_a_running_session",
+            "risk_configuration_is_illustrative_research_default_not_verified_firm_rule_profile",
         ]
         if limits is None:
             reasons.append("risk_configuration_unavailable_or_invalid")
