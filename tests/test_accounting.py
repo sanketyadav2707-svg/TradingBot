@@ -157,7 +157,7 @@ def test_persistent_account_survives_reopen_and_starting_balance_cannot_change(t
 def test_contract_point_value_cannot_change_while_position_is_open(tmp_path) -> None:
     store = PaperAccountStore(tmp_path / "account.sqlite3", 50_000)
     store.record_fill(make_fill("entry", Side.LONG, 1, 100), MES)
-    changed = Instrument("MES", 0.5, 2.5, 5.0)
+    changed = Instrument("MES", 0.5, 5.0, 10.0)
     with pytest.raises(ValueError, match="point_value_usd changed"):
         store.record_fill(
             make_fill("add", Side.LONG, 1, 101, timestamp=T0 + timedelta(minutes=1)),
