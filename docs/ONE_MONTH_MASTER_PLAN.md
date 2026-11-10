@@ -99,7 +99,7 @@ Gate 4: a green backtest alone is not challenge-ready. Require positive untouche
 | 5 | 10 Nov | Check QC second/tick availability and fields | **Completed:** Free Plan excludes Tick/Second resolution; minute-only path retained. See [access audit](HIGH_RESOLUTION_DATA_ACCESS_AUDIT_2026-11-10.md). No paid upgrade or cloud probe. |
 | 6 | 11 Nov | Inspect continuous-contract mapping transitions | **Implementation completed:** explicit SymbolChangedEvent capture, mapped raw-contract bars, pending roll reset, mismatch/unannounced counters and regression coverage. Cloud-run transition evidence remains pending. See [roll audit](CONTRACT_ROLL_AUDIT_2026-11-10.md). |
 | 7 | 12 Nov | Gate 1 review | Continue or pause decision |
-| 8 | 13 Nov | Write opening-range strategy specification | Frozen hypothesis and parameters |
+| 8 | 13 Nov | Write opening-range strategy specification | **Drafted early:** [MNQ/MES ORB15 v1.0](strategies/MNQ_MES_ORB15_SPEC_V1.md). Hypothesis is pre-registered; implementation remains blocked until Gate 1 cloud verification and spec review. |
 | 9 | 14 Nov | Write VWAP pullback specification | Frozen hypothesis and parameters |
 | 10 | 15 Nov | Write volatility-compression specification | Frozen hypothesis and parameters |
 | 11 | 16 Nov | Gemini critique and Claude red-team review | Ranked objections and revisions |
