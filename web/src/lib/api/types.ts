@@ -123,6 +123,7 @@ export interface RiskSnapshotResponse {
   daily_loss_limit: Money | null;
   open_positions: number | null;
   max_contracts: number | null;
+  execution_halted: boolean | null;
 }
 
 export interface OperationalEvent {
