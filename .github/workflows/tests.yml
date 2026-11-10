@@ -2,9 +2,9 @@ name: Python checks
 
 on:
   push:
-    branches: [main, "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account", "feature/contract-roll-audit", "docs/orb15-pre-registered-spec", "feature/orb15-bracket-backtester"]
+    branches: [main, "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account", "feature/contract-roll-audit", "docs/orb15-pre-registered-spec", "feature/orb15-bracket-backtester", "fix/phase-1-accounting-history-regression"]
   pull_request:
-    branches: [main, "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account"]
+    branches: [main, "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account", "feature/orb15-bracket-backtester"]
 
 permissions:
   contents: read
