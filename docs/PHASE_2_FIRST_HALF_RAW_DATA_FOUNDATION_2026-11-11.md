@@ -98,6 +98,14 @@ New `tests/test_raw_futures_data.py` covers:
 
 These are deliberately left for the second half. No data was fetched or purchased during this implementation.
 
+## CI verification (11 November 2026)
+
+- Focused Phase 2 data-quality workflow: **passed**. It runs raw futures tests, existing CSV loader tests, dataset audit tests, Databento adapter tests and CLI tests.
+- Workflow run: https://github.com/sanketyadav2707-svg/TradingBot/actions/runs/42890749329
+- Full Python/API workflow: API installation and smoke test passed; test suite reported **142 passed, 1 failed**.
+- The one failure is the already-known, unrelated `tests/test_api.py::test_completed_round_trip_flows_into_trade_and_equity_apis` assertion: equity-history's final snapshot remains USD 50,000.00 while the account summary is USD 50,007.50. It is outside this Phase 2 diff and is being handled in the separate Phase 1 equity-history PR stack. It was not hidden, skipped, or changed here.
+- Full workflow run: https://github.com/sanketyadav2707-svg/TradingBot/actions/runs/42890749311
+
 ## Acceptance boundary
 
-The code can be accepted only after the full Python CI run on this branch passes. Even then, this is a validated ingestion foundation, not proof that any external provider dataset has been correctly licensed, mapped, or economically tradable.
+The new Phase 2 focused tests and CLI path pass. The full repository gate remains blocked by the pre-existing Phase 1 equity-history failure on this ORB15 branch base. This is a validated ingestion foundation, not proof that any external provider dataset has been correctly licensed, mapped, or economically tradable.
