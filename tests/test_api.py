@@ -77,7 +77,16 @@ def test_risk_snapshot_exposes_limits_but_keeps_gate_unknown(tmp_path) -> None:
     assert payload["daily_loss_used"] is None
     assert payload["open_positions"] == 0
     assert payload["max_contracts"] == 1
+    assert payload["execution_halted"] is False
     assert "risk_gate_has_not_been_evaluated_for_a_running_strategy_session" in payload["reasons"]
+
+
+def test_risk_api_reports_durable_emergency_halt(tmp_path) -> None:
+    runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
+    runtime.account_store.activate_emergency_halt("test_api_halt")
+    payload = TestClient(create_app(runtime)).get("/api/v1/risk/snapshot").json()
+    assert payload["execution_halted"] is True
+    assert payload["gate"] == "UNKNOWN"
 
 
 def test_empty_persistent_ledgers_are_available_not_missing(tmp_path) -> None:
