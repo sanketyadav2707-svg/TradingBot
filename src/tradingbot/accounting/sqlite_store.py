@@ -11,7 +11,8 @@ import json
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Iterator, Mapping
@@ -344,7 +345,10 @@ class PaperAccountStore:
             if open_lots and any(row["side"] != open_lots[0]["side"] for row in open_lots):
                 raise RuntimeError("Position ledger invariant violated: mixed sides for one symbol")
 
+            opened_quantity = 0
+            closed_quantity = 0
             if not open_lots or open_lots[0]["side"] == side:
+                opened_quantity = remaining
                 connection.execute(
                     """INSERT INTO open_lots(
                         symbol, side, quantity_open, entry_price, entry_commission_remaining,
@@ -355,7 +359,6 @@ class PaperAccountStore:
                 )
                 remaining = 0
             else:
-                closed_quantity = 0
                 for lot in open_lots:
                     if remaining == 0:
                         break
@@ -417,6 +420,7 @@ class PaperAccountStore:
                     closed_quantity += quantity
 
                 if remaining > 0:
+                    opened_quantity = remaining
                     remaining_commission = commission - fee_per_contract * Decimal(closed_quantity)
                     connection.execute(
                         """INSERT INTO open_lots(
@@ -440,6 +444,8 @@ class PaperAccountStore:
                         "side": side, "quantity": fill.quantity,
                         "requested_price": _number(requested), "fill_price": _number(price),
                         "commission_usd": _number(commission),
+                        "opened_quantity": opened_quantity,
+                        "closed_quantity": closed_quantity,
                     }, sort_keys=True),
                 ),
             )
@@ -542,6 +548,7 @@ class PaperAccountStore:
             "equity_usd": _number(equity) if equity is not None else None,
             "net_pnl_usd": _number(equity - start) if equity is not None else None,
             "max_drawdown_usd": _number(max_drawdown),
+            "peak_equity_usd": _number(peak),
             "open_positions": len({row["symbol"] for row in lots}),
             "open_contracts": sum(int(row["quantity_open"]) for row in lots),
             "fills_count": connection.execute("SELECT COUNT(*) AS n FROM fills").fetchone()["n"],
@@ -573,6 +580,110 @@ class PaperAccountStore:
     def get_summary(self) -> dict[str, Any]:
         with self._lock, self._connection() as connection:
             return self._summary(connection)
+
+    def get_risk_inputs(
+        self,
+        timestamp: datetime,
+        *,
+        timezone_name: str = "UTC",
+        max_mark_age_seconds: int = 60,
+    ) -> dict[str, float | int]:
+        """Derive risk inputs from persisted account history; fail closed if ambiguous.
+
+        The risk-day baseline uses the latest marked equity snapshot at or before
+        local midnight in the supplied timezone. A position carried across that
+        boundary is rejected because this ledger does not implement overnight/session
+        financing or firm-specific session-reset semantics.
+        """
+        if type(max_mark_age_seconds) is not int or max_mark_age_seconds < 1:
+            raise ValueError("max_mark_age_seconds must be a positive integer")
+        current_time = _timestamp(timestamp)
+        current_dt = datetime.fromisoformat(current_time.replace("Z", "+00:00"))
+        zone = ZoneInfo(timezone_name)
+        local_day_start = datetime.combine(
+            current_dt.astimezone(zone).date(),
+            time.min,
+            tzinfo=zone,
+        )
+        day_start_utc = local_day_start.astimezone(timezone.utc)
+        day_start = _timestamp(day_start_utc)
+
+        with self._lock, self._connection() as connection:
+            summary = self._summary(connection)
+            equity_value = summary["equity_usd"]
+            if equity_value is None:
+                raise ValueError("account_equity_unavailable_until_all_open_positions_have_marks")
+
+            current_marks = {
+                row["symbol"]: row["timestamp"]
+                for row in connection.execute("SELECT symbol, timestamp FROM marks").fetchall()
+            }
+            open_symbols = {
+                row["symbol"]
+                for row in connection.execute("SELECT DISTINCT symbol FROM open_lots").fetchall()
+            }
+            for symbol in open_symbols:
+                mark_timestamp = current_marks.get(symbol)
+                if mark_timestamp is None:
+                    raise ValueError(f"mark_missing_for_open_position:{symbol}")
+                mark_dt = datetime.fromisoformat(mark_timestamp.replace("Z", "+00:00"))
+                age = (current_dt - mark_dt).total_seconds()
+                if age < 0 or age > max_mark_age_seconds:
+                    raise ValueError(f"mark_stale_for_open_position:{symbol}")
+
+            # Reconstruct positions immediately before the risk-day boundary.
+            # If a position was carried through midnight, the current account
+            # model cannot assert a firm/session-specific daily baseline.
+            signed_positions: dict[str, int] = {}
+            prior_fills = connection.execute(
+                "SELECT symbol, side, quantity FROM fills WHERE timestamp < ? ORDER BY timestamp, rowid",
+                (day_start,),
+            ).fetchall()
+            for fill in prior_fills:
+                symbol = fill["symbol"]
+                current = signed_positions.get(symbol, 0)
+                signed_positions[symbol] = current + int(fill["side"]) * int(fill["quantity"])
+            carryovers = {symbol: qty for symbol, qty in signed_positions.items() if qty != 0}
+            if carryovers:
+                raise ValueError(
+                    "risk_day_started_with_open_positions:" + ",".join(sorted(carryovers))
+                )
+
+            baseline_row = connection.execute(
+                """SELECT equity_usd FROM equity_snapshots
+                   WHERE timestamp <= ? AND equity_usd IS NOT NULL
+                   ORDER BY timestamp DESC, id DESC LIMIT 1""",
+                (day_start,),
+            ).fetchone()
+            if baseline_row is not None:
+                baseline = Decimal(baseline_row["equity_usd"])
+            elif not prior_fills:
+                baseline = self.starting_balance_usd
+            else:
+                raise ValueError("risk_day_baseline_equity_unavailable")
+
+            day_events = connection.execute(
+                """SELECT payload_json FROM account_events
+                   WHERE event_type = 'FILL_RECORDED' AND timestamp >= ? AND timestamp <= ?
+                   ORDER BY timestamp, id""",
+                (day_start, current_time),
+            ).fetchall()
+            entries_today = 0
+            for event in day_events:
+                payload = json.loads(event["payload_json"])
+                if int(payload.get("opened_quantity", 0)) > 0:
+                    entries_today += 1
+
+            equity = Decimal(equity_value)
+            peak = Decimal(summary["peak_equity_usd"])
+            daily_pnl = equity - baseline
+
+        return {
+            "equity_usd": float(equity),
+            "peak_equity_usd": float(max(peak, equity)),
+            "daily_pnl_usd": float(daily_pnl),
+            "trades_today": entries_today,
+        }
 
     def count_records(self, table: str) -> int:
         allowed = {
