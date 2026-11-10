@@ -5,7 +5,7 @@ import pytest
 
 from tradingbot.accounting import DuplicateFillError, PaperAccountEngine, PaperAccountStore
 from tradingbot.models import Instrument, Side
-from tradingbot.execution.router import OrderIntent, OrderRejected
+from tradingbot.execution.router import AccountRiskSnapshot, OrderIntent, OrderRejected
 from tradingbot.risk.limits import RiskLimits
 from tradingbot.paper.broker import PaperBroker, PaperFill
 
@@ -160,7 +160,7 @@ def test_contract_point_value_cannot_change_while_position_is_open(tmp_path) -> 
     store = PaperAccountStore(tmp_path / "account.sqlite3", 50_000)
     store.record_fill(make_fill("entry", Side.LONG, 1, 100), MES)
     changed = Instrument("MES", 0.5, 5.0, 10.0)
-    with pytest.raises(ValueError, match="point_value_usd changed"):
+    with pytest.raises(ValueError, match="contract tick/point specification changed"):
         store.record_fill(
             make_fill("add", Side.LONG, 1, 101, timestamp=T0 + timedelta(minutes=1)),
             changed,
