@@ -288,3 +288,27 @@ def test_engine_wide_emergency_halt_blocks_existing_and_future_routers(tmp_path)
     assert engine.halted is True
     assert store.get_summary()["fills_count"] == 0
 
+def test_emergency_halt_survives_store_and_engine_restart(tmp_path) -> None:
+    database = tmp_path / "account.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    engine = PaperAccountEngine(store, RiskLimits())
+    router = engine.router_for(MES, require_firm_profile=False)
+    engine.emergency_halt("test_restart_recovery")
+
+    assert store.emergency_halt_active is True
+    reopened_store = PaperAccountStore(database, 50_000)
+    reopened_engine = PaperAccountEngine(reopened_store, RiskLimits())
+    assert reopened_engine.halted is True
+
+    reopened_router = reopened_engine.router_for(MES, require_firm_profile=False)
+    intent = OrderIntent(
+        instrument=MES,
+        side=Side.LONG,
+        stop_ticks=8,
+        reference_price=100,
+        timestamp=T0,
+    )
+    with pytest.raises(OrderRejected, match="emergency_halt_active"):
+        reopened_router.submit_entry(intent)
+    assert reopened_store.get_summary()["fills_count"] == 0
+
