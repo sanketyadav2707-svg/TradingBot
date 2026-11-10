@@ -69,13 +69,13 @@ export function PaperTradeJournal() {
         <div className="flex items-center justify-between border-b border-[#202b38] px-3.5 py-3">
           <div>
             <h2 className="text-[11px] font-semibold">Open paper positions</h2>
-            <p className="mt-0.5 text-[8px] text-slate-500">PERSISTED FIFO LOT BOOK · NO BROKER CONNECTION</p>
+            <p className="mt-0.5 text-[8px] text-slate-500">PERSISTED FIFO LOT BOOK · P&L USES LAST EXPLICIT MARK</p>
           </div>
           <span className="font-mono text-[10px] text-slate-300">{positions.length} symbols</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[620px] text-left">
-            <thead><tr className="text-[8px] tracking-wider text-slate-600"><th className="px-3 py-2">SYMBOL</th><th className="px-3 py-2">SIDE</th><th className="px-3 py-2 text-right">QTY</th><th className="px-3 py-2 text-right">AVG ENTRY</th><th className="px-3 py-2 text-right">UNREALIZED P&L</th><th className="px-3 py-2">OPENED</th></tr></thead>
+            <thead><tr className="text-[8px] tracking-wider text-slate-600"><th className="px-3 py-2">SYMBOL</th><th className="px-3 py-2">SIDE</th><th className="px-3 py-2 text-right">QTY</th><th className="px-3 py-2 text-right">AVG ENTRY</th><th className="px-3 py-2 text-right">LAST MARK</th><th className="px-3 py-2 text-right">U P&L AT MARK</th><th className="px-3 py-2">MARK / OPENED</th></tr></thead>
             <tbody>
               {positions.map((position) => (
                 <tr key={position.id} className="border-t border-[#202b38]/70 text-[9px]">
@@ -83,8 +83,9 @@ export function PaperTradeJournal() {
                   <td className={`px-3 py-3 font-bold ${position.side === "LONG" ? "text-emerald-300" : "text-rose-300"}`}>{position.side}</td>
                   <td className="px-3 py-3 text-right font-mono">{position.quantity}</td>
                   <td className="px-3 py-3 text-right font-mono">{amount(position.average_price)}</td>
+                  <td className="px-3 py-3 text-right font-mono">{amount(position.mark_price)}</td>
                   <td className="px-3 py-3 text-right font-mono">{pnl(position.unrealized_pnl)}</td>
-                  <td className="px-3 py-3 text-slate-500">{new Date(position.opened_at).toLocaleString()}</td>
+                  <td className="px-3 py-3 text-slate-500">{position.mark_timestamp ? new Date(position.mark_timestamp).toLocaleString() : "No mark"}<div className="mt-1 text-[8px] text-slate-600">Opened {new Date(position.opened_at).toLocaleString()}</div></td>
                 </tr>
               ))}
             </tbody>
