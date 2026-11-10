@@ -54,7 +54,7 @@ This section defines a new bracketed-trade experiment. It is **not** what the ea
 - Short initial stop: `ORH + 0.25`.
 - Risk distance `R`: absolute difference between entry price and initial stop. Reject the trade if the stop is on the wrong side of the entry or if `R <= 0`.
 - Profit target: 1.0R from entry in the trade direction.
-- Time exit: close at the first available one-minute bar close at or after 15 minutes from entry. Do not extend the holding period to find a better price.
+- Time exit: close at the close of the bar whose interval ends exactly 15 minutes after entry. If that exact endpoint is unavailable, classify the observation as a data-integrity failure and use the data-gap forced-exit rule below. Never extend the hold to a later convenient close.
 - Exit on the first stop or target touch, otherwise use the time exit.
 - Maximum one open position per instrument; one attempted trade per instrument per session.
 - Research size is exactly one micro contract. No compounding or pyramiding. Position sizing and account-level risk limits are evaluated later in the separate risk-engine phase.
@@ -67,8 +67,10 @@ Minute OHLC does not reveal the order of high and low inside a bar. Apply these 
 2. If the bar opens through the stop, fill at the worse of the stop and bar open, then apply adverse exit slippage.
 3. If the bar opens through the target, do not grant price improvement; fill no better than the target, then apply adverse exit slippage.
 4. If only the stop is touched, assume stop execution at the stop price, except for the gap rule above.
-5. If only the target is touched, assume target execution at the target price. Do not assume a limit queue fill; target-touch is still an optimistic assumption and must be stress-tested with a target non-fill scenario in the execution-model phase.
-6. Apply the chosen slippage scenario to both entry and exit, including stop and target exits. Commission is charged for a complete round trip.
+5. The bracket is active immediately after the entry fill at the next bar's open. Evaluate the entry bar's subsequent high/low for stop/target touches using the same conservative rules; do not ignore risk during the entry minute.
+6. If only the target is touched, assume target execution at the target price. Do not assume a limit queue fill; target-touch is still an optimistic assumption and must be stress-tested with a target non-fill scenario in the execution-model phase.
+7. If any required one-minute bar is missing while a position is open, do not carry the position silently across the gap. On the first subsequent valid mapped-contract bar, force an exit at that bar's open, apply adverse exit slippage, and classify it as `DATA_GAP_FORCED_EXIT`. Also report the missing interval and count this exit separately. If the next valid bar belongs to another contract or session/date, do not use its price to bridge the gap; classify the run/session as invalid and require a separate conservative gap-loss stress rather than inventing a fill.
+8. Apply the chosen slippage scenario to both entry and exit, including stop, target, time and data-gap exits. Commission is charged for a complete round trip.
 
 These are conservative bar-level conventions, not a claim of executable fills. A later execution-model task must add missed-target/no-fill sensitivity and stop-gap stress. Do not use this bar model to claim broker fill realism.
 
@@ -95,7 +97,7 @@ Contract values are checked against CME's Micro E-mini product information. See 
 - On a `SymbolChangedEvent`, invalidate any open/pending observation and reset all ORB state. Never carry a position or price comparison across the roll in this research specification.
 - No return, position, or trade may bridge a missing minute, trading-date boundary, session break, or contract roll.
 - Fill-forward is disabled.
-- Store signal time, entry time, mapped contract identifier, range high/low, entry, stop, target, exit time, exit reason, gross P&L, commission, slippage, and cancellation/invalidation reason in the permitted research output. Do not export raw licensed market data.
+- Store signal time, entry time, mapped contract identifier, range high/low, entry, stop, target, exit time, exit reason, gross P&L, commission, slippage, and cancellation/invalidation reason in the permitted research output. Store the first qualifying signal only; never choose the direction retrospectively. Do not export raw licensed market data.
 
 ## 8. Frozen experiment protocol
 
