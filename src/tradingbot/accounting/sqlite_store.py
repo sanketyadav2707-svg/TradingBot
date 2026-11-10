@@ -691,6 +691,23 @@ class PaperAccountStore:
             if any(len(sides) > 1 for sides in lot_sides.values()):
                 errors.append("mixed_sides_in_open_position")
 
+            fill_allocations = connection.execute(
+                """SELECT fills.order_id, fills.quantity,
+                          COALESCE((SELECT SUM(quantity) FROM closed_trades
+                                    WHERE closing_fill_id = fills.order_id), 0) AS closed_as_exit,
+                          COALESCE((SELECT SUM(quantity) FROM closed_trades
+                                    WHERE opening_fill_id = fills.order_id), 0)
+                          + COALESCE((SELECT SUM(quantity_open) FROM open_lots
+                                      WHERE opening_fill_id = fills.order_id), 0) AS opened_as_entry
+                   FROM fills"""
+            ).fetchall()
+            if any(
+                int(row["closed_as_exit"]) + int(row["opened_as_entry"])
+                != int(row["quantity"])
+                for row in fill_allocations
+            ):
+                errors.append("fill_quantity_allocation_does_not_reconcile")
+
             total_fees = sum(
                 (Decimal(row["commission_usd"]) for row in connection.execute(
                     "SELECT commission_usd FROM fills"
