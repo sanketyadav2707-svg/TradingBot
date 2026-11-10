@@ -56,6 +56,7 @@ class ExecutionRouter:
         compliance_gate: FirmComplianceGate | None = None,
         require_firm_profile: bool = False,
         account_snapshot_provider: Callable[[OrderIntent], AccountRiskSnapshot] | None = None,
+        halt_check: Callable[[], bool] | None = None,
     ) -> None:
         if type(broker) is not PaperBroker:
             raise TypeError("paper_broker_only: custom and live broker adapters are not supported")
@@ -65,6 +66,7 @@ class ExecutionRouter:
         self.compliance_gate = compliance_gate
         self.require_firm_profile = require_firm_profile
         self._account_snapshot_provider = account_snapshot_provider
+        self._halt_check = halt_check
         self._halted = False
 
     def emergency_halt(self) -> None:
@@ -76,7 +78,7 @@ class ExecutionRouter:
         intent: OrderIntent,
         account: AccountRiskSnapshot | None = None,
     ) -> object:
-        if self._halted:
+        if self._halted or (self._halt_check is not None and self._halt_check()):
             raise OrderRejected("emergency_halt_active")
         if self.mode != ExecutionMode.PAPER:
             raise OrderRejected("live_execution_not_implemented")
