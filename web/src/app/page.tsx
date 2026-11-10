@@ -7,6 +7,7 @@ import { BackendStatusPanel } from "@/components/backend-status";
 const nav=[["Overview",LayoutDashboard,"CORE"],["Market Terminal",Activity,"CORE"],["Strategy Engine",BrainCircuit,"QUANT"],["Backtesting",LineChart,"QUANT"],["Trade Journal",Clock3,"QUANT"],["Risk & Compliance",Shield,"CONTROL"],["Performance",Gauge,"CONTROL"],["AI Research",Sparkles,"TOOLS"],["Data Feeds",Database,"TOOLS"],["Settings",Settings2,"SYSTEM"]] as const;
 const markets: [string, string, string, string, boolean, string][] = [["MNQ","Micro Nasdaq","20,842.25","+0.42%",true,"182.4K"],["MES","Micro S&P","5,942.50","+0.18%",true,"96.2K"],["NQ","E-mini Nasdaq","20,841.75","+0.41%",true,"82.1K"],["ES","E-mini S&P","5,942.25","+0.17%",true,"64.8K"],["RTY","E-mini Russell","2,118.40","-0.12%",false,"31.7K"]];
 const chartOffsets=[-62,-48,-54,-32,-40,-18,-26,-11,-20,3,-3,10,-1,22,15,28,20,37,26,42,33,50,44,0];
+const RANGE_MINUTES:Record<string,number>={"1m":1,"3m":3,"5m":5,"15m":15,"1h":60};
 const pageDetails: Record<string,{description:string;cards:[string,string,string][];rows:[string,string,string][]}> = {
  "Market Terminal":{description:"Instrument monitor · simulated quotes and depth",cards:[["SELECTED CONTRACT","MNQ","Demo instrument"],["MARKET FEED","OFFLINE","No provider connected"],["ORDER ROUTING","DISABLED","Paper-only workspace"]],rows:[["MNQ","Micro E-mini Nasdaq-100","Selected demo contract"],["MES","Micro E-mini S&P 500","Available demo contract"],["NQ","E-mini Nasdaq-100","Available demo contract"],["ES","E-mini S&P 500","Available demo contract"]]},
  "Strategy Engine":{description:"Strategy registry · research status only",cards:[["REGISTERED","3","Demo registry"],["PAPER ENABLED","0","No strategy connected"],["LIVE STRATEGIES","0","Not supported"]],rows:[["MNQ Opening Range Breakout","RESEARCH","Out-of-sample validation pending"],["MES VWAP Pullback","PAPER READY","Execution adapter not connected"],["Volatility Compression","DRAFT","Ruleset under development"]]},
@@ -27,8 +28,7 @@ function Tag({children,tone="slate"}:{children:React.ReactNode;tone?:string}){re
 export default function DashboardPage(){
  const [active,setActive]=useState("Overview"),[range,setRange]=useState("5m"),[instrument,setInstrument]=useState("MNQ"),[filter,setFilter]=useState(""),[mobile,setMobile]=useState(false),[toast,setToast]=useState("");
  const selectedMarket=markets.find(m=>m[0]===instrument) ?? markets[0];
- const rangeMinutes:Record<string,number>={"1m":1,"3m":3,"5m":5,"15m":15,"1h":60};
- const chart=useMemo(()=>chartOffsets.map((offset,i)=>{const minuteOfDay=9*60+30+i*(rangeMinutes[range]??5);return {t:`${String(Math.floor(minuteOfDay/60)%24).padStart(2,"0")}:${String(minuteOfDay%60).padStart(2,"0")}`,p:Number(selectedMarket[2].replace(/,/g,""))+offset*0.55};}),[range,instrument]);
+ const chart=useMemo(()=>chartOffsets.map((offset,i)=>{const minuteOfDay=9*60+30+i*(RANGE_MINUTES[range]??5);return {t:`${String(Math.floor(minuteOfDay/60)%24).padStart(2,"0")}:${String(minuteOfDay%60).padStart(2,"0")}`,p:Number(selectedMarket[2].replace(/,/g,""))+offset*0.55};}),[range,selectedMarket]);
  const filtered=useMemo(()=>markets.filter(m=>(m[0]+m[1]).toLowerCase().includes(filter.toLowerCase())),[filter]);
  const toastTimer=useRef<number|null>(null);
  const flash=(s:string)=>{if(toastTimer.current)window.clearTimeout(toastTimer.current);setToast(s);toastTimer.current=window.setTimeout(()=>setToast(""),2400)};
