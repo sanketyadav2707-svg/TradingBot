@@ -9,6 +9,7 @@ PaperAccountEngine when paper execution is intentionally started.
 from __future__ import annotations
 
 import os
+import sqlite3
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -109,7 +110,7 @@ class DashboardRuntime:
                     ),
                     slippage_ticks_per_side=int(raw_risk.get("slippage_ticks_per_side", 1)),
                 )
-            except (OSError, TypeError, ValueError, RuntimeError):
+            except (OSError, sqlite3.Error, TypeError, ValueError, RuntimeError):
                 errors.append("paper_account_store_unavailable_or_invalid")
 
         runtime.configuration_errors = tuple(errors)
