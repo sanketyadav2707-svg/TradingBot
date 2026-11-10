@@ -105,6 +105,7 @@ class DashboardRuntime:
                 )
                 runtime.paper_engine = PaperAccountEngine(
                     runtime.account_store,
+                    runtime.risk_limits,
                     commission_per_contract_per_side_usd=float(
                         raw_risk.get("commission_per_contract_per_side_usd", 0.0)
                     ),
