@@ -86,6 +86,28 @@ def test_paper_fills_are_read_only_and_require_an_injected_broker() -> None:
     assert payload["items"][0]["side"] == "LONG"
 
 
+def test_cors_allows_only_local_dashboard_origin() -> None:
+    client = _client()
+    allowed = client.options(
+        "/health",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert allowed.status_code == 200
+    assert allowed.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+    rejected = client.options(
+        "/health",
+        headers={
+            "Origin": "https://untrusted.example",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert "access-control-allow-origin" not in rejected.headers
+
+
 def test_api_exposes_no_mutation_routes() -> None:
     schema = _client().get("/openapi.json").json()
     for operations in schema["paths"].values():
