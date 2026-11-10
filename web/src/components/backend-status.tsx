@@ -54,6 +54,7 @@ export function BackendStatusPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
+  const [dataIssues, setDataIssues] = useState<string[]>([]);
 
   useEffect(() => {
     let disposed = false;
@@ -78,13 +79,23 @@ export function BackendStatusPanel() {
         setSummary(summaryResult.status === "fulfilled" ? summaryResult.value : null);
         setInstruments(instrumentResult.status === "fulfilled" ? instrumentResult.value : null);
         setRisk(riskResult.status === "fulfilled" ? riskResult.value : null);
-        setError(
-          healthy
-            ? null
-            : healthResult.status === "rejected" && healthResult.reason instanceof Error
+        const failures: string[] = [];
+        if (!healthy) {
+          failures.push(
+            healthResult.status === "rejected" && healthResult.reason instanceof Error
               ? healthResult.reason.message
               : "The local Python API is not reachable.",
-        );
+          );
+        } else if (healthy.status === "error") {
+          failures.push("The API process reports an error.");
+        } else if (healthy.status === "degraded") {
+          failures.push("The API is responding with degraded configuration.");
+        }
+        if (summaryResult.status === "rejected") failures.push("Dashboard summary endpoint failed.");
+        if (instrumentResult.status === "rejected") failures.push("Instrument configuration endpoint failed.");
+        if (riskResult.status === "rejected") failures.push("Risk snapshot endpoint failed.");
+        setDataIssues(failures);
+        setError(failures.length ? failures.join(" ") : null);
         setLastChecked(new Date().toISOString());
         setLoading(false);
       }
@@ -171,6 +182,44 @@ export function BackendStatusPanel() {
           tone={symbols.length ? "green" : "slate"}
         />
       </div>
+
+      {instruments?.availability === "AVAILABLE" && (
+        <div className="mt-3 overflow-hidden rounded-lg border border-[#202b38]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#202b38] bg-[#0a1119] px-3 py-2">
+            <div>
+              <h3 className="text-[9px] font-semibold text-slate-200">Configured contract specifications</h3>
+              <p className="mt-0.5 text-[8px] text-slate-500">Source: config/instruments.toml · metadata only, not quotes</p>
+            </div>
+            <span className="rounded border border-cyan-400/15 bg-cyan-400/[.05] px-1.5 py-0.5 text-[7px] font-bold tracking-wider text-cyan-300">CONFIG DATA</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-left">
+              <thead>
+                <tr className="text-[7px] font-bold tracking-wider text-slate-600">
+                  <th className="px-3 py-2">SYMBOL</th>
+                  <th className="px-3 py-2">CONTRACT</th>
+                  <th className="px-3 py-2">EXCHANGE</th>
+                  <th className="px-3 py-2 text-right">TICK SIZE</th>
+                  <th className="px-3 py-2 text-right">TICK VALUE</th>
+                  <th className="px-3 py-2 text-right">POINT VALUE</th>
+                </tr>
+              </thead>
+              <tbody>
+                {instruments.items.map((item) => (
+                  <tr key={item.symbol} className="border-t border-[#202b38]/70 text-[8px]">
+                    <td className="px-3 py-2 font-mono font-bold text-slate-200">{item.symbol}</td>
+                    <td className="px-3 py-2 text-slate-400">{item.name}</td>
+                    <td className="px-3 py-2 text-slate-500">{item.exchange}</td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-300">{item.tick_size}</td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-300">${item.tick_value_usd.amount}</td>
+                    <td className="px-3 py-2 text-right font-mono text-slate-300">${item.point_value_usd.amount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#202b38] pt-2 text-[8px] text-slate-500">
         <span className="flex items-center gap-1.5">
