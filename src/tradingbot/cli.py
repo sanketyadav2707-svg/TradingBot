@@ -12,6 +12,12 @@ from tradingbot.backtest.engine import BacktestConfig, BacktestEngine
 from tradingbot.compliance.rules import FirmComplianceGate, FirmRuleProfile
 from tradingbot.data.audit import audit_bars
 from tradingbot.data.csv_loader import load_bars
+from tradingbot.data.raw_futures import (
+    build_dataset_manifest,
+    load_raw_futures_csv,
+    validate_raw_futures_bars,
+    write_dataset_manifest,
+)
 from tradingbot.models import Instrument
 from tradingbot.risk.limits import RiskGuard, RiskLimits
 from tradingbot.strategy.ema_cross import EmaCrossStrategy
@@ -54,6 +60,18 @@ def _build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--expected-interval-seconds", type=int)
     audit.add_argument("--max-gap-examples", type=int, default=10)
 
+    raw_validate = sub.add_parser(
+        "validate-raw-data",
+        help="Validate raw-contract futures CSV and optionally write a reproducible manifest",
+    )
+    raw_validate.add_argument("--csv", required=True, type=Path)
+    raw_validate.add_argument("--symbol", required=True)
+    raw_validate.add_argument("--interval-seconds", type=int, default=60)
+    raw_validate.add_argument("--manifest", type=Path)
+    raw_validate.add_argument("--provider", default="user_supplied")
+    raw_validate.add_argument("--dataset", default="unspecified")
+    raw_validate.add_argument("--schema", default="ohlcv-1m")
+
     databento = sub.add_parser(
         "fetch-databento",
         help="Fetch optional historical 1-minute futures data (requires data credits/API key)",
@@ -80,6 +98,32 @@ def main() -> None:
             dataset=args.dataset,
         )
         print(json.dumps(result, indent=2))
+        return
+
+    if args.command == "validate-raw-data":
+        bars = load_raw_futures_csv(
+            args.csv,
+            interval_seconds=args.interval_seconds,
+            expected_root_symbol=args.symbol,
+        )
+        report = validate_raw_futures_bars(
+            bars,
+            expected_root_symbol=args.symbol,
+            expected_interval_seconds=args.interval_seconds,
+        )
+        report["file"] = str(args.csv)
+        if args.manifest:
+            manifest = build_dataset_manifest(
+                bars,
+                provider=args.provider,
+                dataset=args.dataset,
+                schema=args.schema,
+                source_reference=args.csv.name,
+            )
+            write_dataset_manifest(args.manifest, manifest)
+            report["manifest"] = str(args.manifest)
+            report["canonical_data_sha256"] = manifest["canonical_data_sha256"]
+        print(json.dumps(report, indent=2))
         return
 
     if args.command == "validate-data":
