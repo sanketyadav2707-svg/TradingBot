@@ -50,6 +50,8 @@ export interface Position {
   side: "LONG" | "SHORT";
   quantity: number;
   average_price: string;
+  mark_price: string | null;
+  mark_timestamp: string | null;
   unrealized_pnl: Money | null;
   opened_at: string;
 }
