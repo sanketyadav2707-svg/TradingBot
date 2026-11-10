@@ -656,10 +656,13 @@ class PaperAccountStore:
         when persisted records cannot be reconciled to their originating fills.
         """
         errors: list[str] = []
+        warnings: list[str] = []
         with self._lock, self._connection() as connection:
             sqlite_result = connection.execute("PRAGMA integrity_check").fetchone()[0]
             if sqlite_result != "ok":
                 errors.append("sqlite_integrity_check_failed")
+            if connection.execute("PRAGMA foreign_key_check").fetchall():
+                errors.append("sqlite_foreign_key_check_failed")
 
             halt = connection.execute(
                 "SELECT value FROM account_meta WHERE key = 'emergency_halt_active'"
@@ -740,6 +743,7 @@ class PaperAccountStore:
                           opening.point_value_usd AS opening_point_value,
                           closing.symbol AS closing_symbol,
                           closing.side AS closing_side,
+                          closing.fill_price AS closing_fill_price,
                           closing.timestamp AS closing_timestamp
                    FROM closed_trades AS ct
                    JOIN fills AS opening ON opening.order_id = ct.opening_fill_id
@@ -755,22 +759,33 @@ class PaperAccountStore:
                     or row["exit_time"] != row["closing_timestamp"]
                     or row["exit_time"] < row["entry_time"]
                     or Decimal(row["entry_price"]) != Decimal(row["opening_fill_price"])
+                    or Decimal(row["exit_price"]) != Decimal(row["closing_fill_price"])
                 ):
                     errors.append("closed_trade_fill_link_invalid")
                     break
-                gross = (
-                    (Decimal(row["exit_price"]) - Decimal(row["entry_price"]))
-                    * Decimal(row["opening_point_value"])
-                    * Decimal(int(row["side"]))
-                    * Decimal(int(row["quantity"]))
-                )
+                gross = Decimal(row["gross_pnl_usd"])
+                if row["opening_point_value"] is not None:
+                    calculated_gross = (
+                        (Decimal(row["exit_price"]) - Decimal(row["entry_price"]))
+                        * Decimal(row["opening_point_value"])
+                        * Decimal(int(row["side"]))
+                        * Decimal(int(row["quantity"]))
+                    )
+                    if calculated_gross != gross:
+                        errors.append("closed_trade_gross_pnl_does_not_reconcile")
+                        break
+                else:
+                    # Legacy closed fills may predate persisted contract metadata.
+                    # Preserve their recorded result but disclose that it cannot
+                    # be independently recalculated from the migrated fill row.
+                    warnings.append("legacy_closed_trade_contract_value_unavailable")
                 net = (
                     gross
                     - Decimal(row["entry_commission_usd"])
                     - Decimal(row["exit_commission_usd"])
                 )
-                if gross != Decimal(row["gross_pnl_usd"]) or net != Decimal(row["net_pnl_usd"]):
-                    errors.append("closed_trade_pnl_does_not_reconcile")
+                if net != Decimal(row["net_pnl_usd"]):
+                    errors.append("closed_trade_net_pnl_does_not_reconcile")
                     break
 
             open_rows = connection.execute(
@@ -799,6 +814,7 @@ class PaperAccountStore:
         return {
             "ok": not errors,
             "errors": errors,
+            "warnings": sorted(set(warnings)),
             "sqlite_integrity": sqlite_result,
         }
 
