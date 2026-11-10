@@ -373,6 +373,19 @@ class PaperAccountStore:
             if halt["value"] == "1":
                 raise RuntimeError("emergency_halt_active")
 
+            latest_fill = connection.execute(
+                "SELECT timestamp FROM fills WHERE symbol = ? ORDER BY timestamp DESC, rowid DESC LIMIT 1",
+                (symbol,),
+            ).fetchone()
+            if latest_fill is not None and timestamp < latest_fill["timestamp"]:
+                raise ValueError("fill_timestamp_cannot_precede_latest_symbol_fill")
+
+            latest_mark = connection.execute(
+                "SELECT timestamp FROM marks WHERE symbol = ?", (symbol,)
+            ).fetchone()
+            if latest_mark is not None and timestamp < latest_mark["timestamp"]:
+                raise ValueError("fill_timestamp_cannot_precede_latest_symbol_mark")
+
             connection.execute(
                 """INSERT INTO fills(
                     order_id, symbol, side, quantity, requested_price, fill_price,
@@ -524,6 +537,12 @@ class PaperAccountStore:
                 ).fetchone()
                 if previous is not None and mark_time < previous["timestamp"]:
                     raise ValueError(f"Mark timestamp for {symbol} cannot move backwards")
+                latest_fill = connection.execute(
+                    "SELECT timestamp FROM fills WHERE symbol = ? ORDER BY timestamp DESC, rowid DESC LIMIT 1",
+                    (symbol,),
+                ).fetchone()
+                if latest_fill is not None and mark_time < latest_fill["timestamp"]:
+                    raise ValueError(f"Mark timestamp for {symbol} cannot precede its latest fill")
                 connection.execute(
                     """INSERT INTO marks(symbol, price, timestamp) VALUES (?, ?, ?)
                        ON CONFLICT(symbol) DO UPDATE SET price = excluded.price,
