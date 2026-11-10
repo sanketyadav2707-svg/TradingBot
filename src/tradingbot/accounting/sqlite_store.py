@@ -8,7 +8,6 @@ closed trades and account snapshots from that immutable fill history.
 from __future__ import annotations
 
 import json
-import math
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -97,6 +96,7 @@ class PaperAccountStore:
     def _initialize(self, starting_balance: Decimal) -> None:
         with self._lock, self._connection() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
+            connection.execute("PRAGMA synchronous = FULL")
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS account_meta (
@@ -179,6 +179,29 @@ class PaperAccountStore:
                 "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('starting_balance_usd', ?)",
                 (_number(starting_balance),),
             )
+            stored_balance = Decimal(connection.execute(
+                "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
+            ).fetchone()["value"])
+            if stored_balance != starting_balance:
+                raise ValueError(
+                    "starting_balance_usd does not match the existing persistent paper account; "
+                    "refusing to silently reset or reinterpret account history"
+                )
+            snapshots = connection.execute(
+                "SELECT COUNT(*) AS n FROM equity_snapshots"
+            ).fetchone()["n"]
+            if snapshots == 0:
+                created_at = _timestamp(datetime.now(timezone.utc))
+                connection.execute(
+                    """INSERT INTO account_events(
+                        timestamp, event_type, symbol, reference_id, payload_json
+                    ) VALUES (?, 'ACCOUNT_INITIALIZED', NULL, NULL, ?)""",
+                    (
+                        created_at,
+                        json.dumps({"starting_balance_usd": _number(starting_balance)}, sort_keys=True),
+                    ),
+                )
+                self._write_snapshot(connection, created_at, "ACCOUNT_INITIALIZED", None)
 
     @property
     def starting_balance_usd(self) -> Decimal:
@@ -251,6 +274,13 @@ class PaperAccountStore:
             open_lots = connection.execute(
                 "SELECT * FROM open_lots WHERE symbol = ? ORDER BY id", (symbol,)
             ).fetchall()
+            if open_lots and any(
+                Decimal(row["point_value_usd"]) != point_value for row in open_lots
+            ):
+                raise ValueError(
+                    "point_value_usd changed while this symbol has an open position; "
+                    "close the existing position before changing contract specifications"
+                )
             if open_lots and any(row["side"] != open_lots[0]["side"] for row in open_lots):
                 raise RuntimeError("Position ledger invariant violated: mixed sides for one symbol")
 
@@ -370,6 +400,11 @@ class PaperAccountStore:
 
         with self._transaction() as connection:
             for symbol, price in normalized.items():
+                previous = connection.execute(
+                    "SELECT timestamp FROM marks WHERE symbol = ?", (symbol,)
+                ).fetchone()
+                if previous is not None and mark_time < previous["timestamp"]:
+                    raise ValueError(f"Mark timestamp for {symbol} cannot move backwards")
                 connection.execute(
                     """INSERT INTO marks(symbol, price, timestamp) VALUES (?, ?, ?)
                        ON CONFLICT(symbol) DO UPDATE SET price = excluded.price,
@@ -388,9 +423,6 @@ class PaperAccountStore:
         start = Decimal(connection.execute(
             "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
         ).fetchone()["value"])
-        gross_row = connection.execute(
-            "SELECT COALESCE(SUM(CAST(gross_pnl_usd AS REAL)), 0) AS total FROM closed_trades"
-        ).fetchone()
         # Re-sum decimal text in Python; SQLite REAL aggregation is not used for money.
         gross = sum(
             (Decimal(row["gross_pnl_usd"]) for row in connection.execute(
@@ -448,6 +480,7 @@ class PaperAccountStore:
             "total_commissions_usd": _number(commissions),
             "unrealized_pnl_usd": _number(unrealized) if unrealized is not None else None,
             "equity_usd": _number(equity) if equity is not None else None,
+            "net_pnl_usd": _number(equity - start) if equity is not None else None,
             "max_drawdown_usd": _number(max_drawdown),
             "open_positions": len({row["symbol"] for row in lots}),
             "open_contracts": sum(int(row["quantity_open"]) for row in lots),
@@ -481,6 +514,20 @@ class PaperAccountStore:
         with self._lock, self._connection() as connection:
             return self._summary(connection)
 
+    def count_records(self, table: str) -> int:
+        allowed = {
+            "fills": "fills",
+            "closed_trades": "closed_trades",
+            "account_events": "account_events",
+        }
+        selected = allowed.get(table)
+        if selected is None:
+            raise ValueError("Unsupported account record table")
+        with self._lock, self._connection() as connection:
+            return int(connection.execute(
+                f"SELECT COUNT(*) AS n FROM {selected}"
+            ).fetchone()["n"])
+
     def list_positions(self) -> list[dict[str, Any]]:
         with self._lock, self._connection() as connection:
             lots = connection.execute("SELECT * FROM open_lots ORDER BY symbol, id").fetchall()
@@ -501,7 +548,6 @@ class PaperAccountStore:
                     (Decimal(item["entry_price"]) * int(item["quantity_open"]) for item in items),
                     Decimal("0"),
                 ) / Decimal(quantity)
-                point_value = Decimal(items[0]["point_value_usd"])
                 if symbol in marks:
                     mark, mark_time = marks[symbol]
                     unrealized = sum(
