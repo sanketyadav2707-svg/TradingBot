@@ -266,7 +266,7 @@ components:
     RiskSnapshot:
       type: object
       additionalProperties: false
-      required: [meta, gate, reasons, daily_loss_used, daily_loss_limit, open_positions, max_contracts]
+      required: [meta, gate, reasons, daily_loss_used, daily_loss_limit, open_positions, max_contracts, execution_halted]
       properties:
         meta: { $ref: "#/components/schemas/ApiMeta" }
         gate: { type: string, enum: [PASS, BLOCK, UNKNOWN] }
@@ -275,3 +275,4 @@ components:
         daily_loss_limit: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
         open_positions: { type: [integer, "null"] }
         max_contracts: { type: [integer, "null"] }
+        execution_halted: { type: [boolean, "null"], description: Durable one-way paper execution halt. Null if no account store is configured. }
