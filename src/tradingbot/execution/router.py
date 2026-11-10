@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from math import isfinite
-from typing import Callable
+from typing import Any, Callable
 
 from tradingbot.compliance.rules import FirmComplianceGate
 from tradingbot.models import Instrument, Side
@@ -57,6 +57,7 @@ class ExecutionRouter:
         require_firm_profile: bool = False,
         account_snapshot_provider: Callable[[OrderIntent], AccountRiskSnapshot] | None = None,
         halt_check: Callable[[], bool] | None = None,
+        submission_lock: Any | None = None,
     ) -> None:
         if type(broker) is not PaperBroker:
             raise TypeError("paper_broker_only: custom and live broker adapters are not supported")
@@ -67,13 +68,29 @@ class ExecutionRouter:
         self.require_firm_profile = require_firm_profile
         self._account_snapshot_provider = account_snapshot_provider
         self._halt_check = halt_check
+        self._submission_lock = submission_lock
         self._halted = False
 
     def emergency_halt(self) -> None:
-        """Permanently halt this router instance. Restart/review is required to resume."""
-        self._halted = True
+        """Permanently halt this router instance, waiting for an in-flight submit."""
+        if self._submission_lock is None:
+            self._halted = True
+            return
+        with self._submission_lock:
+            self._halted = True
 
     def submit_entry(
+        self,
+        intent: OrderIntent,
+        account: AccountRiskSnapshot | None = None,
+    ) -> object:
+        """Serialize entry evaluation and submission with an injected engine halt lock."""
+        if self._submission_lock is None:
+            return self._submit_entry_locked(intent, account)
+        with self._submission_lock:
+            return self._submit_entry_locked(intent, account)
+
+    def _submit_entry_locked(
         self,
         intent: OrderIntent,
         account: AccountRiskSnapshot | None = None,
