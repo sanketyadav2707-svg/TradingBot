@@ -362,6 +362,17 @@ class PaperAccountStore:
                     raise DuplicateFillError("order_id_already_exists_with_different_fill_data")
                 return False
 
+            # Enforce the durable halt inside the same SQLite write transaction
+            # as the fill. This closes the race where a different engine/process
+            # activates the halt after this router's in-memory pre-check.
+            halt = connection.execute(
+                "SELECT value FROM account_meta WHERE key = 'emergency_halt_active'"
+            ).fetchone()
+            if halt is None or halt["value"] not in {"0", "1"}:
+                raise RuntimeError("paper_account_emergency_halt_state_unavailable_or_corrupt")
+            if halt["value"] == "1":
+                raise RuntimeError("emergency_halt_active")
+
             connection.execute(
                 """INSERT INTO fills(
                     order_id, symbol, side, quantity, requested_price, fill_price,
