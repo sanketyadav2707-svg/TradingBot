@@ -132,17 +132,9 @@ def test_orb15_rejects_unsorted_duplicate_and_invalid_cost_inputs() -> None:
                0, 1, -1, 0, 10)
 
 
-def test_orb15_rejects_non_minute_contiguous_opening_range() -> None:
-    bars = _session()
-    # Keep fifteen list elements but introduce a two-minute timestamp jump.
-    broken = []
-    for bar in bars:
-        if bar.timestamp.time() == time(8, 38):
-            broken.append(_bar(bar.timestamp + timedelta(minutes=1)))
-        else:
-            broken.append(bar)
-    broken.sort(key=lambda item: item.timestamp)
-    result = run_orb15(broken, MES, slippage_ticks_per_side=0)
+def test_orb15_gap_inside_opening_range_invalidates_session() -> None:
+    bars = _session(omit=(8,))
+    result = run_orb15(bars, MES, slippage_ticks_per_side=0)
     assert result.eligible_sessions == 0
     assert result.invalid_sessions == 1
-    assert dict(result.rejection_reasons)["non_contiguous_opening_range"] == 1
+    assert dict(result.rejection_reasons)["incomplete_opening_range"] == 1
