@@ -121,11 +121,13 @@ export function BackendStatusPanel() {
           </div>
         </div>
         <div className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[8px] font-bold tracking-wider ${
-          online
+          healthTone === "green"
             ? "border-emerald-400/20 bg-emerald-400/[.06] text-emerald-300"
-            : loading
-              ? "border-slate-700 bg-slate-800/60 text-slate-300"
-              : "border-rose-400/20 bg-rose-400/[.06] text-rose-300"
+            : healthTone === "amber"
+              ? "border-amber-400/20 bg-amber-400/[.06] text-amber-300"
+              : healthTone === "slate"
+                ? "border-slate-700 bg-slate-800/60 text-slate-300"
+                : "border-rose-400/20 bg-rose-400/[.06] text-rose-300"
         }`}>
           <StateDot tone={healthTone} />
           {health?.status === "ok" ? "API ONLINE" : health?.status === "degraded" ? "API DEGRADED" : loading ? "CONNECTING" : "API OFFLINE"}
@@ -148,7 +150,7 @@ export function BackendStatusPanel() {
           label="SERVICE HEALTH"
           value={health?.status.toUpperCase() ?? (loading ? "CHECKING" : "UNAVAILABLE")}
           detail={health ? `API v${health.version}` : "No response from localhost:8000"}
-          tone={online ? "green" : loading ? "slate" : "red"}
+          tone={healthTone}
         />
         <Stat
           label="TRADING RUNTIME"
@@ -159,7 +161,7 @@ export function BackendStatusPanel() {
         <Stat
           label="RISK GATE"
           value={riskGate}
-          detail={risk?.daily_loss_limit ? `Research default: ${risk.daily_loss_limit.amount} · not enforced` : "No evaluated account snapshot"}
+          detail={risk?.daily_loss_limit ? `Research default: USD ${risk.daily_loss_limit.amount} · not enforced` : "No evaluated account snapshot"}
           tone={riskGate === "PASS" ? "green" : riskGate === "BLOCK" ? "red" : "amber"}
         />
         <Stat
