@@ -5,7 +5,7 @@ import pytest
 
 from tradingbot.accounting import DuplicateFillError, PaperAccountEngine, PaperAccountStore
 from tradingbot.models import Instrument, Side
-from tradingbot.execution.router import AccountRiskSnapshot, OrderIntent, OrderRejected
+from tradingbot.execution.router import OrderIntent, OrderRejected
 from tradingbot.risk.limits import RiskLimits
 from tradingbot.paper.broker import PaperBroker, PaperFill
 
@@ -196,13 +196,7 @@ def test_paper_account_engine_persists_risk_gated_router_fills(tmp_path) -> None
         reference_price=100,
         timestamp=T0,
     )
-    account = AccountRiskSnapshot(
-        equity_usd=50_000,
-        peak_equity_usd=50_000,
-        daily_pnl_usd=0,
-        trades_today=0,
-    )
-    fill = router.submit_entry(intent, account)
+    fill = router.submit_entry(intent)
 
     assert fill.fill_price == 100.25
     assert fill.quantity == 2
