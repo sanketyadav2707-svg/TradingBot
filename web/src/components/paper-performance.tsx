@@ -50,7 +50,6 @@ export function PaperPerformance() {
   },[]);
 
   const latest=points.at(-1)?.equity.amount;
-  const first=points[0]?.equity.amount;
   const net=summary?.account.net_pnl?.amount;
 
   return <div className="space-y-3">
@@ -80,7 +79,7 @@ export function PaperPerformance() {
         </ResponsiveContainer>
       </div> : <div className="py-14 text-center text-[10px] text-slate-500">{loading?"Loading persisted equity…":"No persisted equity observations in this account."}</div>}
       {error&&<div className="mt-2 text-[9px] text-rose-300">{error}</div>}
-      <div className="mt-3 border-t border-[#202b38] pt-2 text-[8px] text-slate-500">Opening paper balance: {money(summary?.account.balance?.amount && first ? first : summary?.account.balance?.amount)}. Equity changes only when a fill or explicit mark is recorded.</div>
+      <div className="mt-3 border-t border-[#202b38] pt-2 text-[8px] text-slate-500">Current cash balance: {money(summary?.account.balance?.amount)}. Equity changes only when a fill or explicit mark is recorded.</div>
     </section>
   </div>;
 }
