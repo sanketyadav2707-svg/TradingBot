@@ -2,9 +2,9 @@ name: Python checks
 
 on:
   push:
-    branches: [main, "feature/dashboard-ci-api-contract"]
+    branches: [main, "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service"]
   pull_request:
-    branches: [main]
+    branches: [main, "feature/dashboard-ci-api-contract"]
 
 permissions:
   contents: read
