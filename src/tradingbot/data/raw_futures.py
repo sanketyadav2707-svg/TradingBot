@@ -6,6 +6,7 @@ never repairs, fills, resamples, or silently drops market-data observations.
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import math
@@ -70,6 +71,65 @@ class RawFuturesBar:
             or self.volume < 0
         ):
             raise DataValidationError("Volume must be finite and non-negative")
+
+
+def load_raw_futures_csv(
+    path: str | Path,
+    *,
+    interval_seconds: int = 60,
+    expected_root_symbol: str | None = None,
+) -> list[RawFuturesBar]:
+    """Load an explicit raw-contract CSV without dropping identity columns.
+
+    Required columns: timestamp, root_symbol, contract_symbol, instrument_id,
+    open, high, low, close, volume. Timestamps must carry an explicit timezone.
+    """
+    source = Path(path)
+    if not source.is_file():
+        raise FileNotFoundError(f"Raw futures CSV does not exist: {source}")
+    required = {
+        "timestamp", "root_symbol", "contract_symbol", "instrument_id",
+        "open", "high", "low", "close", "volume",
+    }
+    rows: list[RawFuturesBar] = []
+    with source.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        missing = required - set(reader.fieldnames or [])
+        if missing:
+            raise DataValidationError(
+                "Raw futures CSV missing columns: " + ", ".join(sorted(missing))
+            )
+        for line_number, row in enumerate(reader, start=2):
+            raw_stamp = (row.get("timestamp") or "").strip()
+            normalized = raw_stamp[:-1] + "+00:00" if raw_stamp.endswith("Z") else raw_stamp
+            try:
+                stamp = datetime.fromisoformat(normalized)
+                bar = RawFuturesBar(
+                    timestamp=stamp,
+                    root_symbol=row["root_symbol"],
+                    contract_symbol=row["contract_symbol"],
+                    instrument_id=row["instrument_id"],
+                    interval_seconds=interval_seconds,
+                    open=float(row["open"]),
+                    high=float(row["high"]),
+                    low=float(row["low"]),
+                    close=float(row["close"]),
+                    volume=float(row["volume"]),
+                )
+            except (TypeError, ValueError, KeyError) as exc:
+                raise DataValidationError(
+                    f"Invalid raw futures CSV row {line_number}: {exc}"
+                ) from exc
+            rows.append(bar)
+
+    if not rows:
+        raise DataValidationError("Raw futures CSV contains no market-data rows")
+    validate_raw_futures_bars(
+        rows,
+        expected_root_symbol=expected_root_symbol,
+        expected_interval_seconds=interval_seconds,
+    )
+    return rows
 
 
 def _utc(value: datetime) -> datetime:
