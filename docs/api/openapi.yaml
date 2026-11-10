@@ -3,53 +3,61 @@ info:
   title: TradingBot Read-only Dashboard API
   version: 1.0.0
   description: >
-    Proposed contract for the local Python service. This specification is a
-    contract target, not a claim that these endpoints are already implemented.
-    All endpoints are read-only. No order placement or risk mutation exists.
+    Local loopback-only read API. It exposes configuration and process state only.
+    Missing runtime, position, trade and equity sources are explicitly marked unavailable.
+    No order placement, risk mutation or live execution operations are defined.
 servers:
   - url: http://127.0.0.1:8000
     description: Local development only
 paths:
   /health:
     get:
-      summary: Service health and version
       operationId: getHealth
+      summary: API process health
       responses:
         "200":
-          description: Service health
+          description: API process is responding (not a statement that trading is ready)
           content:
             application/json:
               schema:
-                type: object
-                required: [status, version, timestamp]
-                properties:
-                  status: { type: string, enum: [ok, degraded, error] }
-                  version: { type: string }
-                  timestamp: { type: string, format: date-time }
+                $ref: "#/components/schemas/Health"
   /api/v1/dashboard/summary:
     get:
-      summary: Account and system summary
       operationId: getDashboardSummary
+      summary: Environment and account availability snapshot
       responses:
         "200":
-          description: Summary snapshot
+          description: Dashboard summary with unavailable account fields set to null
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/DashboardSummary" }
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+  /api/v1/instruments:
+    get:
+      operationId: listConfiguredInstruments
+      summary: Contract metadata loaded from config/instruments.toml
+      responses:
+        "200":
+          description: Configured instrument metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Instruments"
   /api/v1/positions:
     get:
-      summary: Current paper positions
       operationId: listPositions
+      summary: Position book availability
       responses:
         "200":
-          description: Position page
+          description: Explicitly unavailable until a position book exists
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PositionPage" }
+              schema:
+                $ref: "#/components/schemas/AvailabilityPage"
   /api/v1/trades:
     get:
-      summary: Paginated paper trade ledger
       operationId: listTrades
+      summary: Closed trade ledger availability
       parameters:
         - in: query
           name: limit
@@ -59,49 +67,65 @@ paths:
           schema: { type: string }
       responses:
         "200":
-          description: Trade page
+          description: Explicitly unavailable until a persistent trade ledger exists
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/TradePage" }
+              schema:
+                $ref: "#/components/schemas/AvailabilityPage"
+        "400":
+          description: Invalid pagination cursor
+        "422":
+          description: Invalid query parameters
+  /api/v1/paper/fills:
+    get:
+      operationId: listPaperFills
+      summary: In-memory fills from an explicitly injected paper broker
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+      responses:
+        "200":
+          description: Paper fill page or NOT_CONFIGURED state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaperFills"
   /api/v1/performance/equity:
     get:
-      summary: Persisted account equity observations
       operationId: getEquityHistory
+      summary: Persisted equity history availability
       parameters:
         - in: query
           name: range
           schema: { type: string, enum: [1d, 1w, 1m, all], default: 1d }
       responses:
         "200":
-          description: Equity series
+          description: Explicitly unavailable until equity observations are persisted
           content:
             application/json:
               schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items:
-                      type: object
-                      required: [timestamp, equity]
-                      properties:
-                        timestamp: { type: string, format: date-time }
-                        equity: { $ref: "#/components/schemas/Money" }
+                $ref: "#/components/schemas/EquityHistory"
+        "422":
+          description: Unsupported range
   /api/v1/risk/snapshot:
     get:
-      summary: Current server-calculated risk gate and limits
       operationId: getRiskSnapshot
+      summary: Configured limits and current risk-evaluation availability
       responses:
         "200":
-          description: Risk snapshot
+          description: Limit configuration; live usage remains null without an account snapshot
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/RiskSnapshot" }
+              schema:
+                $ref: "#/components/schemas/RiskSnapshot"
   /api/v1/events:
     get:
-      summary: Paginated operational and audit events
       operationId: listEvents
+      summary: Operational event-store availability
       parameters:
         - in: query
           name: limit
@@ -111,23 +135,34 @@ paths:
           schema: { type: string }
       responses:
         "200":
-          description: Event page
+          description: Explicitly unavailable until an append-only event store exists
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/EventPage" }
+              schema:
+                $ref: "#/components/schemas/AvailabilityPage"
 components:
   schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, version, timestamp]
+      properties:
+        status: { type: string, enum: [ok, degraded, error] }
+        version: { type: string }
+        timestamp: { type: string, format: date-time }
     Money:
       type: object
+      additionalProperties: false
       required: [amount, currency]
       properties:
         amount:
           type: string
           pattern: "^-?[0-9]+(\\.[0-9]+)?$"
-          description: Decimal string, never a binary floating-point JSON number.
+          description: Decimal string. Avoids floating-point ambiguity.
         currency: { type: string, const: USD }
     ApiMeta:
       type: object
+      additionalProperties: false
       required: [as_of, environment, source]
       properties:
         as_of: { type: string, format: date-time }
@@ -135,55 +170,108 @@ components:
         source: { type: string }
     DashboardSummary:
       type: object
+      additionalProperties: false
       required: [meta, account, strategy, market_data]
       properties:
         meta: { $ref: "#/components/schemas/ApiMeta" }
         account:
           type: object
-          properties:
-            balance: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
-            equity: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
-            realized_pnl: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
-            unrealized_pnl: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
-            net_pnl: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
-            max_drawdown: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
+          additionalProperties:
+            oneOf:
+              - { $ref: "#/components/schemas/Money" }
+              - { type: "null" }
+          required: [balance, equity, realized_pnl, unrealized_pnl, net_pnl, max_drawdown]
         strategy:
           type: object
+          additionalProperties: false
+          required: [name, state]
           properties:
-            name: { oneOf: [{ type: string }, { type: "null" }] }
+            name: { type: [string, "null"] }
             state: { type: string, enum: [IDLE, RUNNING, HALTED, ERROR, UNKNOWN] }
         market_data:
           type: object
+          additionalProperties: false
+          required: [connection, last_update, symbols]
           properties:
             connection: { type: string, enum: [CONNECTED, DISCONNECTED, DELAYED, UNKNOWN] }
-            last_update: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+            last_update: { type: [string, "null"], format: date-time }
             symbols: { type: array, items: { type: string } }
-    PositionPage:
+    Instrument:
       type: object
-      required: [items, next_cursor]
+      additionalProperties: false
+      required: [symbol, name, exchange, tick_size, tick_value_usd, point_value_usd]
       properties:
-        items: { type: array, items: { type: object } }
-        next_cursor: { oneOf: [{ type: string }, { type: "null" }] }
-    TradePage:
+        symbol: { type: string }
+        name: { type: string }
+        exchange: { type: string }
+        tick_size: { type: string }
+        tick_value_usd: { $ref: "#/components/schemas/Money" }
+        point_value_usd: { $ref: "#/components/schemas/Money" }
+    Instruments:
       type: object
-      required: [items, next_cursor]
+      additionalProperties: false
+      required: [availability, source, items, reason]
       properties:
+        availability: { type: string, enum: [AVAILABLE, NOT_CONFIGURED] }
+        source: { type: string }
+        items: { type: array, items: { $ref: "#/components/schemas/Instrument" } }
+        reason: { type: [string, "null"] }
+    AvailabilityPage:
+      type: object
+      additionalProperties: false
+      required: [availability, items, next_cursor, reason]
+      properties:
+        availability: { type: string, enum: [AVAILABLE, NOT_CONFIGURED, NOT_PERSISTED, NOT_IMPLEMENTED] }
         items: { type: array, items: { type: object } }
-        next_cursor: { oneOf: [{ type: string }, { type: "null" }] }
+        next_cursor: { type: [string, "null"] }
+        reason: { type: [string, "null"] }
+    PaperFill:
+      type: object
+      additionalProperties: false
+      required: [order_id, symbol, side, quantity, requested_price, fill_price, commission, timestamp]
+      properties:
+        order_id: { type: string }
+        symbol: { type: string }
+        side: { type: string, enum: [LONG, SHORT] }
+        quantity: { type: integer, minimum: 1 }
+        requested_price: { type: string }
+        fill_price: { type: string }
+        commission: { $ref: "#/components/schemas/Money" }
+        timestamp: { type: string, format: date-time }
+    PaperFills:
+      type: object
+      additionalProperties: false
+      required: [availability, items, next_cursor, reason]
+      properties:
+        availability: { type: string, enum: [AVAILABLE, NOT_CONFIGURED, NOT_PERSISTED, NOT_IMPLEMENTED] }
+        items: { type: array, items: { $ref: "#/components/schemas/PaperFill" } }
+        next_cursor: { type: [string, "null"] }
+        reason: { type: [string, "null"] }
+    EquityPoint:
+      type: object
+      additionalProperties: false
+      required: [timestamp, equity]
+      properties:
+        timestamp: { type: string, format: date-time }
+        equity: { $ref: "#/components/schemas/Money" }
+    EquityHistory:
+      type: object
+      additionalProperties: false
+      required: [availability, items, reason, range]
+      properties:
+        availability: { type: string, enum: [AVAILABLE, NOT_CONFIGURED, NOT_PERSISTED, NOT_IMPLEMENTED] }
+        items: { type: array, items: { $ref: "#/components/schemas/EquityPoint" } }
+        reason: { type: [string, "null"] }
+        range: { type: string, enum: [1d, 1w, 1m, all] }
     RiskSnapshot:
       type: object
-      required: [meta, gate, reasons, open_positions]
+      additionalProperties: false
+      required: [meta, gate, reasons, daily_loss_used, daily_loss_limit, open_positions, max_contracts]
       properties:
         meta: { $ref: "#/components/schemas/ApiMeta" }
         gate: { type: string, enum: [PASS, BLOCK, UNKNOWN] }
         reasons: { type: array, items: { type: string } }
         daily_loss_used: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
         daily_loss_limit: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
-        open_positions: { type: integer, minimum: 0 }
-        max_positions: { oneOf: [{ type: integer, minimum: 0 }, { type: "null" }] }
-    EventPage:
-      type: object
-      required: [items, next_cursor]
-      properties:
-        items: { type: array, items: { type: object } }
-        next_cursor: { oneOf: [{ type: string }, { type: "null" }] }
+        open_positions: { type: [integer, "null"] }
+        max_contracts: { type: [integer, "null"] }
