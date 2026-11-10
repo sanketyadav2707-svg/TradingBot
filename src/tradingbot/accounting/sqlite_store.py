@@ -111,6 +111,8 @@ class PaperAccountStore:
                     requested_price TEXT NOT NULL,
                     fill_price TEXT NOT NULL,
                     commission_usd TEXT NOT NULL,
+                    tick_size TEXT NOT NULL,
+                    tick_value_usd TEXT NOT NULL,
                     point_value_usd TEXT NOT NULL,
                     timestamp TEXT NOT NULL
                 );
@@ -121,6 +123,8 @@ class PaperAccountStore:
                     quantity_open INTEGER NOT NULL CHECK (quantity_open > 0),
                     entry_price TEXT NOT NULL,
                     entry_commission_remaining TEXT NOT NULL,
+                    tick_size TEXT NOT NULL,
+                    tick_value_usd TEXT NOT NULL,
                     point_value_usd TEXT NOT NULL,
                     opened_at TEXT NOT NULL,
                     opening_fill_id TEXT NOT NULL REFERENCES fills(order_id)
@@ -175,6 +179,25 @@ class PaperAccountStore:
                     ON account_events(timestamp, id);
                 """
             )
+            # Upgrade pre-specification databases only when no open lots need
+            # contract metadata that the older schema never stored.
+            for table in ("fills", "open_lots"):
+                columns = {
+                    row["name"] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+                }
+                missing = [name for name in ("tick_size", "tick_value_usd") if name not in columns]
+                if missing:
+                    open_lots_count = connection.execute(
+                        "SELECT COUNT(*) AS n FROM open_lots"
+                    ).fetchone()["n"]
+                    if open_lots_count:
+                        raise RuntimeError(
+                            "paper account database lacks full contract specifications for open lots; "
+                            "reconcile/close positions before upgrading the ledger"
+                        )
+                    for name in missing:
+                        connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} TEXT")
+
             connection.execute(
                 "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('starting_balance_usd', ?)",
                 (_number(starting_balance),),
@@ -213,6 +236,36 @@ class PaperAccountStore:
             raise RuntimeError("Paper account starting balance is missing")
         return Decimal(row["value"])
 
+    def validate_instrument(self, instrument: Instrument) -> None:
+        """Reject changed contract specifications while any FIFO lot remains open."""
+        if not isinstance(instrument, Instrument):
+            raise TypeError("instrument must be an Instrument")
+        symbol = instrument.symbol.strip().upper()
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                "SELECT tick_size, tick_value_usd, point_value_usd FROM open_lots WHERE symbol = ?",
+                (symbol,),
+            ).fetchall()
+        expected = (
+            Decimal(str(instrument.tick_size)),
+            Decimal(str(instrument.tick_value_usd)),
+            Decimal(str(instrument.point_value_usd)),
+        )
+        if any(
+            row["tick_size"] is None
+            or row["tick_value_usd"] is None
+            or row["point_value_usd"] is None
+            or (
+                Decimal(row["tick_size"]),
+                Decimal(row["tick_value_usd"]),
+                Decimal(row["point_value_usd"]),
+            ) != expected
+            for row in rows
+        ):
+            raise ValueError(
+                "contract tick/point specification changed or is unknown while a position is open"
+            )
+
     def record_fill(self, fill: PaperFill, instrument: Instrument) -> bool:
         """Persist a PaperBroker fill and update FIFO lots atomically.
 
@@ -236,8 +289,10 @@ class PaperAccountStore:
         requested = _decimal(fill.requested_price, "requested_price")
         price = _decimal(fill.fill_price, "fill_price")
         commission = _decimal(fill.commission_usd, "commission_usd")
+        tick_size = _decimal(instrument.tick_size, "tick_size")
+        tick_value = _decimal(instrument.tick_value_usd, "tick_value_usd")
         point_value = _decimal(instrument.point_value_usd, "point_value_usd")
-        if commission < 0 or point_value <= 0:
+        if commission < 0 or tick_size <= 0 or tick_value <= 0 or point_value <= 0:
             raise ValueError("Commission must be non-negative and point value positive")
         timestamp = _timestamp(fill.timestamp)
         side = int(fill.side)
@@ -249,13 +304,15 @@ class PaperAccountStore:
             ).fetchone()
             candidate = (
                 symbol, side, fill.quantity, _number(requested), _number(price),
-                _number(commission), _number(point_value), timestamp,
+                _number(commission), _number(tick_size), _number(tick_value),
+                _number(point_value), timestamp,
             )
             if existing is not None:
                 actual = (
                     existing["symbol"], existing["side"], existing["quantity"],
                     existing["requested_price"], existing["fill_price"],
-                    existing["commission_usd"], existing["point_value_usd"],
+                    existing["commission_usd"], existing["tick_size"],
+                    existing["tick_value_usd"], existing["point_value_usd"],
                     existing["timestamp"],
                 )
                 if actual != candidate:
@@ -265,8 +322,8 @@ class PaperAccountStore:
             connection.execute(
                 """INSERT INTO fills(
                     order_id, symbol, side, quantity, requested_price, fill_price,
-                    commission_usd, point_value_usd, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    commission_usd, tick_size, tick_value_usd, point_value_usd, timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (normalized_id, *candidate),
             )
             remaining = fill.quantity
@@ -275,10 +332,13 @@ class PaperAccountStore:
                 "SELECT * FROM open_lots WHERE symbol = ? ORDER BY id", (symbol,)
             ).fetchall()
             if open_lots and any(
-                Decimal(row["point_value_usd"]) != point_value for row in open_lots
+                Decimal(row["tick_size"]) != tick_size
+                or Decimal(row["tick_value_usd"]) != tick_value
+                or Decimal(row["point_value_usd"]) != point_value
+                for row in open_lots
             ):
                 raise ValueError(
-                    "point_value_usd changed while this symbol has an open position; "
+                    "contract tick/point specification changed while this symbol has an open position; "
                     "close the existing position before changing contract specifications"
                 )
             if open_lots and any(row["side"] != open_lots[0]["side"] for row in open_lots):
@@ -288,10 +348,10 @@ class PaperAccountStore:
                 connection.execute(
                     """INSERT INTO open_lots(
                         symbol, side, quantity_open, entry_price, entry_commission_remaining,
-                        point_value_usd, opened_at, opening_fill_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        tick_size, tick_value_usd, point_value_usd, opened_at, opening_fill_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (symbol, side, remaining, _number(price), _number(commission),
-                     _number(point_value), timestamp, normalized_id),
+                     _number(tick_size), _number(tick_value), _number(point_value), timestamp, normalized_id),
                 )
                 remaining = 0
             else:
@@ -361,11 +421,11 @@ class PaperAccountStore:
                     connection.execute(
                         """INSERT INTO open_lots(
                             symbol, side, quantity_open, entry_price, entry_commission_remaining,
-                            point_value_usd, opened_at, opening_fill_id
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                            tick_size, tick_value_usd, point_value_usd, opened_at, opening_fill_id
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             symbol, side, remaining, _number(price), _number(remaining_commission),
-                            _number(point_value), timestamp, normalized_id,
+                            _number(tick_size), _number(tick_value), _number(point_value), timestamp, normalized_id,
                         ),
                     )
                     remaining = 0
