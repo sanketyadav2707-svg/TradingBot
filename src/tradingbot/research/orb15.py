@@ -61,8 +61,16 @@ class ORB15Config:
 
     def __post_init__(self) -> None:
         ZoneInfo(self.timezone)
-        if self.range_start >= self.signal_start or self.signal_start >= self.signal_end:
-            raise ValueError("ORB session times must be strictly ordered")
+        if any(
+            not isinstance(value, time) or value.tzinfo is not None
+            for value in (self.range_start, self.signal_start, self.signal_end)
+        ):
+            raise ValueError("ORB session times must be naive local clock times")
+        range_start_minutes = self.range_start.hour * 60 + self.range_start.minute
+        signal_start_minutes = self.signal_start.hour * 60 + self.signal_start.minute
+        signal_end_minutes = self.signal_end.hour * 60 + self.signal_end.minute
+        if signal_start_minutes - range_start_minutes != 15 or signal_end_minutes <= signal_start_minutes:
+            raise ValueError("signal_start must be exactly 15 minutes after range_start and before signal_end")
         if type(self.stop_buffer_ticks) is not int or self.stop_buffer_ticks < 1:
             raise ValueError("stop_buffer_ticks must be a positive integer")
         if type(self.max_holding_minutes) is not int or self.max_holding_minutes < 1:
@@ -238,7 +246,10 @@ def run_orb15(
     for trading_day in sorted(by_day):
         day_bars = by_day[trading_day]
         local = {bar.timestamp.astimezone(tz).replace(tzinfo=None).time(): (i, bar) for i, bar in enumerate(day_bars)}
-        range_times = [time(8, 30 + i) if i < 30 else time(9, i - 30) for i in range(15)]
+        range_times = [
+            (datetime.combine(trading_day, cfg.range_start) + minute * i).time()
+            for i in range(15)
+        ]
         range_rows = [local.get(t) for t in range_times]
         if any(row is None for row in range_rows):
             invalid += 1
