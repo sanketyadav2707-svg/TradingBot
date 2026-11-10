@@ -1,9 +1,11 @@
 import type {
+  AvailabilityPage,
   DashboardSummaryResponse,
-  EquityPoint,
+  EquityResponse,
   HealthResponse,
+  InstrumentsResponse,
   OperationalEvent,
-  Page,
+  PaperFill,
   Position,
   RiskSnapshotResponse,
   Trade,
@@ -20,7 +22,7 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_TRADINGBOT_API_URL ?? "";
+const API_BASE = (process.env.NEXT_PUBLIC_TRADINGBOT_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
 
 async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
   let response: Response;
@@ -48,20 +50,30 @@ async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
-/** Read-only endpoints. No order, settings or risk mutation method is exposed. */
+/** All operations are GET-only. No order or risk mutation method is exposed. */
 export const tradingBotApi = {
   health: (signal?: AbortSignal) => request<HealthResponse>("/health", signal),
   summary: (signal?: AbortSignal) =>
     request<DashboardSummaryResponse>("/api/v1/dashboard/summary", signal),
+  instruments: (signal?: AbortSignal) =>
+    request<InstrumentsResponse>("/api/v1/instruments", signal),
   positions: (signal?: AbortSignal) =>
-    request<Page<Position>>("/api/v1/positions", signal),
+    request<AvailabilityPage<Position>>("/api/v1/positions", signal),
   trades: (limit = 50, cursor?: string, signal?: AbortSignal) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cursor) params.set("cursor", cursor);
-    return request<Page<Trade>>(`/api/v1/trades?${params.toString()}`, signal);
+    return request<AvailabilityPage<Trade>>(`/api/v1/trades?${params.toString()}`, signal);
   },
-  equity: (range = "1d", signal?: AbortSignal) =>
-    request<{ items: EquityPoint[] }>(
+  paperFills: (limit = 50, cursor?: string, signal?: AbortSignal) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor) params.set("cursor", cursor);
+    return request<AvailabilityPage<PaperFill>>(
+      `/api/v1/paper/fills?${params.toString()}`,
+      signal,
+    );
+  },
+  equity: (range: EquityResponse["range"] = "1d", signal?: AbortSignal) =>
+    request<EquityResponse>(
       `/api/v1/performance/equity?range=${encodeURIComponent(range)}`,
       signal,
     ),
@@ -70,7 +82,7 @@ export const tradingBotApi = {
   events: (limit = 50, cursor?: string, signal?: AbortSignal) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cursor) params.set("cursor", cursor);
-    return request<Page<OperationalEvent>>(
+    return request<AvailabilityPage<OperationalEvent>>(
       `/api/v1/events?${params.toString()}`,
       signal,
     );

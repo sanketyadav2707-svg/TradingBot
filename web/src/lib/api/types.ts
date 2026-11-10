@@ -1,10 +1,10 @@
-/** Stable, read-only API contract shared by the dashboard and Python service.
- * Monetary values are decimal strings to avoid binary floating-point ambiguity.
- * All timestamps are ISO-8601 UTC strings.
+/** API contracts for the read-only local TradingBot service.
+ * Money is serialized as decimal strings. Null means unavailable, not zero.
  */
 
 export type EnvironmentState = "DEMO" | "PAPER" | "DISCONNECTED" | "STALE" | "ERROR";
 export type ConnectionState = "CONNECTED" | "DISCONNECTED" | "DELAYED" | "UNKNOWN";
+export type DataAvailability = "AVAILABLE" | "NOT_CONFIGURED" | "NOT_PERSISTED" | "NOT_IMPLEMENTED";
 
 export interface ApiMeta {
   as_of: string;
@@ -67,14 +67,50 @@ export interface Trade {
   exit_reason: string;
 }
 
-export interface Page<T> {
+export interface AvailabilityPage<T> {
+  availability: DataAvailability;
   items: T[];
   next_cursor: string | null;
+  reason: string | null;
+}
+
+export interface InstrumentMetadata {
+  symbol: string;
+  name: string;
+  exchange: string;
+  tick_size: string;
+  tick_value_usd: Money;
+  point_value_usd: Money;
+}
+
+export interface InstrumentsResponse {
+  availability: "AVAILABLE" | "NOT_CONFIGURED";
+  source: string;
+  items: InstrumentMetadata[];
+  reason: string | null;
+}
+
+export interface PaperFill {
+  order_id: string;
+  symbol: string;
+  side: "LONG" | "SHORT";
+  quantity: number;
+  requested_price: string;
+  fill_price: string;
+  commission: Money;
+  timestamp: string;
 }
 
 export interface EquityPoint {
   timestamp: string;
   equity: Money;
+}
+
+export interface EquityResponse {
+  availability: DataAvailability;
+  items: EquityPoint[];
+  reason: string | null;
+  range: "1d" | "1w" | "1m" | "all";
 }
 
 export interface RiskSnapshotResponse {
@@ -83,8 +119,8 @@ export interface RiskSnapshotResponse {
   reasons: string[];
   daily_loss_used: Money | null;
   daily_loss_limit: Money | null;
-  open_positions: number;
-  max_positions: number | null;
+  open_positions: number | null;
+  max_contracts: number | null;
 }
 
 export interface OperationalEvent {

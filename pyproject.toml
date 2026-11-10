@@ -11,11 +11,13 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "httpx2>=2.16.0"]
+api = ["fastapi>=0.115", "uvicorn>=0.34"]
 marketdata = ["databento>=0.50", "pandas>=2.2", "python-dotenv>=1.0"]
 
 [project.scripts]
 tradingbot = "tradingbot.cli:main"
+tradingbot-api = "tradingbot.api.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -156,3 +156,24 @@ The first QuantConnect strategy signal screen is documented in [docs/STRATEGY_SC
 ## Web dashboard
 
 The planned hybrid TradingBot web dashboard is documented in [Dashboard Architecture](docs/DASHBOARD_ARCHITECTURE.md) and [Dashboard Implementation Plan](docs/DASHBOARD_IMPLEMENTATION_PLAN.md). The initial UI will be demo-only and read-only; it does not add live market data or live order capability.
+
+## Local read-only dashboard service
+
+The hybrid TradingBot dashboard now has a local FastAPI status/configuration bridge. It does not start a strategy or broker, and exposes GET-only endpoints.
+
+```bash
+# Terminal 1: from the repository root
+source .venv/bin/activate
+python -m pip install -e ".[dev,api]"
+tradingbot-api
+
+# Terminal 2
+cd web
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+Open http://localhost:3000 for the dashboard and http://127.0.0.1:8000/docs for the API contract. Full instructions and endpoint semantics: [Dashboard API setup](docs/api/README.md).
+
+The API reports configured contract metadata and risk configuration, while account, position, trade and equity values remain unavailable until backed by actual runtime state and persistence. The values in `config/risk.toml` are research defaults, not verified prop-firm limits. No live execution endpoint exists.
