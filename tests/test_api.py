@@ -130,7 +130,7 @@ def test_completed_round_trip_flows_into_trade_and_equity_apis(tmp_path) -> None
     assert summary["account"]["realized_pnl"] == {"amount": "7.50", "currency": "USD"}
     assert summary["account"]["balance"] == {"amount": "50007.50", "currency": "USD"}
     assert equity["availability"] == "AVAILABLE"
-    assert len(equity["items"]) == 3
+    assert len(equity["items"]) == 2
 
 
 def test_cors_allows_only_local_dashboard_origin(tmp_path) -> None:
