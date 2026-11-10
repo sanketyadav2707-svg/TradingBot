@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import sqlite3
 from decimal import Decimal
 
 import pytest
@@ -236,3 +237,54 @@ def test_pagination_helpers_validate_and_return_records(tmp_path) -> None:
     assert len(store.list_fills(limit=2, offset=2)) == 1
     with pytest.raises(ValueError, match="limit"):
         store.list_fills(limit=101)
+
+def test_legacy_account_schema_migrates_all_contract_specification_columns(tmp_path) -> None:
+    database = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """CREATE TABLE fills (
+                order_id TEXT PRIMARY KEY, symbol TEXT NOT NULL, side INTEGER NOT NULL,
+                quantity INTEGER NOT NULL, requested_price TEXT NOT NULL,
+                fill_price TEXT NOT NULL, commission_usd TEXT NOT NULL, timestamp TEXT NOT NULL
+            )"""
+        )
+        connection.execute(
+            """CREATE TABLE open_lots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, symbol TEXT NOT NULL,
+                side INTEGER NOT NULL, quantity_open INTEGER NOT NULL,
+                entry_price TEXT NOT NULL, entry_commission_remaining TEXT NOT NULL,
+                opened_at TEXT NOT NULL, opening_fill_id TEXT NOT NULL
+            )"""
+        )
+
+    PaperAccountStore(database, 50_000)
+
+    with sqlite3.connect(database) as connection:
+        for table in ("fills", "open_lots"):
+            columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+            assert {"tick_size", "tick_value_usd", "point_value_usd"} <= columns
+
+
+def test_engine_wide_emergency_halt_blocks_existing_and_future_routers(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "account.sqlite3", 50_000)
+    engine = PaperAccountEngine(store, RiskLimits())
+    first_router = engine.router_for(MES, require_firm_profile=False)
+    engine.emergency_halt()
+
+    intent = OrderIntent(
+        instrument=MES,
+        side=Side.LONG,
+        stop_ticks=8,
+        reference_price=100,
+        timestamp=T0,
+    )
+    with pytest.raises(OrderRejected, match="emergency_halt_active"):
+        first_router.submit_entry(intent)
+
+    second_router = engine.router_for(MES, require_firm_profile=False)
+    with pytest.raises(OrderRejected, match="emergency_halt_active"):
+        second_router.submit_entry(intent)
+
+    assert engine.halted is True
+    assert store.get_summary()["fills_count"] == 0
+
