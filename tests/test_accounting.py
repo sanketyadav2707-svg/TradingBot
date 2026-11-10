@@ -149,6 +149,35 @@ def test_duplicate_fill_is_idempotent_and_conflicting_duplicate_fails(tmp_path) 
     assert store.get_summary()["fills_count"] == 1
 
 
+def test_integrity_audit_reconciles_fifo_quantity_fees_and_pnl(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "account.sqlite3", 50_000)
+    store.record_fill(make_fill("open", Side.LONG, 2, 100, 2.0), MES)
+    store.record_fill(
+        make_fill("close", Side.SHORT, 1, 105, 1.0, T0 + timedelta(minutes=1)),
+        MES,
+    )
+    audit = store.audit_integrity()
+    assert audit == {"ok": True, "errors": [], "sqlite_integrity": "ok"}
+
+
+def test_engine_startup_fails_closed_when_fee_allocation_is_corrupt(tmp_path) -> None:
+    database = tmp_path / "account.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    store.record_fill(make_fill("open", Side.LONG, 1, 100, 1.0), MES)
+
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE open_lots SET entry_commission_remaining = '0.50' WHERE opening_fill_id = 'open'"
+        )
+
+    corrupted = PaperAccountStore(database, 50_000)
+    audit = corrupted.audit_integrity()
+    assert audit["ok"] is False
+    assert "commission_allocation_does_not_reconcile" in audit["errors"]
+    with pytest.raises(RuntimeError, match="paper_account_integrity_check_failed"):
+        PaperAccountEngine(corrupted, RiskLimits())
+
+
 def test_persistent_account_survives_reopen_and_starting_balance_cannot_change(tmp_path) -> None:
     db = tmp_path / "account.sqlite3"
     store = PaperAccountStore(db, 50_000)
