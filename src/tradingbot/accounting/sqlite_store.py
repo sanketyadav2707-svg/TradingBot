@@ -186,7 +186,7 @@ class PaperAccountStore:
                 columns = {
                     row["name"] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
                 }
-                missing = [name for name in ("tick_size", "tick_value_usd") if name not in columns]
+                missing = [name for name in ("tick_size", "tick_value_usd", "point_value_usd") if name not in columns]
                 if missing:
                     open_lots_count = connection.execute(
                         "SELECT COUNT(*) AS n FROM open_lots"
@@ -532,7 +532,7 @@ class PaperAccountStore:
         peak = start
         max_drawdown = Decimal("0")
         for row in connection.execute(
-            "SELECT equity_usd FROM equity_snapshots WHERE equity_usd IS NOT NULL ORDER BY id"
+            "SELECT equity_usd FROM equity_snapshots WHERE equity_usd IS NOT NULL ORDER BY timestamp, id"
         ).fetchall():
             value = Decimal(row["equity_usd"])
             peak = max(peak, value)
@@ -555,7 +555,7 @@ class PaperAccountStore:
             "closed_trades_count": connection.execute("SELECT COUNT(*) AS n FROM closed_trades").fetchone()["n"],
             "as_of": max(
                 [row["timestamp"] for row in connection.execute(
-                    "SELECT timestamp FROM equity_snapshots ORDER BY id DESC LIMIT 1"
+                    "SELECT timestamp FROM equity_snapshots ORDER BY timestamp DESC, id DESC LIMIT 1"
                 ).fetchall()],
                 default=None,
             ),
@@ -753,7 +753,7 @@ class PaperAccountStore:
         self._validate_page(limit, offset)
         with self._lock, self._connection() as connection:
             rows = connection.execute(
-                "SELECT * FROM closed_trades ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset)
+                "SELECT * FROM closed_trades ORDER BY exit_time DESC, id DESC LIMIT ? OFFSET ?", (limit, offset)
             ).fetchall()
             return [{
                 "id": row["id"], "symbol": row["symbol"],
@@ -789,7 +789,7 @@ class PaperAccountStore:
         with self._lock, self._connection() as connection:
             rows = connection.execute(
                 """SELECT timestamp, equity_usd FROM equity_snapshots
-                   WHERE equity_usd IS NOT NULL ORDER BY id DESC LIMIT ?""",
+                   WHERE equity_usd IS NOT NULL ORDER BY timestamp DESC, id DESC LIMIT ?""",
                 (limit,),
             ).fetchall()
             return [{"timestamp": row["timestamp"], "equity_usd": row["equity_usd"]} for row in reversed(rows)]
