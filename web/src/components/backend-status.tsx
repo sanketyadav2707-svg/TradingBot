@@ -164,7 +164,7 @@ export function BackendStatusPanel() {
         <Stat
           label="TRADING RUNTIME"
           value={runtimeMode}
-          detail={runtimeMode === "PAPER" ? "Paper broker attached" : "No broker session attached"}
+          detail={runtimeMode === "PAPER" ? "Persistent paper account · strategy stopped" : "No paper account available"}
           tone={runtimeMode === "PAPER" ? "green" : "amber"}
         />
         <Stat

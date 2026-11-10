@@ -50,6 +50,8 @@ export interface Position {
   side: "LONG" | "SHORT";
   quantity: number;
   average_price: string;
+  mark_price: string | null;
+  mark_timestamp: string | null;
   unrealized_pnl: Money | null;
   opened_at: string;
 }
@@ -121,6 +123,7 @@ export interface RiskSnapshotResponse {
   daily_loss_limit: Money | null;
   open_positions: number | null;
   max_contracts: number | null;
+  execution_halted: boolean | null;
 }
 
 export interface OperationalEvent {

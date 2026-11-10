@@ -49,7 +49,7 @@ paths:
       summary: Position book availability
       responses:
         "200":
-          description: Explicitly unavailable until a position book exists
+          description: Persisted open FIFO positions from the SQLite paper account
           content:
             application/json:
               schema:
@@ -67,7 +67,7 @@ paths:
           schema: { type: string }
       responses:
         "200":
-          description: Explicitly unavailable until a persistent trade ledger exists
+          description: Persisted closed FIFO lot matches with commissions and net P&L
           content:
             application/json:
               schema:
@@ -79,7 +79,7 @@ paths:
   /api/v1/paper/fills:
     get:
       operationId: listPaperFills
-      summary: In-memory fills from an explicitly injected paper broker
+      summary: Persisted fills recorded by the local paper-account engine
       parameters:
         - in: query
           name: limit
@@ -104,7 +104,7 @@ paths:
           schema: { type: string, enum: [1d, 1w, 1m, all], default: 1d }
       responses:
         "200":
-          description: Explicitly unavailable until equity observations are persisted
+          description: Persisted virtual paper-account equity snapshots
           content:
             application/json:
               schema:
@@ -135,7 +135,7 @@ paths:
           schema: { type: string }
       responses:
         "200":
-          description: Explicitly unavailable until an append-only event store exists
+          description: Persisted paper-account audit events
           content:
             application/json:
               schema:
@@ -266,7 +266,7 @@ components:
     RiskSnapshot:
       type: object
       additionalProperties: false
-      required: [meta, gate, reasons, daily_loss_used, daily_loss_limit, open_positions, max_contracts]
+      required: [meta, gate, reasons, daily_loss_used, daily_loss_limit, open_positions, max_contracts, execution_halted]
       properties:
         meta: { $ref: "#/components/schemas/ApiMeta" }
         gate: { type: string, enum: [PASS, BLOCK, UNKNOWN] }
@@ -275,3 +275,5 @@ components:
         daily_loss_limit: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
         open_positions: { type: [integer, "null"] }
         max_contracts: { type: [integer, "null"] }
+        execution_halted: { type: [boolean, "null"], description: Durable one-way paper execution halt. Null if no paper account is configured. }
+        execution_halted: { type: [boolean, "null"], description: Durable one-way paper execution halt. Null if no account store is configured. }

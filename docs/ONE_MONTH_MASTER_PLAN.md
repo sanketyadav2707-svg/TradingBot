@@ -96,7 +96,7 @@ Gate 4: a green backtest alone is not challenge-ready. Require positive untouche
 | 2 | 7 Nov | Verify pair counts, sample counts and gap resets | Data calculation sanity report |
 | 3 | 8 Nov | Confirm exchange timezone, DST and session boundaries | Session/timezone specification |
 | 4 | 9 Nov | Split RTH vs overnight vs opening/closing windows | Session movement comparison |
-| 5 | 10 Nov | Check QC second/tick availability and fields | High-resolution access report |
+| 5 | 10 Nov | Check QC second/tick availability and fields | **Completed:** Free Plan excludes Tick/Second resolution; minute-only path retained. See [access audit](HIGH_RESOLUTION_DATA_ACCESS_AUDIT_2026-11-10.md). No paid upgrade or cloud probe. |
 | 6 | 11 Nov | Inspect continuous-contract mapping transitions | Roll audit and exclusions |
 | 7 | 12 Nov | Gate 1 review | Continue or pause decision |
 | 8 | 13 Nov | Write opening-range strategy specification | Frozen hypothesis and parameters |

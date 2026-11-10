@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from math import isfinite
+from typing import Any, Callable
 
 from tradingbot.compliance.rules import FirmComplianceGate
 from tradingbot.models import Instrument, Side
@@ -54,22 +55,47 @@ class ExecutionRouter:
         mode: ExecutionMode = ExecutionMode.PAPER,
         compliance_gate: FirmComplianceGate | None = None,
         require_firm_profile: bool = False,
+        account_snapshot_provider: Callable[[OrderIntent], AccountRiskSnapshot] | None = None,
+        halt_check: Callable[[], bool] | None = None,
+        submission_lock: Any | None = None,
     ) -> None:
         if type(broker) is not PaperBroker:
             raise TypeError("paper_broker_only: custom and live broker adapters are not supported")
-        self.broker = broker
+        self._broker = broker
         self.risk_guard = risk_guard
         self.mode = mode
         self.compliance_gate = compliance_gate
         self.require_firm_profile = require_firm_profile
+        self._account_snapshot_provider = account_snapshot_provider
+        self._halt_check = halt_check
+        self._submission_lock = submission_lock
         self._halted = False
 
     def emergency_halt(self) -> None:
-        """Permanently halt this router instance. Restart/review is required to resume."""
-        self._halted = True
+        """Permanently halt this router instance, waiting for an in-flight submit."""
+        if self._submission_lock is None:
+            self._halted = True
+            return
+        with self._submission_lock:
+            self._halted = True
 
-    def submit_entry(self, intent: OrderIntent, account: AccountRiskSnapshot) -> object:
-        if self._halted:
+    def submit_entry(
+        self,
+        intent: OrderIntent,
+        account: AccountRiskSnapshot | None = None,
+    ) -> object:
+        """Serialize entry evaluation and submission with an injected engine halt lock."""
+        if self._submission_lock is None:
+            return self._submit_entry_locked(intent, account)
+        with self._submission_lock:
+            return self._submit_entry_locked(intent, account)
+
+    def _submit_entry_locked(
+        self,
+        intent: OrderIntent,
+        account: AccountRiskSnapshot | None = None,
+    ) -> object:
+        if self._halted or (self._halt_check is not None and self._halt_check()):
             raise OrderRejected("emergency_halt_active")
         if self.mode != ExecutionMode.PAPER:
             raise OrderRejected("live_execution_not_implemented")
@@ -88,7 +114,7 @@ class ExecutionRouter:
         ):
             raise OrderRejected("reference_price_must_be_finite")
 
-        broker_instrument = self.broker.instrument
+        broker_instrument = self._broker.instrument
         requested_instrument = intent.instrument
         same_contract = (
             broker_instrument.symbol.strip().upper()
@@ -103,6 +129,19 @@ class ExecutionRouter:
             raise OrderRejected("broker_instrument_mismatch")
         if self.require_firm_profile and self.compliance_gate is None:
             raise OrderRejected("verified_firm_profile_required")
+
+        if self._account_snapshot_provider is not None:
+            if account is not None:
+                raise OrderRejected("externally_supplied_account_snapshot_not_allowed")
+            try:
+                account = self._account_snapshot_provider(intent)
+            except Exception as exc:
+                raise OrderRejected(f"account_risk_snapshot_unavailable:{exc}") from exc
+        elif account is None:
+            raise OrderRejected("account_risk_snapshot_required")
+
+        if not isinstance(account, AccountRiskSnapshot):
+            raise OrderRejected("invalid_account_snapshot_type")
 
         decision = self.risk_guard.evaluate_entry(
             instrument=intent.instrument,
@@ -124,7 +163,7 @@ class ExecutionRouter:
             if not compliance.allowed:
                 raise OrderRejected(compliance.reason)
 
-        return self.broker.submit_market(
+        return self._broker.submit_market(
             side=intent.side,
             quantity=decision.quantity,
             reference_price=intent.reference_price,

@@ -2,27 +2,24 @@
 
 This integration uses QuantConnect as a **cloud-only historical research and backtesting environment**. It does not download or export raw market data to this repository.
 
-## Free-plan facts verified 4 November 2026
+## Free-plan facts and resolution entitlement audit (10 November 2026)
 
-QuantConnect's public pricing page currently lists these features in its Free Plan:
+QuantConnect's public plan comparison distinguishes dataset coverage from resolution entitlement. The Free Plan includes Futures data, minute/hour/daily resolution and unlimited backtesting. The separate Tick/Second resolution entitlement is **not included** on Free. QuantConnect-hosted Futures Live Feed is also **not included** on Free.
 
-- Futures data.
-- Minute-resolution data.
-- Unlimited backtesting.
-
-Its Futures dataset documentation lists trailing history by resolution:
+The Futures dataset page documents these trailing history windows when the relevant resolution is entitled:
 
 - Minute: 1 year.
 - Second: 2 months.
 - Tick: 1 month.
 - Daily and hourly: all historical data.
 
-The same pricing comparison lists QuantConnect-hosted Futures Live Feed as unavailable on the Free Plan. Therefore this integration can test the historical minute-data route, but it does **not** solve continuous real-time CME paper trading.
+Do not read the dataset retention table as proof that the Free Plan can access second/tick data. We have already verified one-minute MES/MNQ historical coverage on the Free Plan. No second/tick backtest is required or appropriate under the current ₹0 constraint.
 
 Official references:
-- Pricing: https://www.quantconnect.com/pricing
-- Futures dataset: https://www.quantconnect.com/docs/v2/cloud-platform/datasets/quantconnect/futures
-- Futures security master and MES/MNQ identifiers: https://www.quantconnect.com/docs/v2/writing-algorithms/datasets/quantconnect/us-futures-security-master
+- Pricing and plan entitlements: https://www.quantconnect.com/pricing/planFree?billing=mo
+- Futures dataset and history windows: https://www.quantconnect.com/docs/v2/cloud-platform/datasets/quantconnect/futures
+
+Therefore this integration remains a minute-resolution historical research route. It does **not** solve second/tick execution-quality research or continuous real-time CME paper trading. See [the 10 November resolution access audit](../../docs/HIGH_RESOLUTION_DATA_ACCESS_AUDIT_2026-11-10.md).
 
 ## Run the no-trade coverage probe
 

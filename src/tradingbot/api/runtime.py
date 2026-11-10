@@ -1,16 +1,20 @@
-"""Read-only runtime adapter.
+"""Dashboard runtime composition.
 
-The shipped application deliberately does not instantiate a broker, strategy runner,
-market-data feed, or account snapshot. Those objects can be injected by a future local
-orchestrator, but this module never starts trading or fabricates account state.
+The default API creates a durable paper-account ledger and reads configuration.
+It does not instantiate a broker, start a strategy, connect to market data, or
+submit an order. A strategy/orchestrator must explicitly request a broker from
+PaperAccountEngine when paper execution is intentionally started.
 """
 
 from __future__ import annotations
 
+import os
+import sqlite3
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from tradingbot.accounting import PaperAccountEngine, PaperAccountStore
 from tradingbot.models import Instrument
 from tradingbot.paper.broker import PaperBroker
 from tradingbot.risk.limits import RiskLimits
@@ -28,15 +32,27 @@ class DashboardRuntime:
     config_dir: Path
     risk_limits: RiskLimits | None = None
     instruments: dict[str, InstrumentConfig] = field(default_factory=dict)
+    account_store: PaperAccountStore | None = None
+    paper_engine: PaperAccountEngine | None = None
     paper_broker: PaperBroker | None = None
     configuration_errors: tuple[str, ...] = ()
 
     @classmethod
-    def from_config(cls, config_dir: Path | None = None) -> "DashboardRuntime":
-        project_root = Path(__file__).resolve().parents[3]
+    def from_config(
+        cls,
+        config_dir: Path | None = None,
+        database_path: Path | None = None,
+    ) -> "DashboardRuntime":
+        module_path = Path(__file__).resolve()
+        candidates = [Path.cwd().resolve(), *module_path.parents]
+        project_root = next(
+            (candidate for candidate in candidates if (candidate / "config" / "risk.toml").is_file()),
+            Path.cwd().resolve(),
+        )
         selected_dir = (config_dir or project_root / "config").expanduser().resolve()
         runtime = cls(config_dir=selected_dir)
         errors: list[str] = []
+        raw_risk: dict = {}
 
         risk_path = selected_dir / "risk.toml"
         try:
@@ -72,6 +88,31 @@ class DashboardRuntime:
                 )
         except (OSError, KeyError, TypeError, ValueError, tomllib.TOMLDecodeError):
             errors.append("instrument_configuration_unavailable_or_invalid")
+
+        if runtime.risk_limits is not None:
+            try:
+                selected_db = database_path
+                if selected_db is None:
+                    selected_db = Path(
+                        os.environ.get(
+                            "TRADINGBOT_ACCOUNT_DB",
+                            str(project_root / "data" / "paper_account.sqlite3"),
+                        )
+                    )
+                runtime.account_store = PaperAccountStore(
+                    selected_db,
+                    starting_balance_usd=runtime.risk_limits.starting_balance_usd,
+                )
+                runtime.paper_engine = PaperAccountEngine(
+                    runtime.account_store,
+                    runtime.risk_limits,
+                    commission_per_contract_per_side_usd=float(
+                        raw_risk.get("commission_per_contract_per_side_usd", 0.0)
+                    ),
+                    slippage_ticks_per_side=int(raw_risk.get("slippage_ticks_per_side", 1)),
+                )
+            except (OSError, sqlite3.Error, TypeError, ValueError, RuntimeError):
+                errors.append("paper_account_store_unavailable_or_invalid")
 
         runtime.configuration_errors = tuple(errors)
         return runtime

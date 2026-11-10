@@ -2,12 +2,12 @@ name: Web checks
 
 on:
   push:
-    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract"]
+    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account"]
     paths:
       - "web/**"
       - ".github/workflows/web.yml"
   pull_request:
-    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract"]
+    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service"]
     paths:
       - "web/**"
       - ".github/workflows/web.yml"
@@ -32,8 +32,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
       - name: Lint
         run: npm run lint
       - name: Type check

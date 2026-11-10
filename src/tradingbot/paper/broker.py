@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from math import isfinite
+from typing import Callable
 from uuid import uuid4
 
 from tradingbot.models import Instrument, Side
@@ -30,6 +31,7 @@ class PaperBroker:
         instrument: Instrument,
         commission_per_contract_per_side_usd: float = 0.0,
         slippage_ticks_per_side: int = 1,
+        on_fill: Callable[[PaperFill], None] | None = None,
     ) -> None:
         if (
             not isinstance(commission_per_contract_per_side_usd, (int, float))
@@ -44,6 +46,7 @@ class PaperBroker:
         self.commission = float(commission_per_contract_per_side_usd)
         self.slippage_ticks = slippage_ticks_per_side
         self.fills: list[PaperFill] = []
+        self._on_fill = on_fill
 
     def submit_market(
         self, *, side: Side, quantity: int, reference_price: float, timestamp: datetime
@@ -73,5 +76,9 @@ class PaperBroker:
             commission_usd=self.commission * quantity,
             timestamp=timestamp,
         )
+        # Persist first. If the durable sink rejects the fill, the broker's
+        # in-memory history is not advanced, avoiding a split-brain fill record.
+        if self._on_fill is not None:
+            self._on_fill(record)
         self.fills.append(record)
         return record

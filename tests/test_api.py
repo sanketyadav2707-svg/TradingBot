@@ -1,19 +1,40 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 from fastapi.testclient import TestClient
 
 from tradingbot.api.app import create_app
 from tradingbot.api.runtime import DashboardRuntime
 from tradingbot.models import Instrument, Side
-from tradingbot.paper.broker import PaperBroker
+from tradingbot.execution.router import OrderIntent
 
 
-def _client() -> TestClient:
-    return TestClient(create_app(DashboardRuntime.from_config()))
+MES = Instrument("MES", 0.25, 1.25, 5.0)
+T0 = datetime(2026, 11, 10, 14, 0, tzinfo=timezone.utc)
 
 
-def test_health_reports_api_process_not_trading_readiness() -> None:
-    response = _client().get("/health")
+def _client(tmp_path) -> TestClient:
+    runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
+    return TestClient(create_app(runtime))
+
+
+def _submit_research_paper_fill(runtime, side: Side, reference_price: float, timestamp: datetime):
+    """Explicit research-only test path; production default requires a verified firm profile."""
+    router = runtime.paper_engine.router_for(MES, require_firm_profile=False)
+    runtime.account_store.mark_to_market({"MES": reference_price}, timestamp)
+    return router.submit_entry(
+        OrderIntent(
+            instrument=MES,
+            side=side,
+            stop_ticks=8,
+            reference_price=reference_price,
+            timestamp=timestamp,
+        )
+    )
+
+
+def test_health_reports_api_process_not_trading_readiness(tmp_path) -> None:
+    response = _client(tmp_path).get("/health")
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "ok"
@@ -21,10 +42,16 @@ def test_health_reports_api_process_not_trading_readiness() -> None:
     assert payload["timestamp"].endswith("Z")
 
 
-def test_summary_does_not_fabricate_account_or_market_state() -> None:
-    payload = _client().get("/api/v1/dashboard/summary").json()
-    assert payload["meta"]["environment"] == "DISCONNECTED"
-    assert all(value is None for value in payload["account"].values())
+def test_summary_reports_a_real_persistent_virtual_paper_account(tmp_path) -> None:
+    payload = _client(tmp_path).get("/api/v1/dashboard/summary").json()
+    assert payload["meta"]["environment"] == "PAPER"
+    assert payload["meta"]["source"] == "sqlite-paper-account"
+    assert payload["account"]["balance"] == {"amount": "50000.00", "currency": "USD"}
+    assert payload["account"]["equity"] == {"amount": "50000.00", "currency": "USD"}
+    assert payload["account"]["realized_pnl"] == {"amount": "0.00", "currency": "USD"}
+    assert payload["account"]["unrealized_pnl"] == {"amount": "0.00", "currency": "USD"}
+    assert payload["account"]["net_pnl"] == {"amount": "0.00", "currency": "USD"}
+    assert payload["meta"]["as_of"] == _client(tmp_path).get("/api/v1/performance/equity?range=all").json()["items"][0]["timestamp"]
     assert payload["strategy"] == {"name": None, "state": "UNKNOWN"}
     assert payload["market_data"] == {
         "connection": "DISCONNECTED",
@@ -33,8 +60,8 @@ def test_summary_does_not_fabricate_account_or_market_state() -> None:
     }
 
 
-def test_instruments_are_loaded_from_repository_configuration() -> None:
-    response = _client().get("/api/v1/instruments")
+def test_instruments_are_loaded_from_repository_configuration(tmp_path) -> None:
+    response = _client(tmp_path).get("/api/v1/instruments")
     assert response.status_code == 200
     payload = response.json()
     assert payload["availability"] == "AVAILABLE"
@@ -43,51 +70,93 @@ def test_instruments_are_loaded_from_repository_configuration() -> None:
     assert mes["tick_value_usd"] == {"amount": "1.25", "currency": "USD"}
 
 
-def test_risk_snapshot_exposes_limits_but_not_unmeasured_usage() -> None:
-    payload = _client().get("/api/v1/risk/snapshot").json()
+def test_risk_snapshot_exposes_limits_but_keeps_gate_unknown(tmp_path) -> None:
+    payload = _client(tmp_path).get("/api/v1/risk/snapshot").json()
     assert payload["gate"] == "UNKNOWN"
     assert payload["daily_loss_limit"] == {"amount": "300.00", "currency": "USD"}
     assert payload["daily_loss_used"] is None
-    assert payload["open_positions"] is None
+    assert payload["open_positions"] == 0
     assert payload["max_contracts"] == 1
-    assert "account_snapshot_unavailable" in payload["reasons"]
+    assert payload["execution_halted"] is False
+    assert "risk_gate_has_not_been_evaluated_for_a_running_strategy_session" in payload["reasons"]
 
 
-def test_unavailable_ledgers_are_explicit() -> None:
-    client = _client()
+def test_risk_api_reports_durable_emergency_halt(tmp_path) -> None:
+    runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
+    runtime.account_store.activate_emergency_halt("test_api_halt")
+    payload = TestClient(create_app(runtime)).get("/api/v1/risk/snapshot").json()
+    assert payload["execution_halted"] is True
+    assert payload["gate"] == "UNKNOWN"
+
+
+def test_empty_persistent_ledgers_are_available_not_missing(tmp_path) -> None:
+    client = _client(tmp_path)
     positions = client.get("/api/v1/positions").json()
     trades = client.get("/api/v1/trades").json()
     equity = client.get("/api/v1/performance/equity").json()
     events = client.get("/api/v1/events").json()
-    assert positions["availability"] == "NOT_IMPLEMENTED"
-    assert trades["availability"] == "NOT_PERSISTED"
-    assert equity["availability"] == "NOT_PERSISTED"
-    assert events["availability"] == "NOT_IMPLEMENTED"
-    assert positions["items"] == trades["items"] == equity["items"] == events["items"] == []
+    assert positions["availability"] == "AVAILABLE"
+    assert positions["items"] == []
+    assert trades["availability"] == "AVAILABLE"
+    assert trades["items"] == []
+    assert equity["availability"] == "AVAILABLE"
+    assert len(equity["items"]) == 1
+    assert equity["items"][0]["equity"] == {"amount": "50000.00", "currency": "USD"}
+    assert events["availability"] == "AVAILABLE"
+    assert len(events["items"]) == 1
+    assert events["items"][0]["category"] == "ACCOUNT_INITIALIZED"
 
 
-def test_paper_fills_are_read_only_and_require_an_injected_broker() -> None:
-    client = _client()
-    assert client.get("/api/v1/paper/fills").json()["availability"] == "NOT_CONFIGURED"
+def test_paper_broker_fills_flow_into_persistent_account_api(tmp_path) -> None:
+    runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
+    _submit_research_paper_fill(runtime, Side.LONG, 6000, T0)
 
-    broker = PaperBroker(Instrument("MES", 0.25, 1.25, 5.0), slippage_ticks_per_side=1)
-    broker.submit_market(
-        side=Side.LONG,
-        quantity=1,
-        reference_price=6000,
-        timestamp=datetime(2026, 11, 9, 14, 30, tzinfo=timezone.utc),
-    )
-    runtime = DashboardRuntime.from_config()
-    runtime.paper_broker = broker
-    payload = TestClient(create_app(runtime)).get("/api/v1/paper/fills").json()
+    client = TestClient(create_app(runtime))
+    fills = client.get("/api/v1/paper/fills").json()
+    positions = client.get("/api/v1/positions").json()
+    assert fills["availability"] == "AVAILABLE"
+    assert len(fills["items"]) == 1
+    assert fills["items"][0]["fill_price"] == "6000.25"
+    assert fills["items"][0]["side"] == "LONG"
+    assert positions["items"][0]["quantity"] == 1
+    assert positions["items"][0]["side"] == "LONG"
+
+
+def test_positions_expose_last_mark_and_timestamp_not_live_quote(tmp_path) -> None:
+    runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
+    _submit_research_paper_fill(runtime, Side.LONG, 6000, T0)
+    payload = TestClient(create_app(runtime)).get("/api/v1/positions").json()
     assert payload["availability"] == "AVAILABLE"
-    assert len(payload["items"]) == 1
-    assert payload["items"][0]["fill_price"] == "6000.25"
-    assert payload["items"][0]["side"] == "LONG"
+    position = payload["items"][0]
+    assert position["mark_price"] == "6000"
+    assert position["mark_timestamp"] == T0.isoformat(timespec="microseconds").replace("+00:00", "Z")
+    assert position["unrealized_pnl"] == {"amount": "-1.25", "currency": "USD"}
 
 
-def test_cors_allows_only_local_dashboard_origin() -> None:
-    client = _client()
+def test_completed_round_trip_flows_into_trade_and_equity_apis(tmp_path) -> None:
+    runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
+    _submit_research_paper_fill(runtime, Side.LONG, 6000, T0)
+    _submit_research_paper_fill(runtime, Side.SHORT, 6002, T0 + timedelta(minutes=2))
+
+    client = TestClient(create_app(runtime))
+    trades = client.get("/api/v1/trades").json()
+    summary = client.get("/api/v1/dashboard/summary").json()
+    equity = client.get("/api/v1/performance/equity?range=all").json()
+    assert trades["availability"] == "AVAILABLE"
+    assert len(trades["items"]) == 1
+    assert trades["items"][0]["symbol"] == "MES"
+    assert trades["items"][0]["side"] == "LONG"
+    assert trades["items"][0]["net_pnl"] == {"amount": "7.50", "currency": "USD"}
+    assert summary["account"]["realized_pnl"] == {"amount": "7.50", "currency": "USD"}
+    assert summary["account"]["balance"] == {"amount": "50007.50", "currency": "USD"}
+    assert equity["availability"] == "AVAILABLE"
+    assert len(equity["items"]) == 5
+    assert equity["items"][0]["equity"] == {"amount": "50000.00", "currency": "USD"}
+    assert equity["items"][-1]["equity"] == {"amount": "50007.50", "currency": "USD"}
+
+
+def test_cors_allows_only_local_dashboard_origin(tmp_path) -> None:
+    client = _client(tmp_path)
     allowed = client.options(
         "/health",
         headers={
@@ -108,13 +177,32 @@ def test_cors_allows_only_local_dashboard_origin() -> None:
     assert "access-control-allow-origin" not in rejected.headers
 
 
-def test_api_exposes_no_mutation_routes() -> None:
-    schema = _client().get("/openapi.json").json()
+def test_api_exposes_no_mutation_routes(tmp_path) -> None:
+    schema = _client(tmp_path).get("/openapi.json").json()
     for operations in schema["paths"].values():
         assert set(operations).issubset({"get"})
 
 
-def test_pagination_rejects_invalid_cursors() -> None:
-    assert _client().get("/api/v1/trades?limit=101").status_code == 422
-    assert _client().get("/api/v1/trades?cursor=-1").status_code == 400
-    assert _client().get("/api/v1/events?cursor=abc").status_code == 400
+def test_pagination_rejects_invalid_cursors(tmp_path) -> None:
+    client = _client(tmp_path)
+    assert client.get("/api/v1/trades?limit=101").status_code == 422
+    assert client.get("/api/v1/trades?cursor=-1").status_code == 400
+    assert client.get("/api/v1/events?cursor=abc").status_code == 400
+
+
+def test_pagination_returns_next_cursor_for_paper_fills(tmp_path) -> None:
+    runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
+    for index in range(3):
+        _submit_research_paper_fill(
+            runtime,
+            Side.LONG,
+            6000 + index,
+            T0 + timedelta(minutes=index),
+        )
+    client = TestClient(create_app(runtime))
+    first = client.get("/api/v1/paper/fills?limit=2").json()
+    second = client.get(f"/api/v1/paper/fills?limit=2&cursor={first['next_cursor']}").json()
+    assert len(first["items"]) == 2
+    assert first["next_cursor"] == "2"
+    assert len(second["items"]) == 1
+    assert second["next_cursor"] is None
