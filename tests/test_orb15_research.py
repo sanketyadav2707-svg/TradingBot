@@ -138,3 +138,42 @@ def test_orb15_gap_inside_opening_range_invalidates_session() -> None:
     assert result.eligible_sessions == 0
     assert result.invalid_sessions == 1
     assert dict(result.rejection_reasons)["incomplete_opening_range"] == 1
+
+
+def test_orb15_short_trade_is_symmetric_and_uses_short_stop_target() -> None:
+    start = datetime(2026, 11, 9, 8, 30, tzinfo=TZ)
+    bars = [_bar(start + timedelta(minutes=i)) for i in range(15)]
+    bars.append(_bar(start + timedelta(minutes=15), high=100.0, low=98.5, close=98.75))
+    bars.append(_bar(start + timedelta(minutes=16), open_=98.75, high=99.0,
+                     low=96.0, close=97.0))
+    result = run_orb15(bars, MES, slippage_ticks_per_side=0)
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.side == Side.SHORT
+    assert trade.stop_price == pytest.approx(101.25)
+    assert trade.target_price == pytest.approx(96.25)
+    assert trade.exit_reason == "TARGET"
+    assert trade.net_pnl_usd > 0
+
+
+def test_orb15_slippage_stress_is_applied_to_both_entry_and_exit() -> None:
+    bars = _session(entry_high=104.0, entry_low=98.0)
+    zero = run_orb15(bars, MES, slippage_ticks_per_side=0).trades[0]
+    one = run_orb15(bars, MES, slippage_ticks_per_side=1).trades[0]
+    two = run_orb15(bars, MES, slippage_ticks_per_side=2).trades[0]
+    assert zero.exit_reason == one.exit_reason == two.exit_reason == "STOP"
+    assert zero.net_pnl_usd > one.net_pnl_usd > two.net_pnl_usd
+    assert zero.slippage_usd == 0
+    assert one.slippage_usd == pytest.approx(2.5)
+    assert two.slippage_usd == pytest.approx(5.0)
+
+
+def test_orb15_scorecard_labels_realized_drawdown_and_reports_costs() -> None:
+    result = run_orb15(_session(), MES, slippage_ticks_per_side=0)
+    metrics = result.metrics()
+    assert metrics["trades"] == 1
+    assert metrics["total_commission_usd"] == pytest.approx(1.14)
+    assert metrics["total_slippage_usd"] == 0
+    assert metrics["target_exits"] == 1
+    assert metrics["closed_trade_max_drawdown_usd"] == 0
+    assert "max_drawdown_usd" not in metrics
