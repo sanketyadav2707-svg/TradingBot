@@ -5,6 +5,8 @@ import pytest
 
 from tradingbot.accounting import DuplicateFillError, PaperAccountEngine, PaperAccountStore
 from tradingbot.models import Instrument, Side
+from tradingbot.execution.router import AccountRiskSnapshot, OrderIntent, OrderRejected
+from tradingbot.risk.limits import RiskLimits
 from tradingbot.paper.broker import PaperBroker, PaperFill
 
 
@@ -178,23 +180,55 @@ def test_failed_persistence_callback_does_not_acknowledge_broker_fill() -> None:
     assert broker.fills == []
 
 
-def test_paper_account_engine_persists_broker_fills_and_reuses_broker(tmp_path) -> None:
+def test_paper_account_engine_persists_risk_gated_router_fills(tmp_path) -> None:
     store = PaperAccountStore(tmp_path / "account.sqlite3", 50_000)
     engine = PaperAccountEngine(
         store,
+        RiskLimits(max_risk_per_trade_usd=50, max_contracts=2),
         commission_per_contract_per_side_usd=0.5,
         slippage_ticks_per_side=1,
     )
-    broker = engine.broker_for(MES)
-    assert engine.broker_for(MES) is broker
-    fill = broker.submit_market(
-        side=Side.LONG, quantity=2, reference_price=100, timestamp=T0
+    router = engine.router_for(MES, require_firm_profile=False)
+    intent = OrderIntent(
+        instrument=MES,
+        side=Side.LONG,
+        stop_ticks=8,
+        reference_price=100,
+        timestamp=T0,
     )
+    account = AccountRiskSnapshot(
+        equity_usd=50_000,
+        peak_equity_usd=50_000,
+        daily_pnl_usd=0,
+        trades_today=0,
+    )
+    fill = router.submit_entry(intent, account)
 
     assert fill.fill_price == 100.25
+    assert fill.quantity == 2
     assert store.get_summary()["fills_count"] == 1
     assert Decimal(store.get_summary()["total_commissions_usd"]) == Decimal("1")
     assert engine.active_symbols == ("MES",)
+    assert not hasattr(router, "broker")
+
+
+def test_paper_account_engine_requires_verified_firm_profile_by_default(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "account.sqlite3", 50_000)
+    engine = PaperAccountEngine(store, RiskLimits())
+    router = engine.router_for(MES)
+    intent = OrderIntent(
+        instrument=MES,
+        side=Side.LONG,
+        stop_ticks=8,
+        reference_price=100,
+        timestamp=T0,
+    )
+    account = AccountRiskSnapshot(50_000, 50_000, 0, 0)
+
+    with pytest.raises(OrderRejected, match="verified_firm_profile_required"):
+        router.submit_entry(intent, account)
+
+    assert store.get_summary()["fills_count"] == 0
 
 
 def test_pagination_helpers_validate_and_return_records(tmp_path) -> None:
