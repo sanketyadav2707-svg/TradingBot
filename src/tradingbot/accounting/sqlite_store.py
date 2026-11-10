@@ -203,6 +203,9 @@ class PaperAccountStore:
                 "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('starting_balance_usd', ?)",
                 (_number(starting_balance),),
             )
+            connection.execute(
+                "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('emergency_halt_active', '0')"
+            )
             stored_balance = Decimal(connection.execute(
                 "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
             ).fetchone()["value"])
@@ -236,6 +239,45 @@ class PaperAccountStore:
         if row is None:
             raise RuntimeError("Paper account starting balance is missing")
         return Decimal(row["value"])
+
+    @property
+    def emergency_halt_active(self) -> bool:
+        """Return the durable account-wide execution halt latch."""
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT value FROM account_meta WHERE key = 'emergency_halt_active'"
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("Paper account emergency halt state is missing")
+        if row["value"] not in {"0", "1"}:
+            raise RuntimeError("Paper account emergency halt state is corrupt")
+        return row["value"] == "1"
+
+    def activate_emergency_halt(self, reason: str = "manual_emergency_halt") -> bool:
+        """Persist a one-way execution halt. No API or method clears this latch."""
+        if not isinstance(reason, str) or not reason.strip() or len(reason) > 256:
+            raise ValueError("Emergency halt reason must contain 1 to 256 characters")
+        timestamp = _timestamp(datetime.now(timezone.utc))
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT value FROM account_meta WHERE key = 'emergency_halt_active'"
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("Paper account emergency halt state is missing")
+            if row["value"] == "1":
+                return False
+            if row["value"] != "0":
+                raise RuntimeError("Paper account emergency halt state is corrupt")
+            connection.execute(
+                "UPDATE account_meta SET value = '1' WHERE key = 'emergency_halt_active'"
+            )
+            connection.execute(
+                """INSERT INTO account_events(
+                    timestamp, event_type, symbol, reference_id, payload_json
+                ) VALUES (?, 'EMERGENCY_HALT_ACTIVATED', NULL, NULL, ?)""",
+                (timestamp, json.dumps({"reason": reason.strip()}, sort_keys=True)),
+            )
+        return True
 
     def validate_instrument(self, instrument: Instrument) -> None:
         """Reject changed contract specifications while any FIFO lot remains open."""
