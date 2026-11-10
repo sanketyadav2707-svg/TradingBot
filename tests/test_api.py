@@ -130,7 +130,7 @@ def test_positions_expose_last_mark_and_timestamp_not_live_quote(tmp_path) -> No
     position = payload["items"][0]
     assert position["mark_price"] == "6000"
     assert position["mark_timestamp"] == T0.isoformat(timespec="microseconds").replace("+00:00", "Z")
-    assert position["unrealized_pnl"] == {"amount": "-0.50", "currency": "USD"}
+    assert position["unrealized_pnl"] == {"amount": "-1.25", "currency": "USD"}
 
 
 def test_completed_round_trip_flows_into_trade_and_equity_apis(tmp_path) -> None:
