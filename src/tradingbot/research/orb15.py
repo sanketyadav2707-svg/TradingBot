@@ -386,10 +386,12 @@ def run_orb15(
             continue
 
         exit_price = _adverse_exit(exit_base, side, tick, slippage_ticks_per_side)
-        gross = (exit_price - entry_price) * int(side) * point_value
+        # Gross P&L uses unslipped reference prices. Entry/exit fields retain
+        # simulated executed prices; slippage is then deducted exactly once.
+        gross = (exit_base - entry_bar.open) * int(side) * point_value
         commission = cfg.commission_round_turn_usd
         slippage_usd = 2 * slippage_ticks_per_side * instrument.tick_value_usd
-        net = gross - commission
+        net = gross - slippage_usd - commission
         mae, mfe = _bar_excursions(day_bars, entry_idx, exit_idx, side, entry_price, point_value)
         trade = ORBTrade(
             symbol=instrument.symbol.upper(),
