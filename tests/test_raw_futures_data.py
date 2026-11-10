@@ -69,6 +69,21 @@ def test_validation_reports_missing_intervals_without_filling() -> None:
     assert report["total_rows"] == 3
 
 
+def test_robust_outlier_diagnostic_does_not_flag_normal_flat_series_ticks() -> None:
+    flat = [bar(i, close=100.0) for i in range(39)]
+    normal_tick = bar(39, close=100.25)
+    report = validate_raw_futures_bars(flat + [normal_tick])
+    assert report["price_change_outlier_candidate_count"] == 0
+
+
+def test_robust_outlier_diagnostic_flags_extreme_move_as_review_candidate() -> None:
+    flat = [bar(i, close=100.0) for i in range(39)]
+    extreme = bar(39, close=200.0)
+    report = validate_raw_futures_bars(flat + [extreme])
+    assert report["price_change_outlier_candidate_count"] == 1
+    assert report["price_change_outlier_examples"][0]["close"] == 200.0
+
+
 def test_validation_rejects_duplicate_timestamp_for_same_instrument() -> None:
     with pytest.raises(DataValidationError, match="Duplicate timestamp"):
         validate_raw_futures_bars([bar(0), bar(0)])
