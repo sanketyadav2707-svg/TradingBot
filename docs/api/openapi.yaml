@@ -275,4 +275,5 @@ components:
         daily_loss_limit: { oneOf: [{ $ref: "#/components/schemas/Money" }, { type: "null" }] }
         open_positions: { type: [integer, "null"] }
         max_contracts: { type: [integer, "null"] }
+        execution_halted: { type: [boolean, "null"], description: Durable one-way paper execution halt. Null if no paper account is configured. }
         execution_halted: { type: [boolean, "null"], description: Durable one-way paper execution halt. Null if no account store is configured. }
