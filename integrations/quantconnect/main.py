@@ -1,4 +1,4 @@
-"""QuantConnect Cloud-only MES/MNQ futures data-coverage probe.
+"""QuantConnect Cloud-only MES/MNQ futures data-coverage and mapped-roll audit.
 
 This algorithm is deliberately research-only:
 - It never places orders.
