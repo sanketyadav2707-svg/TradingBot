@@ -82,7 +82,7 @@ def test_orb15_missing_opening_range_bar_invalidates_session() -> None:
 
 
 def test_orb15_same_contract_gap_forces_exit_at_next_valid_open() -> None:
-    bars = _session()
+    bars = _session(entry_high=102.0, entry_low=100.0)
     # Remove the minute immediately after entry, then provide a later same-contract bar.
     bars = [bar for bar in bars if bar.timestamp.time() != time(8, 47)]
     bars.append(_bar(datetime(2026, 11, 9, 8, 48, tzinfo=TZ),
@@ -97,7 +97,7 @@ def test_orb15_same_contract_gap_forces_exit_at_next_valid_open() -> None:
 
 
 def test_orb15_contract_roll_while_position_open_is_unresolved_not_fabricated() -> None:
-    bars = _session()
+    bars = _session(entry_high=102.0, entry_low=100.0)
     bars.append(_bar(datetime(2026, 11, 9, 8, 47, tzinfo=TZ),
                      open_=102.0, high=102.5, low=101.5, close=102.0,
                      contract="MESU26"))
