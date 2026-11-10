@@ -345,8 +345,6 @@ def run_orb15(
         for j in range(entry_idx, min(last_bar_idx, len(day_bars) - 1) + 1):
             current = day_bars[j]
             if current.contract_id != contract_id or current.timestamp.astimezone(tz).date() != trading_day:
-                unresolved += 1
-                invalid += 1
                 reasons["roll_or_session_boundary_in_position"] += 1
                 exit_reason = None
                 break
@@ -400,7 +398,11 @@ def run_orb15(
             side=side,
             signal_time=signal_bar.timestamp,
             entry_time=entry_bar.timestamp,
-            exit_time=day_bars[exit_idx].timestamp + minute,
+            exit_time=(
+                day_bars[exit_idx].timestamp
+                if exit_reason == "DATA_GAP_FORCED_EXIT"
+                else day_bars[exit_idx].timestamp + minute
+            ),
             opening_range_high=or_high,
             opening_range_low=or_low,
             entry_price=entry_price,
