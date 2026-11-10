@@ -49,7 +49,7 @@ def _money(value: Decimal) -> str:
 
 
 def _number(value: Decimal) -> str:
-    return format(value, "f")
+    return format(value.normalize(), "f")
 
 
 class PaperAccountStore:
