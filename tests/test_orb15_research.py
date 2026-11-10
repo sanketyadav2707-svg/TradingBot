@@ -91,6 +91,7 @@ def test_orb15_same_contract_gap_forces_exit_at_next_valid_open() -> None:
     assert len(result.trades) == 1
     assert result.trades[0].exit_reason == "DATA_GAP_FORCED_EXIT"
     assert result.trades[0].exit_price == pytest.approx(102.0)
+    assert result.trades[0].exit_time == datetime(2026, 11, 9, 8, 48, tzinfo=TZ)
     assert result.data_gap_forced_exits == 1
 
 
