@@ -362,6 +362,30 @@ class PaperAccountStore:
                     raise DuplicateFillError("order_id_already_exists_with_different_fill_data")
                 return False
 
+            # Enforce the durable halt inside the same SQLite write transaction
+            # as the fill. This closes the race where a different engine/process
+            # activates the halt after this router's in-memory pre-check.
+            halt = connection.execute(
+                "SELECT value FROM account_meta WHERE key = 'emergency_halt_active'"
+            ).fetchone()
+            if halt is None or halt["value"] not in {"0", "1"}:
+                raise RuntimeError("paper_account_emergency_halt_state_unavailable_or_corrupt")
+            if halt["value"] == "1":
+                raise RuntimeError("emergency_halt_active")
+
+            latest_fill = connection.execute(
+                "SELECT timestamp FROM fills WHERE symbol = ? ORDER BY timestamp DESC, rowid DESC LIMIT 1",
+                (symbol,),
+            ).fetchone()
+            if latest_fill is not None and timestamp < latest_fill["timestamp"]:
+                raise ValueError("fill_timestamp_cannot_precede_latest_symbol_fill")
+
+            latest_mark = connection.execute(
+                "SELECT timestamp FROM marks WHERE symbol = ?", (symbol,)
+            ).fetchone()
+            if latest_mark is not None and timestamp < latest_mark["timestamp"]:
+                raise ValueError("fill_timestamp_cannot_precede_latest_symbol_mark")
+
             connection.execute(
                 """INSERT INTO fills(
                     order_id, symbol, side, quantity, requested_price, fill_price,
@@ -513,6 +537,12 @@ class PaperAccountStore:
                 ).fetchone()
                 if previous is not None and mark_time < previous["timestamp"]:
                     raise ValueError(f"Mark timestamp for {symbol} cannot move backwards")
+                latest_fill = connection.execute(
+                    "SELECT timestamp FROM fills WHERE symbol = ? ORDER BY timestamp DESC, rowid DESC LIMIT 1",
+                    (symbol,),
+                ).fetchone()
+                if latest_fill is not None and mark_time < latest_fill["timestamp"]:
+                    raise ValueError(f"Mark timestamp for {symbol} cannot precede its latest fill")
                 connection.execute(
                     """INSERT INTO marks(symbol, price, timestamp) VALUES (?, ?, ?)
                        ON CONFLICT(symbol) DO UPDATE SET price = excluded.price,
@@ -618,6 +648,180 @@ class PaperAccountStore:
                 summary["equity_usd"], reference_id,
             ),
         )
+
+    def audit_integrity(self) -> dict[str, Any]:
+        """Reconcile SQLite, FIFO positions, closed trades and fee allocation.
+
+        This is a read-only startup/recovery check. It intentionally fails closed
+        when persisted records cannot be reconciled to their originating fills.
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+        with self._lock, self._connection() as connection:
+            # Keep every reconciliation query on one SQLite read snapshot even
+            # if another process is writing to the WAL-backed account.
+            connection.execute("BEGIN")
+            sqlite_result = connection.execute("PRAGMA integrity_check").fetchone()[0]
+            if sqlite_result != "ok":
+                errors.append("sqlite_integrity_check_failed")
+            if connection.execute("PRAGMA foreign_key_check").fetchall():
+                errors.append("sqlite_foreign_key_check_failed")
+
+            halt = connection.execute(
+                "SELECT value FROM account_meta WHERE key = 'emergency_halt_active'"
+            ).fetchone()
+            if halt is None or halt["value"] not in {"0", "1"}:
+                errors.append("emergency_halt_state_invalid")
+
+            signed_fills: dict[str, int] = {}
+            for row in connection.execute(
+                "SELECT symbol, side, quantity FROM fills"
+            ).fetchall():
+                signed_fills[row["symbol"]] = (
+                    signed_fills.get(row["symbol"], 0)
+                    + int(row["side"]) * int(row["quantity"])
+                )
+
+            signed_lots: dict[str, int] = {}
+            lot_sides: dict[str, set[int]] = {}
+            for row in connection.execute(
+                "SELECT symbol, side, quantity_open FROM open_lots"
+            ).fetchall():
+                signed_lots[row["symbol"]] = (
+                    signed_lots.get(row["symbol"], 0)
+                    + int(row["side"]) * int(row["quantity_open"])
+                )
+                lot_sides.setdefault(row["symbol"], set()).add(int(row["side"]))
+            if signed_fills != signed_lots:
+                errors.append("fill_quantity_does_not_reconcile_to_open_positions")
+            if any(len(sides) > 1 for sides in lot_sides.values()):
+                errors.append("mixed_sides_in_open_position")
+
+            fill_allocations = connection.execute(
+                """SELECT fills.order_id, fills.quantity,
+                          COALESCE((SELECT SUM(quantity) FROM closed_trades
+                                    WHERE closing_fill_id = fills.order_id), 0) AS closed_as_exit,
+                          COALESCE((SELECT SUM(quantity) FROM closed_trades
+                                    WHERE opening_fill_id = fills.order_id), 0)
+                          + COALESCE((SELECT SUM(quantity_open) FROM open_lots
+                                      WHERE opening_fill_id = fills.order_id), 0) AS opened_as_entry
+                   FROM fills"""
+            ).fetchall()
+            if any(
+                int(row["closed_as_exit"]) + int(row["opened_as_entry"])
+                != int(row["quantity"])
+                for row in fill_allocations
+            ):
+                errors.append("fill_quantity_allocation_does_not_reconcile")
+
+            total_fees = sum(
+                (Decimal(row["commission_usd"]) for row in connection.execute(
+                    "SELECT commission_usd FROM fills"
+                ).fetchall()),
+                Decimal("0"),
+            )
+            allocated_fees = sum(
+                (
+                    Decimal(row["entry_commission_usd"])
+                    + Decimal(row["exit_commission_usd"])
+                    for row in connection.execute(
+                        "SELECT entry_commission_usd, exit_commission_usd FROM closed_trades"
+                    ).fetchall()
+                ),
+                Decimal("0"),
+            ) + sum(
+                (Decimal(row["entry_commission_remaining"]) for row in connection.execute(
+                    "SELECT entry_commission_remaining FROM open_lots"
+                ).fetchall()),
+                Decimal("0"),
+            )
+            if total_fees != allocated_fees:
+                errors.append("commission_allocation_does_not_reconcile")
+
+            closed_rows = connection.execute(
+                """SELECT ct.*, opening.symbol AS opening_symbol,
+                          opening.side AS opening_side,
+                          opening.fill_price AS opening_fill_price,
+                          opening.timestamp AS opening_timestamp,
+                          opening.point_value_usd AS opening_point_value,
+                          closing.symbol AS closing_symbol,
+                          closing.side AS closing_side,
+                          closing.fill_price AS closing_fill_price,
+                          closing.timestamp AS closing_timestamp
+                   FROM closed_trades AS ct
+                   JOIN fills AS opening ON opening.order_id = ct.opening_fill_id
+                   JOIN fills AS closing ON closing.order_id = ct.closing_fill_id"""
+            ).fetchall()
+            for row in closed_rows:
+                if (
+                    row["symbol"] != row["opening_symbol"]
+                    or row["symbol"] != row["closing_symbol"]
+                    or int(row["side"]) != int(row["opening_side"])
+                    or int(row["closing_side"]) != -int(row["side"])
+                    or row["entry_time"] != row["opening_timestamp"]
+                    or row["exit_time"] != row["closing_timestamp"]
+                    or row["exit_time"] < row["entry_time"]
+                    or Decimal(row["entry_price"]) != Decimal(row["opening_fill_price"])
+                    or Decimal(row["exit_price"]) != Decimal(row["closing_fill_price"])
+                ):
+                    errors.append("closed_trade_fill_link_invalid")
+                    break
+                gross = Decimal(row["gross_pnl_usd"])
+                if row["opening_point_value"] is not None:
+                    calculated_gross = (
+                        (Decimal(row["exit_price"]) - Decimal(row["entry_price"]))
+                        * Decimal(row["opening_point_value"])
+                        * Decimal(int(row["side"]))
+                        * Decimal(int(row["quantity"]))
+                    )
+                    if calculated_gross != gross:
+                        errors.append("closed_trade_gross_pnl_does_not_reconcile")
+                        break
+                else:
+                    # Legacy closed fills may predate persisted contract metadata.
+                    # Preserve their recorded result but disclose that it cannot
+                    # be independently recalculated from the migrated fill row.
+                    warnings.append("legacy_closed_trade_contract_value_unavailable")
+                net = (
+                    gross
+                    - Decimal(row["entry_commission_usd"])
+                    - Decimal(row["exit_commission_usd"])
+                )
+                if net != Decimal(row["net_pnl_usd"]):
+                    errors.append("closed_trade_net_pnl_does_not_reconcile")
+                    break
+
+            open_rows = connection.execute(
+                """SELECT lots.*, fills.symbol AS fill_symbol,
+                          fills.side AS fill_side, fills.fill_price AS fill_price,
+                          fills.timestamp AS fill_timestamp,
+                          fills.tick_size AS fill_tick_size,
+                          fills.tick_value_usd AS fill_tick_value,
+                          fills.point_value_usd AS fill_point_value
+                   FROM open_lots AS lots
+                   JOIN fills ON fills.order_id = lots.opening_fill_id"""
+            ).fetchall()
+            for row in open_rows:
+                if (
+                    row["symbol"] != row["fill_symbol"]
+                    or int(row["side"]) != int(row["fill_side"])
+                    or row["entry_price"] != row["fill_price"]
+                    or row["opened_at"] != row["fill_timestamp"]
+                    or Decimal(row["tick_size"]) != Decimal(row["fill_tick_size"])
+                    or Decimal(row["tick_value_usd"]) != Decimal(row["fill_tick_value"])
+                    or Decimal(row["point_value_usd"]) != Decimal(row["fill_point_value"])
+                ):
+                    errors.append("open_lot_fill_link_invalid")
+                    break
+
+            connection.execute("COMMIT")
+
+        return {
+            "ok": not errors,
+            "errors": errors,
+            "warnings": sorted(set(warnings)),
+            "sqlite_integrity": sqlite_result,
+        }
 
     def get_summary(self) -> dict[str, Any]:
         with self._lock, self._connection() as connection:

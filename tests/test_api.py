@@ -89,6 +89,32 @@ def test_risk_api_reports_durable_emergency_halt(tmp_path) -> None:
     assert payload["gate"] == "UNKNOWN"
 
 
+def test_api_restart_preserves_halt_and_blocks_new_paper_router(tmp_path) -> None:
+    database = tmp_path / "account.sqlite3"
+    first_runtime = DashboardRuntime.from_config(database_path=database)
+    first_runtime.paper_engine.emergency_halt("api_restart_recovery_test")
+
+    restarted_runtime = DashboardRuntime.from_config(database_path=database)
+    assert restarted_runtime.paper_engine.halted is True
+    payload = TestClient(create_app(restarted_runtime)).get("/api/v1/risk/snapshot").json()
+    assert payload["execution_halted"] is True
+
+    router = restarted_runtime.paper_engine.router_for(MES, require_firm_profile=False)
+    intent = OrderIntent(
+        instrument=MES,
+        side=Side.LONG,
+        stop_ticks=8,
+        reference_price=6000,
+        timestamp=datetime.now(timezone.utc),
+    )
+    from tradingbot.execution.router import OrderRejected
+    import pytest
+
+    with pytest.raises(OrderRejected, match="emergency_halt_active"):
+        router.submit_entry(intent)
+    assert restarted_runtime.account_store.get_summary()["fills_count"] == 0
+
+
 def test_empty_persistent_ledgers_are_available_not_missing(tmp_path) -> None:
     client = _client(tmp_path)
     positions = client.get("/api/v1/positions").json()

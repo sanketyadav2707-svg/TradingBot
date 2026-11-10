@@ -2,7 +2,7 @@ name: Python checks
 
 on:
   push:
-    branches: [main, "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account", "fix/equity-history-test-chronology"]
+    branches: [main, "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account", "fix/equity-history-test-chronology", "fix/phase-1-paper-account-recovery"]
   pull_request:
     branches: [main, "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account", "fix/equity-history-test-chronology"]
 

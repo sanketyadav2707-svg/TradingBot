@@ -15,6 +15,10 @@ MES = Instrument("MES", 0.25, 1.25, 5.0)
 T0 = datetime(2026, 11, 10, 14, 0, tzinfo=timezone.utc)
 
 
+def _timestamp_for_test(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
 def make_fill(
     order_id: str,
     side: Side,
@@ -143,6 +147,35 @@ def test_duplicate_fill_is_idempotent_and_conflicting_duplicate_fails(tmp_path) 
     with pytest.raises(DuplicateFillError, match="different_fill_data"):
         store.record_fill(make_fill("same-id", Side.LONG, 1, 101, 0.5), MES)
     assert store.get_summary()["fills_count"] == 1
+
+
+def test_integrity_audit_reconciles_fifo_quantity_fees_and_pnl(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "account.sqlite3", 50_000)
+    store.record_fill(make_fill("open", Side.LONG, 2, 100, 2.0), MES)
+    store.record_fill(
+        make_fill("close", Side.SHORT, 1, 105, 1.0, T0 + timedelta(minutes=1)),
+        MES,
+    )
+    audit = store.audit_integrity()
+    assert audit == {"ok": True, "errors": [], "warnings": [], "sqlite_integrity": "ok"}
+
+
+def test_engine_startup_fails_closed_when_fee_allocation_is_corrupt(tmp_path) -> None:
+    database = tmp_path / "account.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    store.record_fill(make_fill("open", Side.LONG, 1, 100, 1.0), MES)
+
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE open_lots SET entry_commission_remaining = '0.50' WHERE opening_fill_id = 'open'"
+        )
+
+    corrupted = PaperAccountStore(database, 50_000)
+    audit = corrupted.audit_integrity()
+    assert audit["ok"] is False
+    assert "commission_allocation_does_not_reconcile" in audit["errors"]
+    with pytest.raises(RuntimeError, match="paper_account_integrity_check_failed"):
+        PaperAccountEngine(corrupted, RiskLimits())
 
 
 def test_persistent_account_survives_reopen_and_starting_balance_cannot_change(tmp_path) -> None:
@@ -311,4 +344,52 @@ def test_emergency_halt_survives_store_and_engine_restart(tmp_path) -> None:
     with pytest.raises(OrderRejected, match="emergency_halt_active"):
         reopened_router.submit_entry(intent)
     assert reopened_store.get_summary()["fills_count"] == 0
+
+
+def test_durable_halt_activated_by_another_engine_rejects_fill_transaction(tmp_path) -> None:
+    database = tmp_path / "account.sqlite3"
+    store_a = PaperAccountStore(database, 50_000)
+    store_b = PaperAccountStore(database, 50_000)
+    engine_a = PaperAccountEngine(store_a, RiskLimits())
+    engine_b = PaperAccountEngine(store_b, RiskLimits())
+    router_b = engine_b.router_for(MES, require_firm_profile=False)
+    store_b.mark_to_market({"MES": 100}, T0)
+
+    # Engine B has a stale in-memory halt event. The SQLite transaction must
+    # still reject the fill after Engine A activates the durable latch.
+    engine_a.emergency_halt("cross_engine_halt_test")
+    intent = OrderIntent(
+        instrument=MES,
+        side=Side.LONG,
+        stop_ticks=8,
+        reference_price=100,
+        timestamp=T0,
+    )
+    with pytest.raises(RuntimeError, match="emergency_halt_active"):
+        router_b.submit_entry(intent)
+    assert router_b._broker.fills == []
+    assert store_a.get_summary()["fills_count"] == 0
+
+
+def test_out_of_order_fill_is_rejected_without_mutating_ledger(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "account.sqlite3", 50_000)
+    store.record_fill(make_fill("later", Side.LONG, 1, 100, timestamp=T0 + timedelta(minutes=2)), MES)
+
+    with pytest.raises(ValueError, match="fill_timestamp_cannot_precede_latest_symbol_fill"):
+        store.record_fill(make_fill("earlier", Side.SHORT, 1, 101, timestamp=T0 + timedelta(minutes=1)), MES)
+
+    assert store.get_summary()["fills_count"] == 1
+    assert store.list_positions()[0]["quantity"] == 1
+    assert store.count_records("closed_trades") == 0
+
+
+def test_mark_cannot_precede_latest_fill_for_symbol(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "account.sqlite3", 50_000)
+    store.record_fill(make_fill("entry", Side.LONG, 1, 100, timestamp=T0 + timedelta(minutes=2)), MES)
+
+    with pytest.raises(ValueError, match="cannot precede its latest fill"):
+        store.mark_to_market({"MES": 99}, T0 + timedelta(minutes=1))
+
+    store.mark_to_market({"MES": 101}, T0 + timedelta(minutes=3))
+    assert store.list_positions()[0]["mark_timestamp"] == _timestamp_for_test(T0 + timedelta(minutes=3))
 
