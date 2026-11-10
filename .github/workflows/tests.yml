@@ -26,5 +26,27 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,api]"
+      - name: Smoke test the installed API server
+        run: |
+          set -euo pipefail
+          tradingbot-api --host 127.0.0.1 --port 8765 > /tmp/tradingbot-api.log 2>&1 &
+          API_PID=$!
+          cleanup() {
+            kill "$API_PID" 2>/dev/null || true
+            wait "$API_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8765/health > /tmp/tradingbot-health.json; then
+              break
+            fi
+            sleep 1
+          done
+
+          python -c "import json; d=json.load(open('/tmp/tradingbot-health.json')); assert d['status'] == 'ok', d; print('API health:', d['status'], 'version:', d['version'])"
+          curl --fail --silent http://127.0.0.1:8765/api/v1/instruments > /tmp/tradingbot-instruments.json
+          python -c "import json; d=json.load(open('/tmp/tradingbot-instruments.json')); symbols={x['symbol'] for x in d['items']}; expected={'MES','MNQ','MYM','M2K','MGC','MCL'}; assert d['availability'] == 'AVAILABLE' and expected <= symbols, d; print('Configured instruments:', ', '.join(sorted(symbols)))"
+
       - name: Run tests
         run: pytest
