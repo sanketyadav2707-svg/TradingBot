@@ -43,6 +43,7 @@ def test_orb15_long_target_after_next_minute_entry_and_commission() -> None:
     assert len(result.trades) == 1
     trade = result.trades[0]
     assert trade.side == Side.LONG
+    assert trade.signal_time.time() == time(8, 46)
     assert trade.entry_time.time() == time(8, 46)
     assert trade.entry_price == pytest.approx(101.25)
     assert trade.stop_price == pytest.approx(98.75)
