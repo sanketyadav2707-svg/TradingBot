@@ -1,7 +1,8 @@
 """Risk-gated composition layer for persistent local paper execution.
 
-This module only creates paper brokers behind ExecutionRouter. It never starts
-a strategy, market-data feed, scheduler, or background trading loop.
+Only ExecutionRouter objects are exposed. Raw PaperBroker instances remain
+private to this module so callers cannot accidentally skip risk/compliance gates.
+This module never starts a strategy, market-data feed, scheduler or background loop.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from tradingbot.risk.limits import RiskGuard, RiskLimits
 
 
 class PaperAccountEngine:
-    """Create only risk-gated routers backed by persisted PaperBroker fills."""
+    """Create paper-only routers whose fills persist before acknowledgement."""
 
     def __init__(
         self,
@@ -73,14 +74,13 @@ class PaperAccountEngine:
         compliance_gate: FirmComplianceGate | None = None,
         require_firm_profile: bool = True,
     ) -> ExecutionRouter:
-        """Return a paper-only router. Firm-profile compliance is required by default.
+        """Return a paper router. Firm compliance is fail-closed by default.
 
-        Setting require_firm_profile=False is an explicit research-only bypass of
-        prop-firm checks; RiskGuard remains mandatory in either mode.
+        Setting require_firm_profile=False is an explicit research-only bypass
+        of prop-firm-profile checks. RiskGuard is mandatory in either mode.
         """
-        broker = self._broker_for(instrument)
         return ExecutionRouter(
-            broker=broker,
+            broker=self._broker_for(instrument),
             risk_guard=self._risk_guard,
             mode=ExecutionMode.PAPER,
             compliance_gate=compliance_gate,
