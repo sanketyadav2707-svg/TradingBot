@@ -87,3 +87,4 @@ class RiskSnapshotResponse(StrictResponse):
     daily_loss_limit: Money | None
     open_positions: int | None
     max_contracts: int | None
+    execution_halted: bool | None
