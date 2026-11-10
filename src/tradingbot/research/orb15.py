@@ -222,7 +222,11 @@ def run_orb15(
             invalid += 1
             reasons["roll_inside_opening_range"] += 1
             continue
-        if any(range_indices[i] != range_indices[i - 1] + 1 for i in range(1, len(range_indices))):
+        if any(
+            range_indices[i] != range_indices[i - 1] + 1
+            or range_bars[i].timestamp - range_bars[i - 1].timestamp != minute
+            for i in range(1, len(range_indices))
+        ):
             invalid += 1
             reasons["non_contiguous_opening_range"] += 1
             continue
