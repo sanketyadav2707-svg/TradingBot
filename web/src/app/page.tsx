@@ -1,10 +1,12 @@
 "use client";
 import {useEffect,useMemo,useRef,useState} from "react";
-import {Activity,AlertTriangle,Bell,BrainCircuit,CheckCircle2,Clock3,Database,Gauge,LayoutDashboard,LineChart,Menu,Radio,Search,Settings2,Shield,Sparkles,Target,Wallet,X,Zap} from "lucide-react";
+import {Activity,AlertTriangle,Bell,BrainCircuit,CheckCircle2,Clock3,Database,Gauge,LayoutDashboard,LineChart,Menu,Radio,Search,Settings2,Shield,Sparkles,X,Zap} from "lucide-react";
 import {Area,AreaChart,CartesianGrid,ReferenceLine,ResponsiveContainer,Tooltip,XAxis,YAxis} from "recharts";
 import { BackendStatusPanel } from "@/components/backend-status";
 import { PaperAccountSummary } from "@/components/paper-account-summary";
 import { PaperRiskPanel } from "@/components/paper-risk-panel";
+import { PaperTradeJournal } from "@/components/paper-trade-journal";
+import { PaperPerformance } from "@/components/paper-performance";
 
 const nav=[["Overview",LayoutDashboard,"CORE"],["Market Terminal",Activity,"CORE"],["Strategy Engine",BrainCircuit,"QUANT"],["Backtesting",LineChart,"QUANT"],["Trade Journal",Clock3,"QUANT"],["Risk & Compliance",Shield,"CONTROL"],["Performance",Gauge,"CONTROL"],["AI Research",Sparkles,"TOOLS"],["Data Feeds",Database,"TOOLS"],["Settings",Settings2,"SYSTEM"]] as const;
 const markets: [string, string, string, string, boolean, string][] = [["MNQ","Micro Nasdaq","20,842.25","+0.42%",true,"182.4K"],["MES","Micro S&P","5,942.50","+0.18%",true,"96.2K"],["NQ","E-mini Nasdaq","20,841.75","+0.41%",true,"82.1K"],["ES","E-mini S&P","5,942.25","+0.17%",true,"64.8K"],["RTY","E-mini Russell","2,118.40","-0.12%",false,"31.7K"]];
