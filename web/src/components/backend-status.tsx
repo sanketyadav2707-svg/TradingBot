@@ -54,7 +54,6 @@ export function BackendStatusPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
-  const [dataIssues, setDataIssues] = useState<string[]>([]);
 
   useEffect(() => {
     let disposed = false;
@@ -94,7 +93,6 @@ export function BackendStatusPanel() {
         if (summaryResult.status === "rejected") failures.push("Dashboard summary endpoint failed.");
         if (instrumentResult.status === "rejected") failures.push("Instrument configuration endpoint failed.");
         if (riskResult.status === "rejected") failures.push("Risk snapshot endpoint failed.");
-        setDataIssues(failures);
         setError(failures.length ? failures.join(" ") : null);
         setLastChecked(new Date().toISOString());
         setLoading(false);
@@ -149,7 +147,7 @@ export function BackendStatusPanel() {
         <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-400/15 bg-amber-400/[.04] px-3 py-2">
           <AlertTriangle size={12} className="mt-0.5 shrink-0 text-amber-300" />
           <div className="min-w-0">
-            <div className="text-[9px] font-semibold text-amber-200">Backend not connected</div>
+            <div className="text-[9px] font-semibold text-amber-200">Backend diagnostics</div>
             <p className="mt-1 break-words text-[8px] leading-relaxed text-amber-100/60">{error}</p>
             <p className="mt-1 text-[8px] text-slate-500">Start it with <code className="text-slate-300">tradingbot-api</code> in a separate terminal.</p>
           </div>
