@@ -1,0 +1,30 @@
+name: ORB15 research checks
+
+on:
+  push:
+    branches: ["feature/orb15-bracket-backtester"]
+  pull_request:
+    branches: ["docs/orb15-pre-registered-spec"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: orb15-research-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  orb15:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Run ORB15 and signal-lab regression tests
+        run: pytest tests/test_orb15_research.py tests/test_strategy_lab.py
