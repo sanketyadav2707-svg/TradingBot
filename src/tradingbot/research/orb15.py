@@ -407,7 +407,7 @@ def run_orb15(
             contract_id=contract_id,
             trading_date=trading_day,
             side=side,
-            signal_time=signal_bar.timestamp,
+            signal_time=signal_bar.timestamp + minute,
             entry_time=entry_bar.timestamp,
             exit_time=(
                 day_bars[exit_idx].timestamp
