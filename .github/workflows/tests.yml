@@ -47,6 +47,10 @@ jobs:
           python -c "import json; d=json.load(open('/tmp/tradingbot-health.json')); assert d['status'] == 'ok', d; print('API health:', d['status'], 'version:', d['version'])"
           curl --fail --silent http://127.0.0.1:8765/api/v1/instruments > /tmp/tradingbot-instruments.json
           python -c "import json; d=json.load(open('/tmp/tradingbot-instruments.json')); symbols={x['symbol'] for x in d['items']}; expected={'MES','MNQ','MYM','M2K','MGC','MCL'}; assert d['availability'] == 'AVAILABLE' and expected <= symbols, d; print('Configured instruments:', ', '.join(sorted(symbols)))"
+          curl --fail --silent http://127.0.0.1:8765/api/v1/dashboard/summary > /tmp/tradingbot-summary.json
+          python -c "import json; d=json.load(open('/tmp/tradingbot-summary.json')); assert d['meta']['environment'] == 'PAPER' and d['account']['balance']['amount'] == '50000.00' and d['account']['equity']['amount'] == '50000.00', d; print('Persistent account:', d['meta']['environment'], 'equity USD', d['account']['equity']['amount'])"
+          curl --fail --silent http://127.0.0.1:8765/api/v1/positions > /tmp/tradingbot-positions.json
+          python -c "import json; d=json.load(open('/tmp/tradingbot-positions.json')); assert d['availability'] == 'AVAILABLE' and d['items'] == [], d; print('Position book: available, no open positions')"
 
       - name: Run tests
         run: pytest
