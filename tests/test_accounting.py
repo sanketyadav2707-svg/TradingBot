@@ -157,7 +157,7 @@ def test_integrity_audit_reconciles_fifo_quantity_fees_and_pnl(tmp_path) -> None
         MES,
     )
     audit = store.audit_integrity()
-    assert audit == {"ok": True, "errors": [], "sqlite_integrity": "ok"}
+    assert audit == {"ok": True, "errors": [], "warnings": [], "sqlite_integrity": "ok"}
 
 
 def test_engine_startup_fails_closed_when_fee_allocation_is_corrupt(tmp_path) -> None:
