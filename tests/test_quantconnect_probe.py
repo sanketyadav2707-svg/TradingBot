@@ -244,3 +244,26 @@ def test_probe_classifies_bar_by_interval_start() -> None:
     source = _probe_source()
     assert "bar_start_time = current_time - timedelta(minutes=1)" in source
     assert "_session_bucket(bar_start_time)" in source
+
+
+def test_probe_uses_explicit_roll_events_and_mapped_raw_contract_bars() -> None:
+    source = _probe_source()
+    assert "slice.symbol_changed_events.get(future.symbol)" in source
+    assert "changed_event.old_symbol" in source
+    assert "changed_event.new_symbol" in source
+    assert "stats[\"roll_reset_pending\"] = True" in source
+    assert "bar = slice.bars.get(mapped_symbol)" in source
+    assert "slice.bars.get(future.symbol)" not in source
+    assert 'f"{root} roll audit"' in source
+
+
+def test_probe_roll_event_without_immediate_bar_keeps_reset_pending() -> None:
+    source = _probe_source()
+    assert source.index('stats["roll_reset_pending"] = True') < source.index(
+        'bar = slice.bars.get(mapped_symbol)'
+    )
+    assert source.index('if bar is None:') < source.index(
+        'stats["roll_reset_pending"] = False'
+    )
+    assert "unannounced_mapping_changes" in source
+    assert "roll_event_mismatches" in source
