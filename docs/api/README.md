@@ -42,7 +42,7 @@ The SQLite paper-account store records:
 
 Accounting uses Decimal arithmetic serialized as text. Each fill is recorded transactionally. Replaying an exact duplicate fill is idempotent; reusing a fill ID with different execution details is rejected. Partial closes allocate entry commission proportionally. Reversals close the old position FIFO and open any excess on the opposite side.
 
-`PaperBroker` accepts an optional persistence callback. `PaperAccountEngine.broker_for(instrument)` creates a broker whose fill is stored before the broker acknowledges it. If persistence fails, the broker does not append the fill to its in-memory fill list.
+`PaperBroker` accepts an optional persistence callback. `PaperAccountEngine.router_for(instrument)` creates a risk/compliance-gated paper router backed by a broker whose fill is stored before it is acknowledged. If persistence fails, the broker does not append the fill to its in-memory fill list.
 
 ## Read-only API routes
 
