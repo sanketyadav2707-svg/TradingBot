@@ -29,9 +29,9 @@ def test_sample_backtest_cli_smoke_test(monkeypatch, capsys) -> None:
 def test_raw_data_validation_cli_writes_manifest(tmp_path, monkeypatch, capsys) -> None:
     source = tmp_path / "MES.csv"
     source.write_text(
-        "timestamp,root_symbol,contract_symbol,instrument_id,open,high,low,close,volume\\n"
-        "2026-01-05T14:30:00Z,MES,MESH6,101,100,101,99,100,10\\n"
-        "2026-01-05T14:31:00Z,MES,MESH6,101,100,102,99,101,12\\n",
+        "timestamp,root_symbol,contract_symbol,instrument_id,open,high,low,close,volume\n"
+        "2026-01-05T14:30:00Z,MES,MESH6,101,100,101,99,100,10\n"
+        "2026-01-05T14:31:00Z,MES,MESH6,101,100,102,99,101,12\n",
         encoding="utf-8",
     )
     manifest = tmp_path / "MES.metadata.json"
