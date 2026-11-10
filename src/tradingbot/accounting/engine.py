@@ -50,6 +50,7 @@ class PaperAccountEngine:
         )
         self._brokers: dict[str, PaperBroker] = {}
         self._lock = threading.RLock()
+        self._halt_event = threading.Event()
 
     def _broker_for(self, instrument: Instrument) -> PaperBroker:
         if not isinstance(instrument, Instrument):
@@ -106,7 +107,21 @@ class PaperAccountEngine:
             compliance_gate=compliance_gate,
             require_firm_profile=require_firm_profile,
             account_snapshot_provider=account_snapshot_provider,
+            halt_check=self._halt_event.is_set,
         )
+
+    def emergency_halt(self) -> None:
+        """Block every existing and future router created by this engine.
+
+        The halt is intentionally one-way for this process. Restarting the API
+        does not start a strategy or broker; an orchestrator must explicitly
+        reconstruct and review the paper engine before creating new routers.
+        """
+        self._halt_event.set()
+
+    @property
+    def halted(self) -> bool:
+        return self._halt_event.is_set()
 
     @property
     def active_symbols(self) -> tuple[str, ...]:
