@@ -2,7 +2,7 @@ name: Web checks
 
 on:
   push:
-    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract"]
+    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account"]
     paths:
       - "web/**"
       - ".github/workflows/web.yml"
