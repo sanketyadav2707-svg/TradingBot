@@ -57,7 +57,7 @@ class ExecutionRouter:
     ) -> None:
         if type(broker) is not PaperBroker:
             raise TypeError("paper_broker_only: custom and live broker adapters are not supported")
-        self.broker = broker
+        self._broker = broker
         self.risk_guard = risk_guard
         self.mode = mode
         self.compliance_gate = compliance_gate
@@ -88,7 +88,7 @@ class ExecutionRouter:
         ):
             raise OrderRejected("reference_price_must_be_finite")
 
-        broker_instrument = self.broker.instrument
+        broker_instrument = self._broker.instrument
         requested_instrument = intent.instrument
         same_contract = (
             broker_instrument.symbol.strip().upper()
@@ -124,7 +124,7 @@ class ExecutionRouter:
             if not compliance.allowed:
                 raise OrderRejected(compliance.reason)
 
-        return self.broker.submit_market(
+        return self._broker.submit_market(
             side=intent.side,
             quantity=decision.quantity,
             reference_price=intent.reference_price,
