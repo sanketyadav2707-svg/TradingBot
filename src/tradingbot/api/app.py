@@ -282,6 +282,7 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
             daily_loss_limit=_money(limits.max_daily_loss_usd) if limits else None,
             open_positions=account_snapshot["open_positions"] if account_snapshot else None,
             max_contracts=limits.max_contracts if limits else None,
+            execution_halted=store.emergency_halt_active if store is not None else None,
         )
 
     @app.get("/api/v1/events", response_model=AvailabilityPage, tags=["operations"])
