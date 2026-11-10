@@ -44,6 +44,29 @@ export interface DashboardSummaryResponse {
   };
 }
 
+export interface Position {
+  id: string;
+  symbol: string;
+  side: "LONG" | "SHORT";
+  quantity: number;
+  average_price: string;
+  unrealized_pnl: Money | null;
+  opened_at: string;
+}
+
+export interface Trade {
+  id: string;
+  symbol: string;
+  side: "LONG" | "SHORT";
+  quantity: number;
+  entry_time: string;
+  exit_time: string;
+  entry_price: string;
+  exit_price: string;
+  net_pnl: Money;
+  exit_reason: string;
+}
+
 export interface AvailabilityPage<T> {
   availability: DataAvailability;
   items: T[];
