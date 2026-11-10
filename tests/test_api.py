@@ -51,6 +51,7 @@ def test_summary_reports_a_real_persistent_virtual_paper_account(tmp_path) -> No
     assert payload["account"]["realized_pnl"] == {"amount": "0.00", "currency": "USD"}
     assert payload["account"]["unrealized_pnl"] == {"amount": "0.00", "currency": "USD"}
     assert payload["account"]["net_pnl"] == {"amount": "0.00", "currency": "USD"}
+    assert payload["meta"]["as_of"] == _client(tmp_path).get("/api/v1/performance/equity?range=all").json()["items"][0]["timestamp"]
     assert payload["strategy"] == {"name": None, "state": "UNKNOWN"}
     assert payload["market_data"] == {
         "connection": "DISCONNECTED",
@@ -110,6 +111,17 @@ def test_paper_broker_fills_flow_into_persistent_account_api(tmp_path) -> None:
     assert fills["items"][0]["side"] == "LONG"
     assert positions["items"][0]["quantity"] == 1
     assert positions["items"][0]["side"] == "LONG"
+
+
+def test_positions_expose_last_mark_and_timestamp_not_live_quote(tmp_path) -> None:
+    runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
+    _submit_research_paper_fill(runtime, Side.LONG, 6000, T0)
+    payload = TestClient(create_app(runtime)).get("/api/v1/positions").json()
+    assert payload["availability"] == "AVAILABLE"
+    position = payload["items"][0]
+    assert position["mark_price"] == "6000"
+    assert position["mark_timestamp"] == T0.isoformat().replace("+00:00", "Z")
+    assert position["unrealized_pnl"] == {"amount": "-0.50", "currency": "USD"}
 
 
 def test_completed_round_trip_flows_into_trade_and_equity_apis(tmp_path) -> None:
