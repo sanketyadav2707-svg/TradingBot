@@ -165,7 +165,11 @@ def _candidate_price_outliers(
                for previous, current in zip(series, series[1:])]
     centre = median(changes)
     mad = median([abs(value - centre) for value in changes])
-    scale = max(1.4826 * mad, abs(centre) * 0.1, 1e-12)
+    typical_range = median([float(bar.high) - float(bar.low) for bar in series])
+    # A zero-return MAD is common in quiet minute data. Use typical bar range
+    # as a robust floor so a single normal tick does not become an "outlier"
+    # merely because many adjacent closes were unchanged.
+    scale = max(1.4826 * mad, typical_range * 0.1, 1e-12)
     threshold = 10.0 * scale
     flagged = [
         {
