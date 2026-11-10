@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from tradingbot.api.app import create_app
 from tradingbot.api.runtime import DashboardRuntime
 from tradingbot.models import Instrument, Side
+from tradingbot.execution.router import AccountRiskSnapshot, OrderIntent
 
 
 MES = Instrument("MES", 0.25, 1.25, 5.0)
@@ -15,6 +16,26 @@ T0 = datetime(2026, 11, 10, 14, 0, tzinfo=timezone.utc)
 def _client(tmp_path) -> TestClient:
     runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
     return TestClient(create_app(runtime))
+
+
+def _submit_research_paper_fill(runtime, side: Side, reference_price: float, timestamp: datetime):
+    """Explicit research-only test path; production default requires a verified firm profile."""
+    router = runtime.paper_engine.router_for(MES, require_firm_profile=False)
+    return router.submit_entry(
+        OrderIntent(
+            instrument=MES,
+            side=side,
+            stop_ticks=8,
+            reference_price=reference_price,
+            timestamp=timestamp,
+        ),
+        AccountRiskSnapshot(
+            equity_usd=50_000,
+            peak_equity_usd=50_000,
+            daily_pnl_usd=0,
+            trades_today=0,
+        ),
+    )
 
 
 def test_health_reports_api_process_not_trading_readiness(tmp_path) -> None:
@@ -83,13 +104,7 @@ def test_empty_persistent_ledgers_are_available_not_missing(tmp_path) -> None:
 
 def test_paper_broker_fills_flow_into_persistent_account_api(tmp_path) -> None:
     runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
-    broker = runtime.paper_engine.broker_for(MES)
-    broker.submit_market(
-        side=Side.LONG,
-        quantity=1,
-        reference_price=6000,
-        timestamp=T0,
-    )
+    _submit_research_paper_fill(runtime, Side.LONG, 6000, T0)
 
     client = TestClient(create_app(runtime))
     fills = client.get("/api/v1/paper/fills").json()
@@ -104,19 +119,8 @@ def test_paper_broker_fills_flow_into_persistent_account_api(tmp_path) -> None:
 
 def test_completed_round_trip_flows_into_trade_and_equity_apis(tmp_path) -> None:
     runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
-    broker = runtime.paper_engine.broker_for(MES)
-    broker.submit_market(
-        side=Side.LONG,
-        quantity=1,
-        reference_price=6000,
-        timestamp=T0,
-    )
-    broker.submit_market(
-        side=Side.SHORT,
-        quantity=1,
-        reference_price=6002,
-        timestamp=T0 + timedelta(minutes=2),
-    )
+    _submit_research_paper_fill(runtime, Side.LONG, 6000, T0)
+    _submit_research_paper_fill(runtime, Side.SHORT, 6002, T0 + timedelta(minutes=2))
 
     client = TestClient(create_app(runtime))
     trades = client.get("/api/v1/trades").json()
@@ -170,13 +174,12 @@ def test_pagination_rejects_invalid_cursors(tmp_path) -> None:
 
 def test_pagination_returns_next_cursor_for_paper_fills(tmp_path) -> None:
     runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
-    broker = runtime.paper_engine.broker_for(MES)
     for index in range(3):
-        broker.submit_market(
-            side=Side.LONG,
-            quantity=1,
-            reference_price=6000 + index,
-            timestamp=T0 + timedelta(minutes=index),
+        _submit_research_paper_fill(
+            runtime,
+            Side.LONG,
+            6000 + index,
+            T0 + timedelta(minutes=index),
         )
     client = TestClient(create_app(runtime))
     first = client.get("/api/v1/paper/fills?limit=2").json()
