@@ -81,9 +81,9 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
         allow_headers=["Accept", "Content-Type"],
     )
 
-    def meta(source: str) -> ApiMeta:
+    def meta(source: str, as_of: str | None = None) -> ApiMeta:
         environment = "PAPER" if dashboard_runtime.account_store is not None else "DISCONNECTED"
-        return ApiMeta(as_of=_utc_now(), environment=environment, source=source)
+        return ApiMeta(as_of=as_of or _utc_now(), environment=environment, source=source)
 
     @app.get("/health", response_model=HealthResponse, tags=["health"])
     def health() -> HealthResponse:
@@ -111,7 +111,7 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
             "max_drawdown": _money(snapshot["max_drawdown_usd"]) if snapshot else None,
         }
         return DashboardSummaryResponse(
-            meta=meta(source),
+            meta=meta(source, snapshot["as_of"] if snapshot else None),
             account=account,
             strategy={"name": None, "state": "UNKNOWN"},
             market_data={"connection": "DISCONNECTED", "last_update": None, "symbols": []},
