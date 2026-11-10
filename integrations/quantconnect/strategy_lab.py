@@ -178,6 +178,10 @@ class FuturesStrategySignalLab(QCAlgorithm):
             self._stats[root] = {
                 "last_end_time": None,
                 "last_mapped_symbol": None,
+                "roll_events": [],
+                "roll_event_mismatches": 0,
+                "unannounced_mapping_changes": 0,
+                "roll_reset_pending": False,
                 "bars": 0,
                 "strategies": {
                     name: new_candidate_state() for name in self.CANDIDATES
@@ -348,29 +352,51 @@ class FuturesStrategySignalLab(QCAlgorithm):
 
     def on_data(self, slice: Slice) -> None:
         for root, future in self._futures.items():
+            stats = self._stats[root]
+
+            # Capture the explicit continuous-future roll event. The event can
+            # precede the first new-contract bar, so keep a pending reset.
+            changed_event = slice.symbol_changed_events.get(future.symbol)
+            event_mapping_changed = changed_event is not None
+            if changed_event is not None:
+                old_text = str(changed_event.old_symbol)
+                new_text = str(changed_event.new_symbol)
+                previous_mapping = stats["last_mapped_symbol"]
+                mapped_now = future.mapped
+                if previous_mapping is not None and previous_mapping != old_text:
+                    stats["roll_event_mismatches"] += 1
+                if mapped_now is not None and str(mapped_now) != new_text:
+                    stats["roll_event_mismatches"] += 1
+                event_time = getattr(changed_event, "end_time", self.time)
+                stats["roll_events"].append((str(event_time), old_text, new_text))
+                stats["last_mapped_symbol"] = new_text
+                stats["roll_reset_pending"] = True
+
             # Use the mapped underlying contract's raw TradeBar for tradable
             # prices. The continuous symbol is a stitched research series.
             mapped = future.mapped
             if mapped is None:
                 continue
-            bar = slice.bars.get(mapped)
-            if bar is None:
-                continue
-
-            stats = self._stats[root]
-            bar_end = bar.end_time
-            bar_start = bar_end - timedelta(minutes=1)
-            bucket = session_bucket(bar_start)
 
             mapped_text = str(mapped)
             previous_mapped = stats["last_mapped_symbol"]
-            mapping_changed = (
-                mapped_text is not None
-                and previous_mapped is not None
-                and mapped_text != previous_mapped
-            )
-            if mapped_text is not None:
+            if previous_mapped is None:
                 stats["last_mapped_symbol"] = mapped_text
+            elif mapped_text != previous_mapped:
+                if not event_mapping_changed:
+                    stats["unannounced_mapping_changes"] += 1
+                stats["last_mapped_symbol"] = mapped_text
+                stats["roll_reset_pending"] = True
+
+            mapping_changed = stats["roll_reset_pending"]
+            bar = slice.bars.get(mapped)
+            if bar is None:
+                continue
+            stats["roll_reset_pending"] = False
+
+            bar_end = bar.end_time
+            bar_start = bar_end - timedelta(minutes=1)
+            bucket = session_bucket(bar_start)
 
             previous_end = stats["last_end_time"]
             contiguous = (
@@ -431,6 +457,16 @@ class FuturesStrategySignalLab(QCAlgorithm):
     def on_end_of_algorithm(self) -> None:
         for root, stats in self._stats.items():
             self.set_runtime_statistic(f"{root} bars", stats["bars"])
+            transitions = ",".join(
+                f"{old}>{new}@{when}" for when, old, new in stats["roll_events"]
+            ) or "none"
+            self.set_runtime_statistic(
+                f"{root} roll audit",
+                f"events={len(stats['roll_events'])}; "
+                f"unannounced={stats['unannounced_mapping_changes']}; "
+                f"mismatches={stats['roll_event_mismatches']}; "
+                f"transitions={transitions}",
+            )
             for name, state in stats["strategies"].items():
                 self.set_runtime_statistic(
                     f"{root} {name} signals",

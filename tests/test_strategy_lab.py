@@ -126,3 +126,25 @@ def test_one_tick_breakout_threshold_is_inclusive_and_tick_aligned() -> None:
     assert "close <= range_low - tick_size" in source
     assert "close >= prior_high + tick_size" in source
     assert "close <= prior_low - tick_size" in source
+
+
+def test_strategy_lab_audits_explicit_roll_events_and_mapped_bars() -> None:
+    source = _source()
+    assert "slice.symbol_changed_events.get(future.symbol)" in source
+    assert "changed_event.old_symbol" in source
+    assert "changed_event.new_symbol" in source
+    assert "stats[\"roll_reset_pending\"] = True" in source
+    assert "bar = slice.bars.get(mapped)" in source
+    assert "slice.bars.get(future.symbol)" not in source
+    assert 'f"{root} roll audit"' in source
+
+
+def test_strategy_lab_preserves_roll_reset_until_new_contract_bar_arrives() -> None:
+    source = _source()
+    event_at = source.index("changed_event = slice.symbol_changed_events.get(future.symbol)")
+    pending_at = source.index('stats["roll_reset_pending"] = True', event_at)
+    bar_at = source.index("bar = slice.bars.get(mapped)", event_at)
+    clear_at = source.index('stats["roll_reset_pending"] = False', bar_at)
+    assert event_at < pending_at < bar_at < clear_at
+    assert "unannounced_mapping_changes" in source
+    assert "roll_event_mismatches" in source

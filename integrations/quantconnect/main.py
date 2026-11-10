@@ -1,4 +1,4 @@
-"""QuantConnect Cloud-only MES/MNQ futures data-coverage probe.
+"""QuantConnect Cloud-only MES/MNQ futures data-coverage and mapped-roll audit.
 
 This algorithm is deliberately research-only:
 - It never places orders.
@@ -146,6 +146,10 @@ class FuturesDataCoverageProbe(QCAlgorithm):
                 "gaps_over_90_seconds": 0,
                 "gaps_over_30_minutes": 0,
                 "mapping_changes": 0,
+                "unannounced_mapping_changes": 0,
+                "roll_event_mismatches": 0,
+                "roll_events": [],
+                "roll_reset_pending": False,
                 "last_mapped_symbol": None,
                 "active_dates": set(),
                 "last_end_time": None,
@@ -193,21 +197,54 @@ class FuturesDataCoverageProbe(QCAlgorithm):
 
     def on_data(self, slice: Slice) -> None:
         for root, future in self._futures.items():
-            bar = slice.bars.get(future.symbol)
+            stats = self._stats[root]
+
+            # QuantConnect emits an explicit SymbolChangedEvent for the
+            # continuous future. Record the old/new contract transition even
+            # if the first bar for the new contract arrives later.
+            changed_event = slice.symbol_changed_events.get(future.symbol)
+            event_mapping_changed = changed_event is not None
+            if changed_event is not None:
+                old_text = str(changed_event.old_symbol)
+                new_text = str(changed_event.new_symbol)
+                previous_mapping = stats["last_mapped_symbol"]
+                mapped_now = future.mapped
+                if previous_mapping is not None and previous_mapping != old_text:
+                    stats["roll_event_mismatches"] += 1
+                if mapped_now is not None and str(mapped_now) != new_text:
+                    stats["roll_event_mismatches"] += 1
+                event_time = getattr(changed_event, "end_time", self.time)
+                stats["roll_events"].append((str(event_time), old_text, new_text))
+                stats["mapping_changes"] += 1
+                stats["last_mapped_symbol"] = new_text
+                stats["roll_reset_pending"] = True
+
+            mapped_symbol = future.mapped
+            if mapped_symbol is None:
+                continue
+
+            mapped_text = str(mapped_symbol)
+            previous_mapping = stats["last_mapped_symbol"]
+            if previous_mapping is None:
+                stats["last_mapped_symbol"] = mapped_text
+            elif mapped_text != previous_mapping:
+                # Defensive fallback: the mapped contract changed without an
+                # explicit event being observed by this algorithm.
+                if not event_mapping_changed:
+                    stats["mapping_changes"] += 1
+                    stats["unannounced_mapping_changes"] += 1
+                stats["last_mapped_symbol"] = mapped_text
+                stats["roll_reset_pending"] = True
+
+            mapping_changed = stats["roll_reset_pending"]
+
+            # Use the mapped underlying contract's RAW bar, never the
+            # continuous series bar, for tradable-price movement diagnostics.
+            bar = slice.bars.get(mapped_symbol)
             if bar is None:
                 continue
 
-            stats = self._stats[root]
-            mapped_symbol = future.mapped
-            mapping_changed = False
-            if mapped_symbol is not None:
-                mapped_text = str(mapped_symbol)
-                previous_mapping = stats["last_mapped_symbol"]
-                if previous_mapping is not None and mapped_text != previous_mapping:
-                    stats["mapping_changes"] += 1
-                    mapping_changed = True
-                stats["last_mapped_symbol"] = mapped_text
-
+            stats["roll_reset_pending"] = False
             stats["bars"] += 1
             stats["active_dates"].add(bar.end_time.date())
 
@@ -299,6 +336,16 @@ class FuturesDataCoverageProbe(QCAlgorithm):
             )
             self.set_runtime_statistic(
                 f"{root} contract mapping changes", stats["mapping_changes"]
+            )
+            transitions = ",".join(
+                f"{old}>{new}@{when}" for when, old, new in stats["roll_events"]
+            ) or "none"
+            self.set_runtime_statistic(
+                f"{root} roll audit",
+                f"events={len(stats['roll_events'])}; "
+                f"unannounced={stats['unannounced_mapping_changes']}; "
+                f"mismatches={stats['roll_event_mismatches']}; "
+                f"transitions={transitions}",
             )
             self.set_runtime_statistic(
                 f"{root} feed result",

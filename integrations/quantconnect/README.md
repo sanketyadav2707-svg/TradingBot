@@ -21,6 +21,12 @@ Official references:
 
 Therefore this integration remains a minute-resolution historical research route. It does **not** solve second/tick execution-quality research or continuous real-time CME paper trading. See [the 10 November resolution access audit](../../docs/HIGH_RESOLUTION_DATA_ACCESS_AUDIT_2026-11-10.md).
 
+## Contract-roll audit implementation (10 November 2026)
+
+The coverage probe and strategy signal lab now consume the mapped underlying contract's raw TradeBar for price-based calculations and inspect `Slice.symbol_changed_events` for explicit continuous-contract roll transitions. A roll event records old/new contract symbols and its event time, sets a pending reset, and prevents returns or active strategy outcomes from crossing the transition. The pending reset remains set until the mapped-contract bar is actually available. A defensive fallback counts mapping changes not accompanied by an observed event. The audit reports transition identifiers and counts only, not prices.
+
+This is a code-level hardening step, not yet proof that the QuantConnect cloud run produced the expected transitions. Rerun the updated probe and strategy lab in QuantConnect Cloud and compare the reported roll counts and transition dates with the documented historical mapping events. See [the roll audit](../../docs/CONTRACT_ROLL_AUDIT_2026-11-10.md).
+
 ## Run the no-trade coverage probe
 
 1. Sign in to QuantConnect and create a new **Python project** using its cloud IDE.
