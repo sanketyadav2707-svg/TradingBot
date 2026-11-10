@@ -35,6 +35,11 @@ class PaperAccountEngine:
             raise TypeError("store must be a PaperAccountStore")
         if not isinstance(risk_limits, RiskLimits):
             raise TypeError("risk_limits must be RiskLimits")
+        integrity = store.audit_integrity()
+        if not integrity["ok"]:
+            raise RuntimeError(
+                "paper_account_integrity_check_failed:" + ",".join(integrity["errors"])
+            )
         self.store = store
         self.commission = commission_per_contract_per_side_usd
         self.slippage_ticks = slippage_ticks_per_side
