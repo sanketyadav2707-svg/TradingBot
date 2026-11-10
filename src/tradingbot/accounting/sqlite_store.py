@@ -658,6 +658,9 @@ class PaperAccountStore:
         errors: list[str] = []
         warnings: list[str] = []
         with self._lock, self._connection() as connection:
+            # Keep every reconciliation query on one SQLite read snapshot even
+            # if another process is writing to the WAL-backed account.
+            connection.execute("BEGIN")
             sqlite_result = connection.execute("PRAGMA integrity_check").fetchone()[0]
             if sqlite_result != "ok":
                 errors.append("sqlite_integrity_check_failed")
@@ -810,6 +813,8 @@ class PaperAccountStore:
                 ):
                     errors.append("open_lot_fill_link_invalid")
                     break
+
+            connection.execute("COMMIT")
 
         return {
             "ok": not errors,
