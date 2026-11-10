@@ -123,6 +123,18 @@ class ORB15Result:
         losers = [t.net_pnl_usd for t in self.trades if t.net_pnl_usd < 0]
         gross_profit = sum(winners)
         gross_loss = abs(sum(losers))
+        daily: dict[date, float] = defaultdict(float)
+        weekly: dict[tuple[int, int], float] = defaultdict(float)
+        for trade in self.trades:
+            daily[trade.trading_date] += trade.net_pnl_usd
+            iso = trade.trading_date.isocalendar()
+            weekly[(iso.year, iso.week)] += trade.net_pnl_usd
+        losing_streak = longest_streak = 0
+        for trade in self.trades:
+            losing_streak = losing_streak + 1 if trade.net_pnl_usd < 0 else 0
+            longest_streak = max(longest_streak, losing_streak)
+        long_trades = sum(t.side == Side.LONG for t in self.trades)
+        short_trades = sum(t.side == Side.SHORT for t in self.trades)
         return {
             "symbol": self.symbol,
             "slippage_ticks_per_side": self.slippage_ticks_per_side,
@@ -132,13 +144,30 @@ class ORB15Result:
             "accepted_entries": self.accepted_entries,
             "cancelled_entries": self.cancelled_entries,
             "trades": len(self.trades),
+            "long_trades": long_trades,
+            "short_trades": short_trades,
+            "stop_exits": sum(t.exit_reason == "STOP" for t in self.trades),
+            "target_exits": sum(t.exit_reason == "TARGET" for t in self.trades),
+            "time_exits": sum(t.exit_reason == "TIME" for t in self.trades),
             "data_gap_forced_exits": self.data_gap_forced_exits,
             "unresolved_positions": self.unresolved_positions,
+            "total_gross_pnl_usd": round(sum(t.gross_pnl_usd for t in self.trades), 2),
+            "total_commission_usd": round(sum(t.commission_usd for t in self.trades), 2),
+            "total_slippage_usd": round(sum(t.slippage_usd for t in self.trades), 2),
             "total_net_pnl_usd": round(self.total_net_pnl_usd, 2),
             "expectancy_per_trade_usd": round(self.total_net_pnl_usd / len(self.trades), 4) if self.trades else 0.0,
+            "average_win_usd": round(sum(winners) / len(winners), 4) if winners else 0.0,
+            "average_loss_usd": round(sum(losers) / len(losers), 4) if losers else 0.0,
             "win_rate_pct": round(100 * len(winners) / len(self.trades), 2) if self.trades else 0.0,
             "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else None,
-            "max_drawdown_usd": round(self.max_drawdown_usd, 2),
+            "average_bars_held": round(sum(t.bars_held for t in self.trades) / len(self.trades), 2) if self.trades else 0.0,
+            "average_mae_usd": round(sum(t.mae_usd for t in self.trades) / len(self.trades), 4) if self.trades else 0.0,
+            "average_mfe_usd": round(sum(t.mfe_usd for t in self.trades) / len(self.trades), 4) if self.trades else 0.0,
+            "worst_day_net_pnl_usd": round(min(daily.values()), 2) if daily else 0.0,
+            "worst_week_net_pnl_usd": round(min(weekly.values()), 2) if weekly else 0.0,
+            "longest_losing_streak": longest_streak,
+            # Closed-trade equity drawdown only. This is not intraday marked-to-market DD.
+            "closed_trade_max_drawdown_usd": round(self.max_drawdown_usd, 2),
         }
 
 
