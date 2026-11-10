@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from tradingbot.api.app import create_app
 from tradingbot.api.runtime import DashboardRuntime
 from tradingbot.models import Instrument, Side
-from tradingbot.execution.router import AccountRiskSnapshot, OrderIntent
+from tradingbot.execution.router import OrderIntent
 
 
 MES = Instrument("MES", 0.25, 1.25, 5.0)
@@ -21,6 +21,7 @@ def _client(tmp_path) -> TestClient:
 def _submit_research_paper_fill(runtime, side: Side, reference_price: float, timestamp: datetime):
     """Explicit research-only test path; production default requires a verified firm profile."""
     router = runtime.paper_engine.router_for(MES, require_firm_profile=False)
+    runtime.account_store.mark_to_market({"MES": reference_price}, timestamp)
     return router.submit_entry(
         OrderIntent(
             instrument=MES,
@@ -28,13 +29,7 @@ def _submit_research_paper_fill(runtime, side: Side, reference_price: float, tim
             stop_ticks=8,
             reference_price=reference_price,
             timestamp=timestamp,
-        ),
-        AccountRiskSnapshot(
-            equity_usd=50_000,
-            peak_equity_usd=50_000,
-            daily_pnl_usd=0,
-            trades_today=0,
-        ),
+        )
     )
 
 
