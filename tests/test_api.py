@@ -135,8 +135,15 @@ def test_positions_expose_last_mark_and_timestamp_not_live_quote(tmp_path) -> No
 
 def test_completed_round_trip_flows_into_trade_and_equity_apis(tmp_path) -> None:
     runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
-    _submit_research_paper_fill(runtime, Side.LONG, 6000, T0)
-    _submit_research_paper_fill(runtime, Side.SHORT, 6002, T0 + timedelta(minutes=2))
+    # Account initialization uses the real creation time. Anchor simulated fills
+    # after that baseline so the test remains chronological regardless of when
+    # CI runs. A fixed historical timestamp can predate the initial snapshot.
+    initial_snapshot = runtime.account_store.list_equity()[0]
+    round_trip_start = datetime.fromisoformat(
+        initial_snapshot["timestamp"].replace("Z", "+00:00")
+    ) + timedelta(seconds=1)
+    _submit_research_paper_fill(runtime, Side.LONG, 6000, round_trip_start)
+    _submit_research_paper_fill(runtime, Side.SHORT, 6002, round_trip_start + timedelta(minutes=2))
 
     client = TestClient(create_app(runtime))
     trades = client.get("/api/v1/trades").json()
