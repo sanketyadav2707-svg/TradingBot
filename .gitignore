@@ -13,3 +13,13 @@ logs/
 *.db
 .DS_Store
 .vscode/
+
+# Python build and editable-install metadata
+/build/
+/src/*.egg-info/
+
+# Next.js generated output and local frontend dependencies
+/web/.next/
+/web/node_modules/
+/web/tsconfig.tsbuildinfo
+/web/build-error.log
