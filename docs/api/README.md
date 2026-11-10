@@ -55,7 +55,7 @@ Accounting uses Decimal arithmetic serialized as text. Each fill is recorded tra
 | `GET /api/v1/trades` | Closed FIFO lot matches, newest first, with fees and net P&L. |
 | `GET /api/v1/paper/fills` | Persisted fills, newest first. |
 | `GET /api/v1/performance/equity` | Persisted equity snapshots filtered by requested period. |
-| `GET /api/v1/risk/snapshot` | Configured research limits and account position count. Risk gate remains UNKNOWN without an active strategy-session evaluation. |
+| `GET /api/v1/risk/snapshot` | Configured research limits, account position count, and durable emergency-halt latch. Risk gate remains UNKNOWN without an active strategy-session evaluation. |
 | `GET /api/v1/events` | Account initialization, fill, mark and trade-close events. |
 
 All routes are GET-only. No order placement, risk mutation, strategy start/stop, live mode, or broker connection endpoint is exposed.
@@ -69,6 +69,7 @@ All routes are GET-only. No order placement, risk mutation, strategy start/stop,
 - The risk gate remains UNKNOWN. Configured risk values are illustrative defaults, not verified prop-firm rules and are not enforced automatically by this API.
 - No broker is instantiated and no strategy is started when the API launches. A paper broker exists only when an orchestrator explicitly requests it from `PaperAccountEngine`.
 - The browser receives no broker credentials or secret environment variables.
+- The engine-wide emergency halt is a durable one-way SQLite latch. It blocks existing and newly-created routers, survives API restarts, and is visible in the read-only risk snapshot. No dashboard or API clear operation exists; recovery requires an offline account review and explicit database-level procedure.
 - Database files, WAL files and local account history must not be committed to Git.
 
 ## Contract and tests
