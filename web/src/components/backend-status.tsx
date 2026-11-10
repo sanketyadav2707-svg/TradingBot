@@ -100,7 +100,8 @@ export function BackendStatusPanel() {
     };
   }, []);
 
-  const online = health?.status === "ok";
+  const online = health !== null && health.status !== "error";
+  const healthTone = health?.status === "ok" ? "green" : health ? "amber" : loading ? "slate" : "red";
   const runtimeMode = summary?.meta.environment ?? "UNKNOWN";
   const riskGate = risk?.gate ?? "UNKNOWN";
   const symbols = instruments?.availability === "AVAILABLE"
@@ -126,8 +127,8 @@ export function BackendStatusPanel() {
               ? "border-slate-700 bg-slate-800/60 text-slate-300"
               : "border-rose-400/20 bg-rose-400/[.06] text-rose-300"
         }`}>
-          <StateDot tone={online ? "green" : loading ? "slate" : "red"} />
-          {online ? "API ONLINE" : loading ? "CONNECTING" : "API OFFLINE"}
+          <StateDot tone={healthTone} />
+          {health?.status === "ok" ? "API ONLINE" : health?.status === "degraded" ? "API DEGRADED" : loading ? "CONNECTING" : "API OFFLINE"}
         </div>
       </div>
 
@@ -158,7 +159,7 @@ export function BackendStatusPanel() {
         <Stat
           label="RISK GATE"
           value={riskGate}
-          detail={risk?.daily_loss_limit ? `Configured daily cap: $${risk.daily_loss_limit.amount}` : "No evaluated account snapshot"}
+          detail={risk?.daily_loss_limit ? `Research default: ${risk.daily_loss_limit.amount} · not enforced` : "No evaluated account snapshot"}
           tone={riskGate === "PASS" ? "green" : riskGate === "BLOCK" ? "red" : "amber"}
         />
         <Stat
