@@ -50,7 +50,10 @@ class PaperAccountEngine:
         )
         self._brokers: dict[str, PaperBroker] = {}
         self._lock = threading.RLock()
+        self._execution_lock = threading.RLock()
         self._halt_event = threading.Event()
+        if self.store.emergency_halt_active:
+            self._halt_event.set()
 
     def _broker_for(self, instrument: Instrument) -> PaperBroker:
         if not isinstance(instrument, Instrument):
@@ -108,20 +111,23 @@ class PaperAccountEngine:
             require_firm_profile=require_firm_profile,
             account_snapshot_provider=account_snapshot_provider,
             halt_check=self._halt_event.is_set,
+            submission_lock=self._execution_lock,
         )
 
-    def emergency_halt(self) -> None:
-        """Block every existing and future router created by this engine.
+    def emergency_halt(self, reason: str = "manual_emergency_halt") -> None:
+        """Durably block all routers, waiting for any in-flight paper submission.
 
-        The halt is intentionally one-way for this process. Restarting the API
-        does not start a strategy or broker; an orchestrator must explicitly
-        reconstruct and review the paper engine before creating new routers.
+        The SQLite latch is one-way. No method or API route clears it. A manual
+        database-level recovery procedure with account reconciliation is required
+        before a new paper account can resume execution.
         """
-        self._halt_event.set()
+        with self._execution_lock:
+            self._halt_event.set()
+            self.store.activate_emergency_halt(reason)
 
     @property
     def halted(self) -> bool:
-        return self._halt_event.is_set()
+        return self._halt_event.is_set() or self.store.emergency_halt_active
 
     @property
     def active_symbols(self) -> tuple[str, ...]:
