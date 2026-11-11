@@ -187,3 +187,91 @@ def audit_contract_rolls(
             "It does not independently establish the provider's continuous mapping rule."
         ),
     }
+
+
+def select_mapped_raw_contract_bars(
+    bars: Iterable[RawFuturesBar],
+    events: Iterable[ContractRollEvent],
+    *,
+    expected_root_symbol: str,
+) -> tuple[list[RawFuturesBar], dict[str, Any]]:
+    """Select the explicitly mapped active expiry at each timestamp.
+
+    The first event's old contract is the initial active contract. Each event
+    switches the active identity to its new contract at event_time (inclusive).
+    Concurrent non-active expiry bars are excluded only after the complete
+    source-backed mapping chain passes audit. No mapping is inferred from volume,
+    open interest, ticker suffix, or price continuity.
+    """
+    rows = list(bars)
+    roll_events = list(events)
+    if not rows:
+        raise ValueError("Cannot select a mapped contract from an empty dataset")
+    if not roll_events:
+        raise ValueError(
+            "At least one source-backed roll event is required to establish the active contract mapping"
+        )
+
+    audit = audit_contract_rolls(
+        rows, roll_events, expected_root_symbol=expected_root_symbol
+    )
+    if audit["status"] != "verified_against_supplied_events":
+        raise ValueError(
+            "Raw contract mapping failed audit; refusing to select an active expiry: "
+            + json.dumps(audit["issues"], sort_keys=True)
+        )
+
+    transitions = [
+        (
+            event.event_time.astimezone(timezone.utc),
+            event.new_contract_symbol.strip().upper(),
+            event.new_instrument_id.strip(),
+        )
+        for event in roll_events
+    ]
+    initial = (
+        roll_events[0].old_contract_symbol.strip().upper(),
+        roll_events[0].old_instrument_id.strip(),
+    )
+    selected: list[RawFuturesBar] = []
+    excluded = 0
+    for bar in rows:
+        instant = bar.timestamp.astimezone(timezone.utc)
+        active = initial
+        for event_time, contract_symbol, instrument_id in transitions:
+            if instant < event_time:
+                break
+            active = (contract_symbol, instrument_id)
+        observed = (bar.contract_symbol.strip().upper(), bar.instrument_id.strip())
+        if observed == active:
+            selected.append(bar)
+        else:
+            excluded += 1
+
+    if not selected:
+        raise ValueError("No bars remain after applying the explicit contract mapping")
+    if any(
+        selected[index].timestamp.astimezone(timezone.utc)
+        < selected[index - 1].timestamp.astimezone(timezone.utc)
+        for index in range(1, len(selected))
+    ):
+        raise ValueError("Selected mapped raw bars are not chronological")
+
+    report = {
+        "status": "explicit_mapping_applied",
+        "root_symbol": expected_root_symbol.strip().upper(),
+        "initial_active_contract": {
+            "contract_symbol": initial[0],
+            "instrument_id": initial[1],
+        },
+        "roll_event_count": len(roll_events),
+        "selected_bar_count": len(selected),
+        "excluded_non_active_contract_bar_count": excluded,
+        "roll_audit": audit,
+        "mapping_rule": "first event old contract until event_time; each new contract active at event_time inclusive",
+        "important_note": (
+            "Active expiry selection is only as trustworthy as the supplied source-backed roll events. "
+            "This does not independently prove the provider's continuous mapping methodology."
+        ),
+    }
+    return selected, report
