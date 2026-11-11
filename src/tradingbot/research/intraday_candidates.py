@@ -318,3 +318,57 @@ def run_candidate_matrix(
                 slippage_ticks_per_side=slippage, config=config,
             )
     return output
+
+
+def write_candidate_matrix_report(
+    path,
+    *,
+    metadata: dict,
+    results: dict[str, CandidateResult],
+):
+    """Write a reproducible exploratory report for the common candidate matrix."""
+    import json
+    from pathlib import Path
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "research_mode": "EXPLORATORY_CONTINUOUS_FUTURES_ONLY",
+        "not_raw_contract_data": True,
+        "metadata": metadata,
+        "candidates": {
+            key: {
+                "metrics": result.metrics(),
+                "rejection_reasons": dict(result.rejection_reasons),
+                "trades": [
+                    {
+                        "strategy": trade.strategy,
+                        "symbol": trade.symbol,
+                        "contract_id": trade.contract_id,
+                        "trading_date": trade.trading_date.isoformat(),
+                        "side": trade.side.name,
+                        "signal_time": trade.signal_time.isoformat(),
+                        "entry_time": trade.entry_time.isoformat(),
+                        "exit_time": trade.exit_time.isoformat(),
+                        "entry_price": trade.entry_price,
+                        "stop_price": trade.stop_price,
+                        "target_price": trade.target_price,
+                        "exit_price": trade.exit_price,
+                        "exit_reason": trade.exit_reason,
+                        "gross_pnl_usd": trade.gross_pnl_usd,
+                        "commission_usd": trade.commission_usd,
+                        "slippage_usd": trade.slippage_usd,
+                        "net_pnl_usd": trade.net_pnl_usd,
+                        "bars_held": trade.bars_held,
+                    }
+                    for trade in result.trades
+                ],
+            }
+            for key, result in results.items()
+        },
+        "interpretation": (
+            "Exploratory five-day continuous-data smoke test only. "
+            "Not raw-contract validation, profitability evidence or live execution proof."
+        ),
+    }
+    destination.write_text(json.dumps(payload, indent=2) + chr(10), encoding="utf-8")
+    return destination
