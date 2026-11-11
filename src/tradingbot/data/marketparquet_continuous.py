@@ -160,5 +160,5 @@ def write_continuous_research_report(
             "claim raw-contract performance, contract-roll correctness or profitability."
         ),
     }
-    destination.write_text(json.dumps(payload, indent=2) + "\\n", encoding="utf-8")
+    destination.write_text(json.dumps(payload, indent=2) + chr(10), encoding="utf-8")
     return destination
