@@ -101,6 +101,14 @@ The focused workflow also reruns existing raw-data, generic loader/audit, Databe
 - No spread, bid/ask, queue, tick-level fill or live feed is available from this work.
 - This does not close the Phase 1 equity-history full-suite failure.
 
+## CI verification (11 November 2026)
+
+- Focused Phase 2 session/roll/provider/ORB/CLI workflow: **50 passed**.
+- Run: https://github.com/sanketyadav2707-svg/TradingBot/actions/runs/43000741581
+- Full Python/API workflow: API installation and smoke test passed; **154 passed, 1 failed**.
+- The sole failure remains the known, unrelated Phase 1 equity-history defect in `tests/test_api.py::test_completed_round_trip_flows_into_trade_and_equity_apis`: final persisted equity history is USD 50,000.00 while the account summary is USD 50,007.50. No Phase 2 files change the account snapshot logic.
+- Full run: https://github.com/sanketyadav2707-svg/TradingBot/actions/runs/43000741606
+
 ## Acceptance
 
-The second half is implementation-complete only if the focused Phase 2 CI passes. The full repository workflow is separately reported. Real-data validation remains pending until a permitted raw-contract dataset and its source-backed roll events are supplied or retrieved under the applicable data entitlement.
+The Phase 2 second-half focused tests and ORB15 regression suite pass. The full repository gate remains blocked by the known Phase 1 equity-history failure. Real-data validation remains pending until a permitted raw-contract dataset and its source-backed roll events are supplied or retrieved under the applicable data entitlement.
