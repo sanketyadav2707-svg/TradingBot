@@ -147,6 +147,11 @@ def test_contract_roll_audit_flags_missing_event_new_bar_and_broken_chain() -> N
     assert "broken_mapping_chain" in issue_types
 
 
+def test_raw_identity_rejects_nan_provider_placeholders() -> None:
+    with pytest.raises(ValueError, match="null placeholder"):
+        raw_bar(T0, "nan", "101")
+
+
 def test_databento_continuous_csv_adapter_preserves_raw_contract_ids(tmp_path) -> None:
     path = tmp_path / "databento.csv"
     path.write_text(
