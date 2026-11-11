@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -180,4 +181,17 @@ def test_orb15_adapter_keeps_contract_identity_and_rejects_closed_session() -> N
             closed,
             instrument=Instrument("MES", 0.25, 1.25, 5.0),
             calendar=calendar(),
+        )
+
+
+def test_committed_cme_calendar_has_coverage_and_fail_closed_holiday_windows() -> None:
+    root = Path(__file__).resolve().parents[1]
+    cal = ExchangeSessionCalendar.from_json(
+        root / "config" / "calendars" / "cme_equity_index_2026.json"
+    )
+    assert cal.coverage_start == date(2025, 11, 4)
+    assert cal.coverage_end == date(2026, 12, 31)
+    with pytest.raises(CalendarCoverageError, match="needs a verified"):
+        cal.is_trading_timestamp(
+            datetime(2026, 11, 26, 9, 0, tzinfo=__import__("zoneinfo").ZoneInfo(CT))
         )
