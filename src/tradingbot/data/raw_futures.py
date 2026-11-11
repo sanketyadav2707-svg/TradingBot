@@ -44,12 +44,13 @@ class RawFuturesBar:
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None or self.timestamp.utcoffset() is None:
             raise DataValidationError("Raw futures timestamp must be timezone-aware")
-        if not self.root_symbol.strip():
-            raise DataValidationError("root_symbol cannot be empty")
-        if not self.contract_symbol.strip():
-            raise DataValidationError("contract_symbol cannot be empty")
-        if not self.instrument_id.strip():
-            raise DataValidationError("instrument_id cannot be empty")
+        invalid_identity_values = {"", "nan", "none", "null", "<na>", "nat"}
+        if self.root_symbol.strip().lower() in invalid_identity_values:
+            raise DataValidationError("root_symbol cannot be empty or a null placeholder")
+        if self.contract_symbol.strip().lower() in invalid_identity_values:
+            raise DataValidationError("contract_symbol cannot be empty or a null placeholder")
+        if self.instrument_id.strip().lower() in invalid_identity_values:
+            raise DataValidationError("instrument_id cannot be empty or a null placeholder")
         if type(self.interval_seconds) is not int or self.interval_seconds <= 0:
             raise DataValidationError("interval_seconds must be a positive integer")
         prices = (self.open, self.high, self.low, self.close)
@@ -130,6 +131,37 @@ def load_raw_futures_csv(
         expected_interval_seconds=interval_seconds,
     )
     return rows
+
+
+def write_raw_futures_csv(
+    path: str | Path,
+    bars: Iterable[RawFuturesBar],
+) -> Path:
+    """Write canonical raw-contract CSV without changing row order or prices."""
+    destination = Path(path)
+    rows = list(bars)
+    validate_raw_futures_bars(rows)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    columns = [
+        "timestamp", "root_symbol", "contract_symbol", "instrument_id",
+        "open", "high", "low", "close", "volume",
+    ]
+    with destination.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=columns)
+        writer.writeheader()
+        for bar in rows:
+            writer.writerow({
+                "timestamp": _utc_text(bar.timestamp),
+                "root_symbol": bar.root_symbol.strip().upper(),
+                "contract_symbol": bar.contract_symbol.strip().upper(),
+                "instrument_id": bar.instrument_id.strip(),
+                "open": repr(float(bar.open)),
+                "high": repr(float(bar.high)),
+                "low": repr(float(bar.low)),
+                "close": repr(float(bar.close)),
+                "volume": repr(float(bar.volume)),
+            })
+    return destination
 
 
 def _utc(value: datetime) -> datetime:
