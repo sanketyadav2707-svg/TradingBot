@@ -146,7 +146,7 @@ def _vwap_signal(bars: list[ORBBar], i: int, vwap: list[float], cfg: CandidateCo
 def _compression_signal(bars: list[ORBBar], i: int, cfg: CandidateConfig, tick: float):
     local = bars[i].timestamp.astimezone(ZoneInfo(cfg.timezone)).time().replace(tzinfo=None)
     lookback, baseline = cfg.compression_lookback, cfg.compression_baseline
-    if local < cfg.session_start or local >= cfg.signal_end or i < lookback + baseline:
+    if local < cfg.session_start or local >= cfg.signal_end or i < baseline + 2 * lookback - 1:
         return None
     prior = bars[i - lookback:i]
     baseline_ranges = [
