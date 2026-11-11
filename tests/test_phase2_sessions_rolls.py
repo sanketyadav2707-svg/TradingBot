@@ -200,3 +200,18 @@ def test_committed_cme_calendar_has_coverage_and_fail_closed_holiday_windows() -
         cal.is_trading_timestamp(
             datetime(2026, 11, 26, 9, 0, tzinfo=__import__("zoneinfo").ZoneInfo(CT))
         )
+
+
+def test_orb15_adapter_rejects_concurrent_expiry_bars_without_mapping_selection() -> None:
+    tz = __import__("zoneinfo").ZoneInfo(CT)
+    stamp = datetime(2026, 1, 5, 8, 30, tzinfo=tz)
+    bars = [
+        raw_bar(stamp, "MESH6", "101"),
+        raw_bar(stamp, "MESM6", "102"),
+    ]
+    with pytest.raises(ValueError, match="exactly one mapped raw contract"):
+        raw_futures_to_orb15_bars(
+            bars,
+            instrument=Instrument("MES", 0.25, 1.25, 5.0),
+            calendar=calendar(),
+        )
