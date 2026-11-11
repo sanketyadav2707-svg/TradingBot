@@ -239,7 +239,7 @@ def main() -> None:
         encoded = json.dumps(payload, indent=2)
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(encoded + "\\n", encoding="utf-8")
+            args.output.write_text(encoded + "\n", encoding="utf-8")
         print(encoded)
         return
 
@@ -265,7 +265,6 @@ def main() -> None:
                 "source_url": calendar.source_url,
             }
             report["calendar_gap_classifications"] = []
-            from datetime import datetime
             for gap in report["gaps"]:
                 previous = datetime.fromisoformat(gap["from_utc"].replace("Z", "+00:00"))
                 current = datetime.fromisoformat(gap["to_utc"].replace("Z", "+00:00"))
