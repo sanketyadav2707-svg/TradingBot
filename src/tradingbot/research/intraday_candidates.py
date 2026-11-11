@@ -372,3 +372,113 @@ def write_candidate_matrix_report(
     }
     destination.write_text(json.dumps(payload, indent=2) + chr(10), encoding="utf-8")
     return destination
+
+
+def run_candidate_matrix_on_raw_contracts(
+    raw_bars,
+    instrument: Instrument,
+    *,
+    calendar,
+    roll_events,
+    slippage_scenarios: tuple[int, ...] = (0, 1, 2),
+    config: CandidateConfig | None = None,
+):
+    """Audit and explicitly map raw expiry bars before running the candidate matrix.
+
+    Returns results plus data lineage metadata. Mapping fails closed if the
+    supplied roll events do not explain every observed contract identity.
+    """
+    from tradingbot.data.orb15_adapter import raw_futures_to_orb15_bars
+    from tradingbot.data.rolls import select_mapped_raw_contract_bars
+
+    selected, mapping_report = select_mapped_raw_contract_bars(
+        raw_bars,
+        roll_events,
+        expected_root_symbol=instrument.symbol,
+    )
+    research_bars = raw_futures_to_orb15_bars(
+        selected,
+        instrument=instrument,
+        calendar=calendar,
+    )
+    results = run_candidate_matrix(
+        research_bars,
+        instrument,
+        slippage_scenarios=slippage_scenarios,
+        config=config,
+    )
+    return results, {
+        "provider": "user_supplied_raw_contract_csv",
+        "schema": "canonical-raw-futures-ohlcv-1m",
+        "source_price_basis": "raw_expiry_contract",
+        "contract_identity": "explicit_contract_symbol_and_instrument_id",
+        "calendar": {
+            "name": calendar.calendar_name,
+            "timezone": calendar.timezone_name,
+            "source_url": calendar.source_url,
+            "coverage_start": calendar.coverage_start.isoformat(),
+            "coverage_end": calendar.coverage_end.isoformat(),
+        },
+        "raw_row_count": len(raw_bars),
+        "mapped_row_count": len(selected),
+        "research_bar_count": len(research_bars),
+        "first_timestamp": research_bars[0].timestamp.isoformat(),
+        "last_timestamp": research_bars[-1].timestamp.isoformat(),
+        "contract_mapping": mapping_report,
+        "limitations": [
+            "Raw contract identity is preserved and selected using supplied source-backed roll events.",
+            "Roll-event correctness remains dependent on the source evidence supplied by the user.",
+            "OHLC minute bars cannot reconstruct intrabar tick path, bid/ask spread, queue priority or actual fills.",
+            "A raw-contract dataset with concurrent expiries must include a complete mapping event chain.",
+        ],
+    }
+
+
+def write_raw_candidate_matrix_report(path, *, metadata, results):
+    """Write candidate metrics with explicit raw-contract provenance."""
+    import json
+    from pathlib import Path
+
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "research_mode": "RAW_EXPIRY_CONTRACT_RESEARCH",
+        "not_raw_contract_data": False,
+        "metadata": metadata,
+        "candidates": {
+            key: {
+                "metrics": result.metrics(),
+                "rejection_reasons": dict(result.rejection_reasons),
+                "trades": [
+                    {
+                        "strategy": trade.strategy,
+                        "symbol": trade.symbol,
+                        "contract_id": trade.contract_id,
+                        "trading_date": trade.trading_date.isoformat(),
+                        "side": trade.side.name,
+                        "signal_time": trade.signal_time.isoformat(),
+                        "entry_time": trade.entry_time.isoformat(),
+                        "exit_time": trade.exit_time.isoformat(),
+                        "entry_price": trade.entry_price,
+                        "stop_price": trade.stop_price,
+                        "target_price": trade.target_price,
+                        "exit_price": trade.exit_price,
+                        "exit_reason": trade.exit_reason,
+                        "gross_pnl_usd": trade.gross_pnl_usd,
+                        "commission_usd": trade.commission_usd,
+                        "slippage_usd": trade.slippage_usd,
+                        "net_pnl_usd": trade.net_pnl_usd,
+                        "bars_held": trade.bars_held,
+                    }
+                    for trade in result.trades
+                ],
+            }
+            for key, result in results.items()
+        },
+        "interpretation": (
+            "Raw expiry-contract identity was retained and mapped using supplied roll events. "
+            "This is not tick-level execution validation or profitability proof."
+        ),
+    }
+    destination.write_text(json.dumps(payload, indent=2) + chr(10), encoding="utf-8")
+    return destination
