@@ -1,13 +1,31 @@
 {
   "calendar_name": "CME Globex equity index futures 2026 baseline with fail-closed holiday windows",
   "timezone": "America/Chicago",
-  "coverage_start": "2026-01-01",
+  "coverage_start": "2025-11-04",
   "coverage_end": "2026-12-31",
   "session_start": "17:00",
   "session_end": "16:00",
-  "trade_weekdays": [0, 1, 2, 3, 4],
+  "trade_weekdays": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
   "source_url": "https://www.cmegroup.com/trading-hours.html",
   "review_required_ranges": [
+    {
+      "start": "2025-11-26",
+      "end": "2025-11-28",
+      "source_url": "https://www.cmegroup.com/trading-hours.html",
+      "note": "2025 Thanksgiving holiday. Product-specific holiday hours must be verified before classifying this window."
+    },
+    {
+      "start": "2025-12-15",
+      "end": "2026-01-02",
+      "source_url": "https://www.cmegroup.com/trading-hours.html",
+      "note": "CME published Christmas and New Year holiday window. Product-specific hours must be verified before classifying this window."
+    },
     {
       "start": "2026-01-01",
       "end": "2026-01-02",
