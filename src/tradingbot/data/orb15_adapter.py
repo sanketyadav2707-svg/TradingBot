@@ -29,7 +29,15 @@ def raw_futures_to_orb15_bars(
         expected_interval_seconds=60,
     )
     converted: list[ORBBar] = []
+    seen_timestamps = set()
     for bar in rows:
+        instant = bar.timestamp.astimezone()
+        if instant in seen_timestamps:
+            raise ValueError(
+                "ORB15 requires exactly one mapped raw contract bar per timestamp; "
+                "filter concurrent expiries using the source mapping events first"
+            )
+        seen_timestamps.add(instant)
         try:
             if not calendar.is_trading_timestamp(bar.timestamp):
                 raise CalendarCoverageError(
