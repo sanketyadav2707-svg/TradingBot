@@ -53,6 +53,7 @@ It preserves contract symbol and instrument ID and validates the result against 
 Added `raw_futures_to_orb15_bars()` and `run_orb15_from_raw_futures()`. They:
 - require one root and one-minute canonical raw bars;
 - require every bar timestamp to fall within a configured calendar interval;
+- reject timestamps with concurrent expiry bars unless the source mapping has first selected exactly one active contract;
 - encode both contract symbol and provider instrument ID into ORB15 contract identity;
 - preserve original timestamps and OHLCV;
 - do not resample, sort, fill-forward or bridge missing intervals.
@@ -169,7 +170,7 @@ The focused workflow also reruns existing raw-data, generic loader/audit, Databe
 
 ## CI verification (11 November 2026)
 
-- Focused Phase 2 session/roll/provider/ORB/CLI workflow: **53 passed**.
+- Focused Phase 2 session/roll/provider/ORB/CLI workflow: **53 passed** (before the final duplicate-expiry guard regression was added; final-head rerun is tracked in the PR checks).
 - Run: https://github.com/sanketyadav2707-svg/TradingBot/actions/runs/43001144676
 - Full Python/API workflow: API installation and smoke test passed; **157 passed, 1 failed**.
 - The sole failure remains the known, unrelated Phase 1 equity-history defect in `tests/test_api.py::test_completed_round_trip_flows_into_trade_and_equity_apis`: final persisted equity history is USD 50,000.00 while the account summary is USD 50,007.50. No Phase 2 files change the account snapshot logic.
