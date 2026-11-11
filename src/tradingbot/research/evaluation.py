@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any\nfrom zoneinfo import ZoneInfo
 
 from tradingbot.models import Instrument
 from tradingbot.research.intraday_candidates import CandidateConfig, run_candidate_matrix
@@ -53,7 +53,7 @@ def evaluate_frozen_strategy_set(
             "last_timestamp": bars[-1].timestamp.isoformat(),
             "contract_ids": sorted({bar.contract_id for bar in bars}),
             "unique_trading_dates": len({
-                bar.timestamp.astimezone(__import__("zoneinfo").ZoneInfo(timezone_name)).date()
+                bar.timestamp.astimezone(ZoneInfo(timezone_name)).date()
                 for bar in bars
             }),
         },
