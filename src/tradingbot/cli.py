@@ -14,13 +14,15 @@ from tradingbot.data.audit import audit_bars
 from tradingbot.data.csv_loader import load_bars
 from tradingbot.data.sessions import ExchangeSessionCalendar
 from tradingbot.data.provider_adapters import load_databento_continuous_ohlcv_csv
-from tradingbot.data.rolls import audit_contract_rolls, load_contract_roll_events_json
+from tradingbot.data.rolls import audit_contract_rolls, load_contract_roll_events_json, select_mapped_raw_contract_bars
 from tradingbot.data.orb15_adapter import run_orb15_from_raw_futures
 from tradingbot.data.marketparquet_continuous import (
     load_marketparquet_continuous_parquet,
     write_continuous_research_report,
 )
 from tradingbot.research.orb15 import run_orb15
+from tradingbot.research.evaluation import evaluate_frozen_strategy_set, write_evaluation_report
+from tradingbot.data.orb15_adapter import raw_futures_to_orb15_bars
 from tradingbot.research.intraday_candidates import (
     run_candidate_matrix,
     write_candidate_matrix_report,
@@ -97,6 +99,18 @@ def _build_parser() -> argparse.ArgumentParser:
     convert_databento.add_argument("--output", required=True, type=Path)
     convert_databento.add_argument("--symbol", required=True)
     convert_databento.add_argument("--interval-seconds", type=int, default=60)
+
+    phase3_eval = sub.add_parser(
+        "evaluate-strategies-raw",
+        help="Evaluate frozen ORB15, VWAP and compression strategies on raw contracts with a protected 90-day holdout",
+    )
+    phase3_eval.add_argument("--csv", required=True, type=Path)
+    phase3_eval.add_argument("--symbol", required=True, choices=["MES", "MNQ"])
+    phase3_eval.add_argument("--calendar", required=True, type=Path)
+    phase3_eval.add_argument("--roll-events", required=True, type=Path)
+    phase3_eval.add_argument("--config-dir", type=Path, default=Path("config"))
+    phase3_eval.add_argument("--holdout-calendar-days", type=int, default=90)
+    phase3_eval.add_argument("--output", required=True, type=Path)
 
     roll_audit = sub.add_parser(
         "audit-rolls",
@@ -230,6 +244,48 @@ def main() -> None:
             "source_price_basis": metadata["source_price_basis"],
             "contract_identity": metadata["contract_identity"],
             "warning": "Continuous ratio-adjusted data only; not raw-contract validation.",
+        }, indent=2))
+        return
+
+    if args.command == "evaluate-strategies-raw":
+        calendar = ExchangeSessionCalendar.from_json(args.calendar)
+        raw_bars = load_raw_futures_csv(
+            args.csv, expected_root_symbol=args.symbol, interval_seconds=60
+        )
+        roll_events = load_contract_roll_events_json(args.roll_events)
+        mapped_bars, mapping_report = select_mapped_raw_contract_bars(
+            raw_bars, roll_events, expected_root_symbol=args.symbol
+        )
+        instruments_config = _load_toml(args.config_dir / "instruments.toml")
+        raw_instrument = instruments_config["instruments"].get(args.symbol)
+        if raw_instrument is None:
+            raise SystemExit(f"No instrument configuration for {args.symbol}")
+        instrument = Instrument(
+            symbol=args.symbol,
+            tick_size=float(raw_instrument["tick_size"]),
+            tick_value_usd=float(raw_instrument["tick_value_usd"]),
+            point_value_usd=float(raw_instrument["point_value_usd"]),
+        )
+        research_bars = raw_futures_to_orb15_bars(
+            mapped_bars, instrument=instrument, calendar=calendar
+        )
+        report = evaluate_frozen_strategy_set(
+            research_bars, instrument,
+            holdout_calendar_days=args.holdout_calendar_days,
+        )
+        report["data"]["provider"] = "user_supplied_raw_contract_csv"
+        report["data"]["source_file"] = str(args.csv)
+        report["data"]["roll_events_file"] = str(args.roll_events)
+        report["data"]["contract_mapping"] = mapping_report
+        report_path = write_evaluation_report(args.output, report)
+        print(json.dumps({
+            "status": "frozen_strategy_evaluation_written",
+            "report": str(report_path),
+            "symbol": args.symbol,
+            "split": report["split"],
+            "strategies": ["orb15", "vwap_pullback", "compression_breakout"],
+            "slippage_scenarios": [0, 1, 2],
+            "warning": "Raw 1-minute OHLC research only. Holdout results must not be used for parameter tuning.",
         }, indent=2))
         return
 
