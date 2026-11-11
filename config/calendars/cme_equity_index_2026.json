@@ -1,0 +1,79 @@
+{
+  "calendar_name": "CME Globex equity index futures 2026 baseline with fail-closed holiday windows",
+  "timezone": "America/Chicago",
+  "coverage_start": "2026-01-01",
+  "coverage_end": "2026-12-31",
+  "session_start": "17:00",
+  "session_end": "16:00",
+  "trade_weekdays": [0, 1, 2, 3, 4],
+  "source_url": "https://www.cmegroup.com/trading-hours.html",
+  "review_required_ranges": [
+    {
+      "start": "2026-01-01",
+      "end": "2026-01-02",
+      "source_url": "https://www.cmegroup.com/trading-hours.html",
+      "note": "CME 2026 New Year's holiday window. Obtain the exact equity-index product session override before classifying bars."
+    },
+    {
+      "start": "2026-01-18",
+      "end": "2026-01-20",
+      "source_url": "https://www.cmegroup.com/trading-hours.html",
+      "note": "CME 2026 Martin Luther King Jr. holiday window. Exact product session hours require confirmation."
+    },
+    {
+      "start": "2026-02-15",
+      "end": "2026-02-17",
+      "source_url": "https://www.cmegroup.com/trading-hours.html",
+      "note": "CME 2026 Presidents Day holiday window. Exact product session hours require confirmation."
+    },
+    {
+      "start": "2026-04-02",
+      "end": "2026-04-04",
+      "source_url": "https://www.cmegroup.com/trading-hours.html",
+      "note": "CME 2026 Good Friday holiday window. Exact product session hours require confirmation."
+    },
+    {
+      "start": "2026-05-24",
+      "end": "2026-05-26",
+      "source_url": "https://www.cmegroup.com/trading-hours.html",
+      "note": "CME 2026 Memorial Day holiday window. Exact product session hours require confirmation."
+    },
+    {
+      "start": "2026-06-18",
+      "end": "2026-06-19",
+      "source_url": "https://www.cmegroup.com/trading-hours.html",
+      "note": "CME 2026 Juneteenth holiday window. Exact product session hours require confirmation."
+    },
+    {
+      "start": "2026-07-03",
+      "end": "2026-07-05",
+      "source_url": "https://www.cmegroup.com/trading-hours.html",
+      "note": "CME 2026 Independence Day holiday window. Exact product session hours require confirmation."
+    },
+    {
+      "start": "2026-09-06",
+      "end": "2026-09-08",
+      "source_url": "https://www.cmegroup.com/trading-hours.html",
+      "note": "CME 2026 Labor Day holiday window. Exact product session hours require confirmation."
+    },
+    {
+      "start": "2026-11-26",
+      "end": "2026-11-28",
+      "source_url": "https://www.cmegroup.com/trading-hours.html",
+      "note": "CME 2026 Thanksgiving holiday window. Exact product session hours require confirmation."
+    },
+    {
+      "start": "2026-12-24",
+      "end": "2026-12-26",
+      "source_url": "https://www.cmegroup.com/trading-hours.html",
+      "note": "CME 2026 Christmas holiday window. Exact product session hours require confirmation."
+    },
+    {
+      "start": "2026-12-31",
+      "end": "2026-12-31",
+      "source_url": "https://www.cmegroup.com/trading-hours.html",
+      "note": "CME 2026-2027 New Year's holiday window. Exact product session hours require confirmation."
+    }
+  ],
+  "exceptions": []
+}
