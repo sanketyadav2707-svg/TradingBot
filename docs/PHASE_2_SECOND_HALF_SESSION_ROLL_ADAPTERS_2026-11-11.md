@@ -59,9 +59,75 @@ Added `raw_futures_to_orb15_bars()` and `run_orb15_from_raw_futures()`. They:
 
 This connects the validated data model to the existing deterministic ORB15 simulator. It does not itself run a real historical dataset or generate a performance claim.
 
-## 6. CLI
+## 6. End-to-end local CLI workflows
 
-Example:
+### Convert an existing Databento CSV
+
+```bash
+python -m tradingbot convert-databento-csv \
+  --input data/raw/MES_databento_continuous.csv \
+  --output data/raw/MES_canonical_raw.csv \
+  --symbol MES
+```
+
+This step performs no network request. It preserves contract symbol and instrument ID while writing the canonical raw schema.
+
+### Validate raw data and classify gaps
+
+```bash
+python -m tradingbot validate-raw-data \
+  --csv data/raw/MES_canonical_raw.csv \
+  --symbol MES \
+  --calendar config/calendars/cme_equity_index_2026.json \
+  --manifest data/manifests/MES_1m.metadata.json
+```
+
+### Audit roll events
+
+The JSON event file must use schema version 1 and contain source-backed transitions:
+
+```json
+{
+  "schema_version": 1,
+  "events": [
+    {
+      "root_symbol": "MES",
+      "event_time": "2026-03-10T14:31:00Z",
+      "old_contract_symbol": "MESH6",
+      "old_instrument_id": "101",
+      "new_contract_symbol": "MESM6",
+      "new_instrument_id": "102",
+      "source_url": "https://provider.example/actual-roll-event"
+    }
+  ]
+}
+```
+
+Run:
+
+```bash
+python -m tradingbot audit-rolls \
+  --csv data/raw/MES_canonical_raw.csv \
+  --events data/raw/MES_roll_events.json \
+  --symbol MES
+```
+
+Do not create roll events by guessing expiry dates. Populate them from the provider's actual mapping-change records and retain the source reference.
+
+### Run the deterministic ORB15 research bridge
+
+```bash
+python -m tradingbot backtest-orb15-raw \
+  --csv data/raw/MES_canonical_raw.csv \
+  --symbol MES \
+  --calendar config/calendars/cme_equity_index_2026.json \
+  --slippage-ticks-per-side 1 \
+  --provider Databento \
+  --dataset GLBX.MDP3 \
+  --output reports/MES_ORB15_1tick.json
+```
+
+Run MES and MNQ separately and repeat for 0, 1 and 2 ticks per side. The report includes a canonical dataset SHA-256 and the ORB15 scorecard. The command is offline-only and does not submit orders.
 
 ```bash
 python -m tradingbot validate-raw-data \
