@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timezone
 from typing import Iterable
 
 from tradingbot.data.raw_futures import RawFuturesBar, validate_raw_futures_bars
@@ -31,7 +32,7 @@ def raw_futures_to_orb15_bars(
     converted: list[ORBBar] = []
     seen_timestamps = set()
     for bar in rows:
-        instant = bar.timestamp.astimezone()
+        instant = bar.timestamp.astimezone(timezone.utc)
         if instant in seen_timestamps:
             raise ValueError(
                 "ORB15 requires exactly one mapped raw contract bar per timestamp; "
