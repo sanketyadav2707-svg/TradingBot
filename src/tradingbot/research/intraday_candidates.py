@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
 from math import isfinite
 from statistics import median
 from typing import Callable
@@ -61,9 +61,9 @@ class CandidateTrade:
     contract_id: str
     trading_date: date
     side: Side
-    signal_time: object
-    entry_time: object
-    exit_time: object
+    signal_time: datetime
+    entry_time: datetime
+    exit_time: datetime
     entry_price: float
     stop_price: float
     target_price: float
@@ -199,9 +199,9 @@ def run_candidate(
     for day in sorted(by_day):
         day_bars = by_day[day]
         rth = [b for b in day_bars if cfg.session_start <= b.timestamp.astimezone(tz).time().replace(tzinfo=None) < cfg.signal_end]
-        if len(rth) < 2:
+        if len(rth) < 2 or rth[0].timestamp.astimezone(tz).time().replace(tzinfo=None) != cfg.session_start:
             invalid += 1
-            reasons["insufficient_session_bars"] += 1
+            reasons["incomplete_session_start_or_insufficient_bars"] += 1
             continue
         eligible += 1
         if any(rth[j].timestamp - rth[j - 1].timestamp != timedelta(minutes=1) for j in range(1, len(rth))):
