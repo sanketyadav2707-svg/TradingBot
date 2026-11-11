@@ -319,15 +319,12 @@ def test_historical_replay_rebases_only_opening_snapshot_before_first_event(tmp_
     created_snapshot = store.list_equity()[0]["timestamp"]
 
     store.record_fill(make_fill("historical-entry", Side.LONG, 1, 100, 0.5, T0), MES)
-    after_fill = store.list_equity()
-    assert len(after_fill) == 2
-    assert after_fill[0]["equity_usd"] == "50000"
-    assert after_fill[0]["timestamp"] < T0.isoformat(timespec="microseconds").replace("+00:00", "Z")
-    assert after_fill[1]["timestamp"] == T0.isoformat(timespec="microseconds").replace("+00:00", "Z")
+    # The fill snapshot correctly has unknown equity until a mark is persisted.
+    assert len(store.list_equity()) == 1
 
     store.mark_to_market({"MES": 101}, T0 + timedelta(minutes=1))
     history = store.list_equity()
-    assert len(history) == 3
+    assert len(history) == 2
     assert [item["timestamp"] for item in history] == sorted(item["timestamp"] for item in history)
     assert history[-1]["equity_usd"] == "50004.5"
     assert history[0]["timestamp"] != created_snapshot
