@@ -133,7 +133,7 @@ def audit_contract_rolls(
             if bar.instrument_id.strip() == new_id
             and bar.timestamp.astimezone(timezone.utc) >= event.event_time.astimezone(timezone.utc)
         ]
-        first_new = min(new_after_event, key=lambda bar: bar.timestamp) if new_after_event else None
+        first_new = min(new_after_event, key=lambda bar: bar.timestamp.astimezone(timezone.utc)) if new_after_event else None
         if first_new is None:
             issues.append({"type": "no_new_contract_bar_at_or_after_event", "at": event.event_time.isoformat()})
         transitions.append({
@@ -147,7 +147,7 @@ def audit_contract_rolls(
                 first_new.timestamp.astimezone(timezone.utc).isoformat() if first_new else None
             ),
             "seconds_until_first_new_bar": (
-                (first_new.timestamp - event.event_time).total_seconds()
+                (first_new.timestamp.astimezone(timezone.utc) - event.event_time.astimezone(timezone.utc)).total_seconds()
                 if first_new else None
             ),
         })
