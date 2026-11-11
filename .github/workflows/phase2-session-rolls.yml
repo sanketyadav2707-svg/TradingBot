@@ -2,9 +2,9 @@ name: Phase 2 session and roll validation
 
 on:
   push:
-    branches: ["feature/phase2-session-roll-adapters", "feature/marketparquet-continuous-adapter", "feature/vwap-compression-strategy-lab", "fix/paper-equity-snapshot-event-order", "feature/raw-contract-candidate-research-v2"]
+    branches: ["feature/phase2-session-roll-adapters", "feature/marketparquet-continuous-adapter", "feature/vwap-compression-strategy-lab", "fix/paper-equity-snapshot-event-order", "feature/raw-contract-candidate-research-v2", "feature/phase3-holdout-evaluation-protocol"]
   pull_request:
-    branches: ["feature/phase2-raw-data-quality", "feature/phase2-session-roll-adapters", "feature/marketparquet-continuous-adapter", "feature/vwap-compression-strategy-lab"]
+    branches: ["feature/phase2-raw-data-quality", "feature/phase2-session-roll-adapters", "feature/marketparquet-continuous-adapter", "feature/vwap-compression-strategy-lab", "feature/phase3-holdout-evaluation-protocol"]
 
 permissions:
   contents: read
