@@ -93,8 +93,8 @@ def test_raw_data_cli_includes_calendar_gap_classification(tmp_path, monkeypatch
 def test_convert_databento_csv_cli_writes_canonical_raw_contract_csv(tmp_path, monkeypatch, capsys) -> None:
     source = tmp_path / "databento.csv"
     source.write_text(
-        "timestamp,symbol,open,high,low,close,volume,contract_symbol,instrument_id\\n"
-        "2026-03-10T14:30:00Z,MES,100,101,99,100,10,MESH6,101\\n",
+        "timestamp,symbol,open,high,low,close,volume,contract_symbol,instrument_id\n"
+        "2026-03-10T14:30:00Z,MES,100,101,99,100,10,MESH6,101\n",
         encoding="utf-8",
     )
     output = tmp_path / "canonical.csv"
@@ -117,9 +117,9 @@ def test_convert_databento_csv_cli_writes_canonical_raw_contract_csv(tmp_path, m
 def test_audit_rolls_cli_loads_source_backed_event_json(tmp_path, monkeypatch, capsys) -> None:
     raw = tmp_path / "raw.csv"
     raw.write_text(
-        "timestamp,root_symbol,contract_symbol,instrument_id,open,high,low,close,volume\\n"
-        "2026-03-10T14:30:00Z,MES,MESH6,101,100,101,99,100,10\\n"
-        "2026-03-10T14:31:00Z,MES,MESM6,102,100,102,99,101,10\\n",
+        "timestamp,root_symbol,contract_symbol,instrument_id,open,high,low,close,volume\n"
+        "2026-03-10T14:30:00Z,MES,MESH6,101,100,101,99,100,10\n"
+        "2026-03-10T14:31:00Z,MES,MESM6,102,100,102,99,101,10\n",
         encoding="utf-8",
     )
     events = tmp_path / "rolls.json"
@@ -165,7 +165,7 @@ def test_backtest_orb15_raw_cli_generates_manifest_and_trade_report(tmp_path, mo
         lines.append(
             f"{stamp.isoformat()},MES,MESZ26,12345,{open_},{high},{low},{close},100"
         )
-    raw.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+    raw.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     calendar = tmp_path / "calendar.json"
     calendar.write_text(
