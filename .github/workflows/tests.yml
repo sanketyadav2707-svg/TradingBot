@@ -2,7 +2,7 @@ name: Python checks
 
 on:
   push:
-    branches: [main, "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account", "feature/contract-roll-audit", "docs/orb15-pre-registered-spec", "feature/orb15-bracket-backtester", "feature/phase2-raw-data-quality", "feature/phase2-session-roll-adapters", "feature/marketparquet-continuous-adapter"]
+    branches: [main, "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account", "feature/contract-roll-audit", "docs/orb15-pre-registered-spec", "feature/orb15-bracket-backtester", "feature/phase2-raw-data-quality", "feature/phase2-session-roll-adapters", "feature/marketparquet-continuous-adapter", "feature/vwap-compression-strategy-lab"]
   pull_request:
     branches: [main, "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account", "feature/orb15-bracket-backtester", "feature/phase2-raw-data-quality", "feature/phase2-session-roll-adapters"]
 
