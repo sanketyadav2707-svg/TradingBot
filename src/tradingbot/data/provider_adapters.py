@@ -8,6 +8,7 @@ mapping metadata has been independently certified.
 from __future__ import annotations
 
 import csv
+from datetime import datetime
 from pathlib import Path
 
 from tradingbot.data.raw_futures import RawFuturesBar, validate_raw_futures_bars
@@ -49,7 +50,7 @@ def load_databento_continuous_ohlcv_csv(
                 normalized = raw_stamp[:-1] + "+00:00" if raw_stamp.endswith("Z") else raw_stamp
                 bars.append(
                     RawFuturesBar(
-                        timestamp=__import__("datetime").datetime.fromisoformat(normalized),
+                        timestamp=datetime.fromisoformat(normalized),
                         root_symbol=row["symbol"],
                         contract_symbol=row["contract_symbol"],
                         instrument_id=row["instrument_id"],
@@ -67,8 +68,9 @@ def load_databento_continuous_ohlcv_csv(
                 ) from exc
     if not bars:
         raise DataValidationError("Databento CSV contains no market-data rows")
-    return validate_raw_futures_bars(
+    validate_raw_futures_bars(
         bars,
         expected_root_symbol=expected_root_symbol,
         expected_interval_seconds=interval_seconds,
-    ) and bars
+    )
+    return bars
