@@ -146,3 +146,61 @@ def test_candidate_matrix_cli_writes_complete_exploratory_report(tmp_path, monke
     }
     assert report["not_raw_contract_data"] is True
     assert report["research_mode"] == "EXPLORATORY_CONTINUOUS_FUTURES_ONLY"
+
+
+def test_vwap_pullback_uses_next_bar_entry_and_stop_first_bracket_accounting():
+    bars = make_bars(count=40, base=100.0)
+    signal = bars[15]
+    bars[15] = ORBBar(
+        signal.timestamp, "MES", "MESH6|123",
+        100.0, 100.75, 99.75, 100.5, 200,
+    )
+    entry = bars[16]
+    bars[16] = ORBBar(
+        entry.timestamp, "MES", "MESH6|123",
+        100.5, 102.0, 100.25, 101.5, 200,
+    )
+    result = run_candidate(
+        bars, MES, strategy="vwap_pullback", slippage_ticks_per_side=0,
+        config=CandidateConfig(commission_round_turn_usd=1.14),
+    )
+    assert result.signals == 1
+    assert len(result.trades) == 1
+    trade = result.trades[0]
+    assert trade.entry_time == bars[16].timestamp
+    assert trade.exit_reason == "TARGET"
+    assert trade.gross_pnl_usd > 0
+    assert trade.net_pnl_usd == pytest.approx(trade.gross_pnl_usd - 1.14)
+
+
+def test_compression_breakout_requires_prior_compression_and_close_confirmation():
+    bars = make_bars(count=45, base=100.0)
+    for i in range(5, 25):
+        b = bars[i]
+        bars[i] = ORBBar(
+            b.timestamp, "MES", "MESH6|123",
+            100.0, 101.0, 99.0, 100.0, 100,
+        )
+    for i in range(25, 30):
+        b = bars[i]
+        bars[i] = ORBBar(
+            b.timestamp, "MES", "MESH6|123",
+            100.0, 100.1, 99.9, 100.0, 100,
+        )
+    b = bars[30]
+    bars[30] = ORBBar(
+        b.timestamp, "MES", "MESH6|123",
+        100.0, 100.75, 99.9, 100.5, 200,
+    )
+    b = bars[31]
+    bars[31] = ORBBar(
+        b.timestamp, "MES", "MESH6|123",
+        100.5, 102.0, 100.25, 101.5, 200,
+    )
+    result = run_candidate(
+        bars, MES, strategy="compression_breakout", slippage_ticks_per_side=0
+    )
+    assert result.signals == 1
+    assert len(result.trades) == 1
+    assert result.trades[0].entry_time == bars[31].timestamp
+    assert result.trades[0].exit_reason == "TARGET"
