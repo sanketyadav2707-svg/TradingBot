@@ -21,6 +21,10 @@ from tradingbot.data.marketparquet_continuous import (
     write_continuous_research_report,
 )
 from tradingbot.research.orb15 import run_orb15
+from tradingbot.research.intraday_candidates import (
+    run_candidate_matrix,
+    write_candidate_matrix_report,
+)
 from tradingbot.data.raw_futures import (
     build_dataset_manifest,
     load_raw_futures_csv,
@@ -127,6 +131,16 @@ def _build_parser() -> argparse.ArgumentParser:
     marketparquet.add_argument("--config-dir", type=Path, default=Path("config"))
     marketparquet.add_argument("--output", required=True, type=Path)
 
+    candidates = sub.add_parser(
+        "research-candidates-marketparquet",
+        help="Compare exploratory VWAP-pullback and compression-breakout candidates",
+    )
+    candidates.add_argument("--parquet", required=True, type=Path)
+    candidates.add_argument("--symbol", required=True, choices=["MES", "MNQ"])
+    candidates.add_argument("--calendar", required=True, type=Path)
+    candidates.add_argument("--config-dir", type=Path, default=Path("config"))
+    candidates.add_argument("--output", required=True, type=Path)
+
     databento = sub.add_parser(
         "fetch-databento",
         help="Fetch optional historical 1-minute futures data (requires data credits/API key)",
@@ -203,6 +217,44 @@ def main() -> None:
             "source_price_basis": metadata["source_price_basis"],
             "contract_identity": metadata["contract_identity"],
             "warning": "Continuous ratio-adjusted data only; not raw-contract validation.",
+        }, indent=2))
+        return
+
+    if args.command == "research-candidates-marketparquet":
+        calendar = ExchangeSessionCalendar.from_json(args.calendar)
+        bars, metadata = load_marketparquet_continuous_parquet(
+            args.parquet,
+            symbol=args.symbol,
+            calendar=calendar,
+        )
+        instruments_config = _load_toml(args.config_dir / "instruments.toml")
+        raw_instrument = instruments_config["instruments"].get(args.symbol)
+        if raw_instrument is None:
+            raise SystemExit(f"No instrument configuration for {args.symbol}")
+        instrument = Instrument(
+            symbol=args.symbol,
+            tick_size=float(raw_instrument["tick_size"]),
+            tick_value_usd=float(raw_instrument["tick_value_usd"]),
+            point_value_usd=float(raw_instrument["point_value_usd"]),
+        )
+        results = run_candidate_matrix(bars, instrument)
+        metadata["calendar"] = {
+            "name": calendar.calendar_name,
+            "timezone": calendar.timezone_name,
+            "source_url": calendar.source_url,
+        }
+        report_path = write_candidate_matrix_report(
+            args.output, metadata=metadata, results=results
+        )
+        print(json.dumps({
+            "status": "exploratory_candidate_matrix_written",
+            "report": str(report_path),
+            "symbol": args.symbol,
+            "bars": len(bars),
+            "candidates": {
+                key: result.metrics() for key, result in results.items()
+            },
+            "warning": "Five-day ratio-adjusted continuous data only; not raw-contract validation.",
         }, indent=2))
         return
 

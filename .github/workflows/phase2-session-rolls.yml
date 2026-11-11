@@ -2,9 +2,9 @@ name: Phase 2 session and roll validation
 
 on:
   push:
-    branches: ["feature/phase2-session-roll-adapters", "feature/marketparquet-continuous-adapter"]
+    branches: ["feature/phase2-session-roll-adapters", "feature/marketparquet-continuous-adapter", "feature/vwap-compression-strategy-lab"]
   pull_request:
-    branches: ["feature/phase2-raw-data-quality", "feature/phase2-session-roll-adapters"]
+    branches: ["feature/phase2-raw-data-quality", "feature/phase2-session-roll-adapters", "feature/marketparquet-continuous-adapter", "feature/vwap-compression-strategy-lab"]
 
 permissions:
   contents: read
@@ -28,4 +28,4 @@ jobs:
           python -m pip install -e ".[dev,parquet]"
       - name: Run Phase 2 session, roll, provider, ORB and CLI tests
         run: |
-          pytest tests/test_phase2_sessions_rolls.py tests/test_marketparquet_continuous.py tests/test_raw_futures_data.py tests/test_data.py tests/test_data_audit.py tests/test_databento_adapter.py tests/test_orb15_research.py tests/test_cli.py
+          pytest tests/test_phase2_sessions_rolls.py tests/test_marketparquet_continuous.py tests/test_intraday_candidates.py tests/test_raw_futures_data.py tests/test_data.py tests/test_data_audit.py tests/test_databento_adapter.py tests/test_orb15_research.py tests/test_cli.py
