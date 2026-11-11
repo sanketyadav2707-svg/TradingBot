@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -77,6 +77,8 @@ def load_marketparquet_continuous_parquet(
             if stamp.tzinfo is None or stamp.utcoffset() is None:
                 stamp = stamp.replace(tzinfo=EASTERN)
             stamp = stamp.astimezone(EASTERN)
+            if stamp.second != 0 or stamp.microsecond != 0:
+                raise ValueError(f"{file.name} row {index}: 1-minute bar timestamp must align to a minute")
             prices = [float(row[key]) for key in ("open", "high", "low", "close")]
             volume = float(row["volume"])
             if not all(math.isfinite(value) and value > 0 for value in prices):
@@ -85,7 +87,7 @@ def load_marketparquet_continuous_parquet(
                 raise ValueError(f"{file.name} row {index}: invalid OHLC geometry")
             if not math.isfinite(volume) or volume < 0:
                 raise ValueError(f"{file.name} row {index}: volume must be finite and non-negative")
-            instant = stamp.astimezone(ZoneInfo("UTC"))
+            instant = stamp.astimezone(timezone.utc)
             if instant in seen:
                 raise ValueError(f"Duplicate {root} timestamp across Parquet files: {stamp.isoformat()}")
             seen.add(instant)
