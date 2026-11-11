@@ -64,11 +64,7 @@ def test_candidates_do_not_create_signals_from_flat_market():
 def test_candidate_rejects_data_gaps_and_contract_identity_changes():
     bars = make_bars()
     broken = list(bars)
-    broken[20] = ORBBar(
-        timestamp=broken[20].timestamp + timedelta(minutes=1),
-        symbol="MES", contract_id="MESH6|123",
-        open=6000, high=6000.25, low=5999.75, close=6000, volume=100,
-    )
+    broken.pop(20)
     result = run_candidate(
         broken, MES, strategy="compression_breakout", slippage_ticks_per_side=0
     )
