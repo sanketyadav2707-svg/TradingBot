@@ -24,6 +24,8 @@ from tradingbot.research.orb15 import run_orb15
 from tradingbot.research.intraday_candidates import (
     run_candidate_matrix,
     write_candidate_matrix_report,
+    run_candidate_matrix_on_raw_contracts,
+    write_raw_candidate_matrix_report,
 )
 from tradingbot.data.raw_futures import (
     build_dataset_manifest,
@@ -141,6 +143,17 @@ def _build_parser() -> argparse.ArgumentParser:
     candidates.add_argument("--config-dir", type=Path, default=Path("config"))
     candidates.add_argument("--output", required=True, type=Path)
 
+    raw_candidates = sub.add_parser(
+        "research-candidates-raw",
+        help="Compare VWAP-pullback and compression-breakout candidates on audited raw expiry contracts",
+    )
+    raw_candidates.add_argument("--csv", required=True, type=Path, help="Canonical raw futures CSV")
+    raw_candidates.add_argument("--symbol", required=True, choices=["MES", "MNQ"])
+    raw_candidates.add_argument("--calendar", required=True, type=Path)
+    raw_candidates.add_argument("--roll-events", required=True, type=Path, help="Source-backed roll-event JSON")
+    raw_candidates.add_argument("--config-dir", type=Path, default=Path("config"))
+    raw_candidates.add_argument("--output", required=True, type=Path)
+
     databento = sub.add_parser(
         "fetch-databento",
         help="Fetch optional historical 1-minute futures data (requires data credits/API key)",
@@ -217,6 +230,46 @@ def main() -> None:
             "source_price_basis": metadata["source_price_basis"],
             "contract_identity": metadata["contract_identity"],
             "warning": "Continuous ratio-adjusted data only; not raw-contract validation.",
+        }, indent=2))
+        return
+
+    if args.command == "research-candidates-raw":
+        calendar = ExchangeSessionCalendar.from_json(args.calendar)
+        raw_bars = load_raw_futures_csv(
+            args.csv,
+            expected_root_symbol=args.symbol,
+            interval_seconds=60,
+        )
+        roll_events = load_contract_roll_events_json(args.roll_events)
+        instruments_config = _load_toml(args.config_dir / "instruments.toml")
+        raw_instrument = instruments_config["instruments"].get(args.symbol)
+        if raw_instrument is None:
+            raise SystemExit(f"No instrument configuration for {args.symbol}")
+        instrument = Instrument(
+            symbol=args.symbol,
+            tick_size=float(raw_instrument["tick_size"]),
+            tick_value_usd=float(raw_instrument["tick_value_usd"]),
+            point_value_usd=float(raw_instrument["point_value_usd"]),
+        )
+        results, metadata = run_candidate_matrix_on_raw_contracts(
+            raw_bars,
+            instrument,
+            calendar=calendar,
+            roll_events=roll_events,
+        )
+        metadata["source_file"] = str(args.csv)
+        metadata["roll_events_file"] = str(args.roll_events)
+        report_path = write_raw_candidate_matrix_report(
+            args.output, metadata=metadata, results=results
+        )
+        print(json.dumps({
+            "status": "raw_contract_candidate_matrix_written",
+            "report": str(report_path),
+            "symbol": args.symbol,
+            "raw_rows": len(raw_bars),
+            "mapped_rows": metadata["mapped_row_count"],
+            "candidates": {key: result.metrics() for key, result in results.items()},
+            "warning": "Minute OHLC raw-contract research only; not tick-level execution validation or profitability proof.",
         }, indent=2))
         return
 
