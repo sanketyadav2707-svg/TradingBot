@@ -16,6 +16,11 @@ from tradingbot.data.sessions import ExchangeSessionCalendar
 from tradingbot.data.provider_adapters import load_databento_continuous_ohlcv_csv
 from tradingbot.data.rolls import audit_contract_rolls, load_contract_roll_events_json
 from tradingbot.data.orb15_adapter import run_orb15_from_raw_futures
+from tradingbot.data.marketparquet_continuous import (
+    load_marketparquet_continuous_parquet,
+    write_continuous_research_report,
+)
+from tradingbot.research.orb15 import run_orb15
 from tradingbot.data.raw_futures import (
     build_dataset_manifest,
     load_raw_futures_csv,
@@ -110,6 +115,18 @@ def _build_parser() -> argparse.ArgumentParser:
     orb15.add_argument("--dataset", default="unspecified")
     orb15.add_argument("--output", type=Path)
 
+    marketparquet = sub.add_parser(
+        "backtest-orb15-marketparquet",
+        help="Exploratory ORB15 run on ratio-adjusted MarketParquet continuous futures",
+    )
+    marketparquet.add_argument("--parquet", required=True, type=Path)
+    marketparquet.add_argument("--symbol", required=True, choices=["MES", "MNQ"])
+    marketparquet.add_argument("--calendar", required=True, type=Path)
+    marketparquet.add_argument("--slippage-ticks-per-side", required=True, type=int, choices=[0, 1, 2])
+    marketparquet.add_argument("--starting-balance-usd", type=float, default=50_000.0)
+    marketparquet.add_argument("--config-dir", type=Path, default=Path("config"))
+    marketparquet.add_argument("--output", required=True, type=Path)
+
     databento = sub.add_parser(
         "fetch-databento",
         help="Fetch optional historical 1-minute futures data (requires data credits/API key)",
@@ -125,6 +142,70 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = _build_parser().parse_args()
+    if args.command == "backtest-orb15-marketparquet":
+        calendar = ExchangeSessionCalendar.from_json(args.calendar)
+        bars, metadata = load_marketparquet_continuous_parquet(
+            args.parquet,
+            symbol=args.symbol,
+            calendar=calendar,
+        )
+        instruments_config = _load_toml(args.config_dir / "instruments.toml")
+        raw_instrument = instruments_config["instruments"].get(args.symbol)
+        if raw_instrument is None:
+            raise SystemExit(f"No instrument configuration for {args.symbol}")
+        instrument = Instrument(
+            symbol=args.symbol,
+            tick_size=float(raw_instrument["tick_size"]),
+            tick_value_usd=float(raw_instrument["tick_value_usd"]),
+            point_value_usd=float(raw_instrument["point_value_usd"]),
+        )
+        result = run_orb15(
+            bars,
+            instrument,
+            slippage_ticks_per_side=args.slippage_ticks_per_side,
+            starting_balance_usd=args.starting_balance_usd,
+        )
+        metadata["calendar"] = {
+            "name": calendar.calendar_name,
+            "timezone": calendar.timezone_name,
+            "source_url": calendar.source_url,
+        }
+        report_path = write_continuous_research_report(
+            args.output,
+            metadata=metadata,
+            metrics=result.metrics(),
+            trades=[
+                {
+                    "trading_date": trade.trading_date.isoformat(),
+                    "side": trade.side.name,
+                    "signal_time": trade.signal_time.isoformat(),
+                    "entry_time": trade.entry_time.isoformat(),
+                    "exit_time": trade.exit_time.isoformat(),
+                    "entry_price": trade.entry_price,
+                    "stop_price": trade.stop_price,
+                    "target_price": trade.target_price,
+                    "exit_price": trade.exit_price,
+                    "exit_reason": trade.exit_reason,
+                    "gross_pnl_usd": trade.gross_pnl_usd,
+                    "commission_usd": trade.commission_usd,
+                    "slippage_usd": trade.slippage_usd,
+                    "net_pnl_usd": trade.net_pnl_usd,
+                }
+                for trade in result.trades
+            ],
+        )
+        print(json.dumps({
+            "status": "exploratory_report_written",
+            "report": str(report_path),
+            "symbol": args.symbol,
+            "bars": len(bars),
+            "metrics": result.metrics(),
+            "source_price_basis": metadata["source_price_basis"],
+            "contract_identity": metadata["contract_identity"],
+            "warning": "Continuous ratio-adjusted data only; not raw-contract validation.",
+        }, indent=2))
+        return
+
     if args.command == "fetch-databento":
         from tradingbot.data.databento_history import fetch_databento_ohlcv
 
