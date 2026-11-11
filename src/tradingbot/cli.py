@@ -14,6 +14,7 @@ from tradingbot.data.audit import audit_bars
 from tradingbot.data.csv_loader import load_bars
 from tradingbot.data.sessions import ExchangeSessionCalendar
 from tradingbot.data.provider_adapters import load_databento_continuous_ohlcv_csv
+from tradingbot.data.databento_cost import estimate_databento_historical_cost, write_cost_estimate
 from tradingbot.data.rolls import audit_contract_rolls, load_contract_roll_events_json, select_mapped_raw_contract_bars
 from tradingbot.data.orb15_adapter import run_orb15_from_raw_futures
 from tradingbot.data.marketparquet_continuous import (
@@ -392,7 +393,6 @@ def main() -> None:
 
     if args.command == "fetch-databento":
         from tradingbot.data.databento_history import fetch_databento_ohlcv
-from tradingbot.data.databento_cost import estimate_databento_historical_cost, write_cost_estimate
 
         result = fetch_databento_ohlcv(
             symbol=args.symbol,
