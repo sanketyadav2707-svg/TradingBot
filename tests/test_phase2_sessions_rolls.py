@@ -86,7 +86,7 @@ def test_gap_classification_distinguishes_missing_bars_from_session_break() -> N
 
     maintenance = cal.classify_gap(
         datetime(2026, 1, 5, 15, 59, tzinfo=tz),
-        datetime(2026, 1, 5, 17, 01, tzinfo=tz),
+        datetime(2026, 1, 5, 17, 1, tzinfo=tz),
         interval_seconds=60,
     )
     assert maintenance["classification"] == "SESSION_BREAK_OR_CLOSED"
