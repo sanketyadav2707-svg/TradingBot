@@ -44,12 +44,13 @@ class RawFuturesBar:
     def __post_init__(self) -> None:
         if self.timestamp.tzinfo is None or self.timestamp.utcoffset() is None:
             raise DataValidationError("Raw futures timestamp must be timezone-aware")
-        if not self.root_symbol.strip():
-            raise DataValidationError("root_symbol cannot be empty")
-        if not self.contract_symbol.strip():
-            raise DataValidationError("contract_symbol cannot be empty")
-        if not self.instrument_id.strip():
-            raise DataValidationError("instrument_id cannot be empty")
+        invalid_identity_values = {"", "nan", "none", "null", "<na>", "nat"}
+        if self.root_symbol.strip().lower() in invalid_identity_values:
+            raise DataValidationError("root_symbol cannot be empty or a null placeholder")
+        if self.contract_symbol.strip().lower() in invalid_identity_values:
+            raise DataValidationError("contract_symbol cannot be empty or a null placeholder")
+        if self.instrument_id.strip().lower() in invalid_identity_values:
+            raise DataValidationError("instrument_id cannot be empty or a null placeholder")
         if type(self.interval_seconds) is not int or self.interval_seconds <= 0:
             raise DataValidationError("interval_seconds must be a positive integer")
         prices = (self.open, self.high, self.low, self.close)
