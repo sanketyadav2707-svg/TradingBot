@@ -9,7 +9,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any\nfrom zoneinfo import ZoneInfo
+from typing import Any
+from zoneinfo import ZoneInfo
 
 from tradingbot.models import Instrument
 from tradingbot.research.intraday_candidates import CandidateConfig, run_candidate_matrix
