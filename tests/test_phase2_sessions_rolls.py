@@ -86,7 +86,7 @@ def test_gap_classification_distinguishes_missing_bars_from_session_break() -> N
 
     maintenance = cal.classify_gap(
         datetime(2026, 1, 5, 15, 59, tzinfo=tz),
-        datetime(2026, 1, 5, 17, 1, tzinfo=tz),
+        datetime(2026, 1, 5, 17, 0, tzinfo=tz),
         interval_seconds=60,
     )
     assert maintenance["classification"] == "SESSION_BREAK_OR_CLOSED"
@@ -149,7 +149,7 @@ def test_contract_roll_audit_flags_missing_event_new_bar_and_broken_chain() -> N
 
 def test_raw_identity_rejects_nan_provider_placeholders() -> None:
     with pytest.raises(ValueError, match="null placeholder"):
-        raw_bar(T0, "nan", "101")
+        raw_bar(datetime(2026, 3, 10, 14, 30, tzinfo=UTC), "nan", "101")
 
 
 def test_databento_continuous_csv_adapter_preserves_raw_contract_ids(tmp_path) -> None:
