@@ -73,3 +73,12 @@ Tests cover timezone interpretation, session gating, provenance labels, director
 ## Next research gate
 
 This adapter closes the *format ingestion and exploratory report generation* gap for the supplied sample. It does not close the raw-contract historical data dependency. Before any serious strategy selection, obtain a permitted raw expiry-contract dataset with actual contract symbols, provider instrument IDs, source-backed roll events and adequate multi-regime history. Do not purchase the MarketParquet archive unless the user separately approves the expense.
+
+
+## CI verification (11 November 2026)
+
+- Focused Phase 2 + MarketParquet adapter workflow: **59 passed**.
+- Run: https://github.com/sanketyadav2707-svg/TradingBot/actions/runs/43051162964
+- Full Python/API workflow: API smoke test passed; **163 passed, 1 failed**.
+- The one failure is the pre-existing Phase 1 paper-account equity-history mismatch in `tests/test_api.py::test_completed_round_trip_flows_into_trade_and_equity_apis` (equity history USD 50,000.00 vs account summary USD 50,007.50). The new adapter tests pass.
+- Full run: https://github.com/sanketyadav2707-svg/TradingBot/actions/runs/43051162913
