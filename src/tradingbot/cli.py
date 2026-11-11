@@ -12,6 +12,7 @@ from tradingbot.backtest.engine import BacktestConfig, BacktestEngine
 from tradingbot.compliance.rules import FirmComplianceGate, FirmRuleProfile
 from tradingbot.data.audit import audit_bars
 from tradingbot.data.csv_loader import load_bars
+from tradingbot.data.sessions import ExchangeSessionCalendar
 from tradingbot.data.raw_futures import (
     build_dataset_manifest,
     load_raw_futures_csv,
@@ -71,6 +72,7 @@ def _build_parser() -> argparse.ArgumentParser:
     raw_validate.add_argument("--provider", default="user_supplied")
     raw_validate.add_argument("--dataset", default="unspecified")
     raw_validate.add_argument("--schema", default="ohlcv-1m")
+    raw_validate.add_argument("--calendar", type=Path, help="Optional verified exchange calendar JSON")
 
     databento = sub.add_parser(
         "fetch-databento",
@@ -112,6 +114,29 @@ def main() -> None:
             expected_interval_seconds=args.interval_seconds,
         )
         report["file"] = str(args.csv)
+        if args.calendar:
+            calendar = ExchangeSessionCalendar.from_json(args.calendar)
+            report["calendar"] = {
+                "name": calendar.calendar_name,
+                "timezone": calendar.timezone_name,
+                "coverage_start": calendar.coverage_start.isoformat(),
+                "coverage_end": calendar.coverage_end.isoformat(),
+                "source_url": calendar.source_url,
+            }
+            report["calendar_gap_classifications"] = []
+            from datetime import datetime
+            for gap in report["gaps"]:
+                previous = datetime.fromisoformat(gap["from_utc"].replace("Z", "+00:00"))
+                current = datetime.fromisoformat(gap["to_utc"].replace("Z", "+00:00"))
+                classification = calendar.classify_gap(
+                    previous,
+                    current,
+                    interval_seconds=args.interval_seconds,
+                )
+                report["calendar_gap_classifications"].append({
+                    **gap,
+                    **classification,
+                })
         if args.manifest:
             manifest = build_dataset_manifest(
                 bars,
