@@ -1,4 +1,7 @@
+import json
+import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -10,6 +13,7 @@ from tradingbot.research.intraday_candidates import (
     run_candidate_matrix,
 )
 from tradingbot.research.orb15 import ORBBar
+from tradingbot.cli import main
 
 
 CT = ZoneInfo("America/Chicago")
@@ -95,3 +99,54 @@ def test_candidate_rejects_invalid_strategy_and_cost():
 def test_config_rejects_invalid_compression_parameters():
     with pytest.raises(ValueError, match="compression_ratio"):
         CandidateConfig(compression_ratio=1.0)
+
+
+def test_candidate_matrix_cli_writes_complete_exploratory_report(tmp_path, monkeypatch, capsys):
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    source = tmp_path / "sample.parquet"
+    start = datetime(2026, 4, 6, 9, 30)
+    rows = []
+    for i in range(40):
+        stamp = start + timedelta(minutes=i)
+        rows.append({
+            "timestamp": stamp,
+            "symbol": "MES",
+            "asset_type": "Futures",
+            "open": 6000.0,
+            "high": 6000.25,
+            "low": 5999.75,
+            "close": 6000.0,
+            "volume": 100.0,
+        })
+    pq.write_table(pa.Table.from_pylist(rows), source)
+    calendar = tmp_path / "calendar.json"
+    calendar.write_text(json.dumps({
+        "calendar_name": "test",
+        "timezone": "America/Chicago",
+        "coverage_start": "2026-04-01",
+        "coverage_end": "2026-04-30",
+        "session_start": "17:00",
+        "session_end": "16:00",
+        "trade_weekdays": [0, 1, 2, 3, 4],
+        "exceptions": [],
+    }), encoding="utf-8")
+    output = tmp_path / "candidate-report.json"
+    monkeypatch.setattr(sys, "argv", [
+        "tradingbot", "research-candidates-marketparquet",
+        "--parquet", str(source),
+        "--symbol", "MES",
+        "--calendar", str(calendar),
+        "--output", str(output),
+    ])
+    main()
+    stdout = json.loads(capsys.readouterr().out)
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert stdout["status"] == "exploratory_candidate_matrix_written"
+    assert set(report["candidates"]) == {
+        "vwap_pullback_0tick", "vwap_pullback_1tick", "vwap_pullback_2tick",
+        "compression_breakout_0tick", "compression_breakout_1tick", "compression_breakout_2tick",
+    }
+    assert report["not_raw_contract_data"] is True
+    assert report["research_mode"] == "EXPLORATORY_CONTINUOUS_FUTURES_ONLY"
