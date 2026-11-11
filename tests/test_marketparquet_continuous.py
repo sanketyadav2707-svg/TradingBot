@@ -1,4 +1,6 @@
-from datetime import date, datetime, time, timedelta
+import json
+import sys
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -11,6 +13,7 @@ from tradingbot.data.marketparquet_continuous import (
     load_marketparquet_continuous_parquet,
 )
 from tradingbot.data.sessions import ExchangeSessionCalendar
+from tradingbot.cli import main
 
 
 CT = ZoneInfo("America/Chicago")
@@ -122,3 +125,51 @@ def test_marketparquet_adapter_loads_all_parquet_files_in_directory(tmp_path) ->
     assert len(bars) == 2
     assert len(metadata["source_files"]) == 2
     assert len(metadata["source_files_sha256"]) == 64
+
+
+def test_marketparquet_cli_writes_explicitly_exploratory_orb15_report(tmp_path, monkeypatch, capsys) -> None:
+    folder = tmp_path / "parquet"
+    folder.mkdir()
+    start = datetime(2026, 4, 6, 9, 30)
+    rows = []
+    for minute in range(15):
+        rows.append(_row(start + timedelta(minutes=minute), close=100.0))
+    breakout = _row(start + timedelta(minutes=15), close=100.75)
+    breakout["open"] = 100.5
+    breakout["high"] = 103.0
+    breakout["low"] = 100.0
+    rows.append(breakout)
+    _write_parquet(folder / "2026-04-06.parquet", rows)
+
+    calendar_file = tmp_path / "calendar.json"
+    calendar_file.write_text(
+        json.dumps({
+            "calendar_name": "test",
+            "timezone": "America/Chicago",
+            "coverage_start": "2026-04-01",
+            "coverage_end": "2026-04-30",
+            "session_start": "17:00",
+            "session_end": "16:00",
+            "trade_weekdays": [0, 1, 2, 3, 4],
+            "exceptions": [],
+        }),
+        encoding="utf-8",
+    )
+    output = tmp_path / "report.json"
+    monkeypatch.setattr(sys, "argv", [
+        "tradingbot", "backtest-orb15-marketparquet",
+        "--parquet", str(folder),
+        "--symbol", "MES",
+        "--calendar", str(calendar_file),
+        "--slippage-ticks-per-side", "1",
+        "--output", str(output),
+    ])
+    main()
+    stdout = json.loads(capsys.readouterr().out)
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert stdout["status"] == "exploratory_report_written"
+    assert stdout["bars"] == 16
+    assert report["research_mode"] == "EXPLORATORY_CONTINUOUS_FUTURES_ONLY"
+    assert report["not_raw_contract_data"] is True
+    assert report["metadata"]["source_price_basis"] == "continuous_ratio_adjusted"
+    assert report["metadata"]["contract_identity"] == "not_provided_by_source"
