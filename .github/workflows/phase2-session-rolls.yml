@@ -1,0 +1,31 @@
+name: Phase 2 session and roll validation
+
+on:
+  push:
+    branches: ["feature/phase2-session-roll-adapters"]
+  pull_request:
+    branches: ["feature/phase2-raw-data-quality"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase2-session-rolls-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  session-roll-adapters:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install project and test dependency
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Run Phase 2 session, roll, provider, ORB and CLI tests
+        run: |
+          pytest tests/test_phase2_sessions_rolls.py tests/test_raw_futures_data.py tests/test_data.py tests/test_data_audit.py tests/test_databento_adapter.py tests/test_orb15_research.py tests/test_cli.py
