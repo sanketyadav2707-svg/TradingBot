@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from tradingbot.data.raw_futures import RawFuturesBar
@@ -71,7 +71,7 @@ def audit_contract_rolls(
         identities[instrument_id] = contract
         contracts[contract] = instrument_id
 
-    ordered = sorted(roll_events, key=lambda item: item.event_time.astimezone().timestamp())
+    ordered = sorted(roll_events, key=lambda item: item.event_time.astimezone(timezone.utc).timestamp())
     if ordered != roll_events:
         raise ValueError("Contract-roll events must be supplied in chronological order")
 
@@ -82,7 +82,7 @@ def audit_contract_rolls(
         if event.root_symbol.strip().upper() != root:
             raise ValueError("Contract-roll event root does not match raw bars")
         if prior_event is not None:
-            if event.event_time.astimezone() <= prior_event.event_time.astimezone():
+            if event.event_time.astimezone(timezone.utc) <= prior_event.event_time.astimezone(timezone.utc):
                 issues.append({"type": "non_increasing_event_time", "at": event.event_time.isoformat()})
             if (
                 event.old_contract_symbol.strip().upper()
@@ -103,7 +103,7 @@ def audit_contract_rolls(
         new_after_event = [
             bar for bar in rows
             if bar.instrument_id.strip() == new_id
-            and bar.timestamp.astimezone() >= event.event_time.astimezone()
+            and bar.timestamp.astimezone(timezone.utc) >= event.event_time.astimezone()
         ]
         first_new = min(new_after_event, key=lambda bar: bar.timestamp) if new_after_event else None
         if first_new is None:
