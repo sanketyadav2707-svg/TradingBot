@@ -29,11 +29,7 @@ def raw_futures_to_orb15_bars(
         expected_interval_seconds=60,
     )
     converted: list[ORBBar] = []
-    previous_timestamp = None
     for bar in rows:
-        if previous_timestamp is not None and bar.timestamp.astimezone() < previous_timestamp.astimezone():
-            raise ValueError("Raw ORB15 bars must be globally chronological")
-        previous_timestamp = bar.timestamp
         try:
             if not calendar.is_trading_timestamp(bar.timestamp):
                 raise CalendarCoverageError(
