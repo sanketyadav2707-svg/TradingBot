@@ -312,3 +312,31 @@ def test_emergency_halt_survives_store_and_engine_restart(tmp_path) -> None:
         reopened_router.submit_entry(intent)
     assert reopened_store.get_summary()["fills_count"] == 0
 
+
+
+def test_historical_replay_rebases_only_opening_snapshot_before_first_event(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "historical.sqlite3", 50_000)
+    created_snapshot = store.list_equity()[0]["timestamp"]
+
+    store.record_fill(make_fill("historical-entry", Side.LONG, 1, 100, 0.5, T0), MES)
+    # The fill snapshot correctly has unknown equity until a mark is persisted.
+    assert len(store.list_equity()) == 1
+
+    store.mark_to_market({"MES": 101}, T0 + timedelta(minutes=1))
+    history = store.list_equity()
+    assert len(history) == 2
+    assert [item["timestamp"] for item in history] == sorted(item["timestamp"] for item in history)
+    assert history[-1]["equity_usd"] == "50004.5"
+    assert history[0]["timestamp"] != created_snapshot
+    assert store.get_summary()["equity_usd"] == history[-1]["equity_usd"]
+
+
+def test_opening_snapshot_is_not_rebased_after_existing_live_activity(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "live.sqlite3", 50_000)
+    first_event = datetime.now(timezone.utc) + timedelta(seconds=1)
+    store.mark_to_market({"MES": 100}, first_event)
+    baseline_timestamp = store.list_equity()[0]["timestamp"]
+
+    # Subsequent chronological activity must not rewrite the baseline.
+    store.mark_to_market({"MES": 101}, first_event + timedelta(seconds=1))
+    assert store.list_equity()[0]["timestamp"] == baseline_timestamp

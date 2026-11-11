@@ -11,7 +11,7 @@ import json
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -309,6 +309,45 @@ class PaperAccountStore:
                 "contract tick/point specification changed or is unknown while a position is open"
             )
 
+    @staticmethod
+    def _order_initial_snapshot_before_activity(
+        connection: sqlite3.Connection, activity_timestamp: str
+    ) -> None:
+        """Keep the opening-balance baseline before the first event-time activity.
+
+        Paper research and replay may intentionally use historical timestamps
+        earlier than the wall-clock time at which the SQLite account was created.
+        In that case the account-initialized snapshot is a logical opening
+        baseline, not a market event. Rebase that one baseline immediately
+        before the first mark/fill so timestamp-ordered equity history remains
+        chronological without changing any P&L or subsequent event timestamps.
+        """
+        activity = datetime.fromisoformat(activity_timestamp.replace("Z", "+00:00"))
+        baseline_row = connection.execute(
+            """SELECT id, timestamp FROM equity_snapshots
+               WHERE source = 'ACCOUNT_INITIALIZED'
+               ORDER BY id LIMIT 1"""
+        ).fetchone()
+        if baseline_row is None or baseline_row["timestamp"] <= activity_timestamp:
+            return
+        has_activity = connection.execute(
+            """SELECT
+                 (SELECT COUNT(*) FROM fills) +
+                 (SELECT COUNT(*) FROM marks) AS n"""
+        ).fetchone()["n"]
+        if has_activity:
+            return
+        baseline_time = _timestamp(activity - timedelta(microseconds=1))
+        connection.execute(
+            "UPDATE equity_snapshots SET timestamp = ? WHERE id = ?",
+            (baseline_time, baseline_row["id"]),
+        )
+        connection.execute(
+            """UPDATE account_events SET timestamp = ?
+               WHERE event_type = 'ACCOUNT_INITIALIZED'""",
+            (baseline_time,),
+        )
+
     def record_fill(self, fill: PaperFill, instrument: Instrument) -> bool:
         """Persist a PaperBroker fill and update FIFO lots atomically.
 
@@ -342,6 +381,7 @@ class PaperAccountStore:
         normalized_id = fill.order_id.strip()
 
         with self._transaction() as connection:
+            self._order_initial_snapshot_before_activity(connection, timestamp)
             existing = connection.execute(
                 "SELECT * FROM fills WHERE order_id = ?", (normalized_id,)
             ).fetchone()
@@ -507,6 +547,7 @@ class PaperAccountStore:
             raise ValueError("At least one mark price is required")
 
         with self._transaction() as connection:
+            self._order_initial_snapshot_before_activity(connection, mark_time)
             for symbol, price in normalized.items():
                 previous = connection.execute(
                     "SELECT timestamp FROM marks WHERE symbol = ?", (symbol,)
