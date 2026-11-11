@@ -146,5 +146,5 @@ def evaluate_frozen_strategy_set(
 def write_evaluation_report(path: str | Path, report: dict[str, Any]) -> Path:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(json.dumps(report, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
+    destination.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return destination
