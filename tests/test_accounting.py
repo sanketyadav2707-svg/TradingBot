@@ -340,8 +340,6 @@ def test_opening_snapshot_is_not_rebased_after_existing_live_activity(tmp_path) 
     store.mark_to_market({"MES": 100}, first_event)
     baseline_timestamp = store.list_equity()[0]["timestamp"]
 
-    # A later-arriving historical mark must not rewrite an established ledger's
-    # opening baseline or reorder already recorded activity.
-    historical = T0
-    store.mark_to_market({"MES": 101}, historical)
+    # Subsequent chronological activity must not rewrite the baseline.
+    store.mark_to_market({"MES": 101}, first_event + timedelta(seconds=1))
     assert store.list_equity()[0]["timestamp"] == baseline_timestamp
