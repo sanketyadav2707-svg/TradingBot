@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -36,6 +38,32 @@ class ContractRollEvent:
             or self.old_instrument_id.strip() == self.new_instrument_id.strip()
         ):
             raise ValueError("A contract-roll event must change both symbol and instrument ID")
+
+
+def load_contract_roll_events_json(path: str | Path) -> list[ContractRollEvent]:
+    """Load source-backed contract-roll events from a versioned JSON document."""
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if payload.get("schema_version") != 1 or not isinstance(payload.get("events"), list):
+        raise ValueError("Roll event JSON must contain schema_version=1 and an events array")
+    events: list[ContractRollEvent] = []
+    for index, item in enumerate(payload["events"]):
+        try:
+            raw_time = str(item["event_time"])
+            normalized = raw_time[:-1] + "+00:00" if raw_time.endswith("Z") else raw_time
+            events.append(
+                ContractRollEvent(
+                    root_symbol=str(item["root_symbol"]),
+                    event_time=datetime.fromisoformat(normalized),
+                    old_contract_symbol=str(item["old_contract_symbol"]),
+                    old_instrument_id=str(item["old_instrument_id"]),
+                    new_contract_symbol=str(item["new_contract_symbol"]),
+                    new_instrument_id=str(item["new_instrument_id"]),
+                    source_url=str(item["source_url"]),
+                )
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid contract-roll event at index {index}: {exc}") from exc
+    return events
 
 
 def audit_contract_rolls(
