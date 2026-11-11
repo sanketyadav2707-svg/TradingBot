@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from tradingbot.data.raw_futures import RawFuturesBar
-from tradingbot.data.rolls import ContractRollEvent, audit_contract_rolls
+from tradingbot.data.rolls import ContractRollEvent, audit_contract_rolls, select_mapped_raw_contract_bars
 from tradingbot.data.sessions import (
     CalendarCoverageError,
     CalendarException,
@@ -214,4 +214,39 @@ def test_orb15_adapter_rejects_concurrent_expiry_bars_without_mapping_selection(
             bars,
             instrument=Instrument("MES", 0.25, 1.25, 5.0),
             calendar=calendar(),
+        )
+
+
+def test_explicit_raw_contract_selector_switches_at_source_backed_roll_event() -> None:
+    t0 = datetime(2026, 3, 10, 14, 30, tzinfo=UTC)
+    bars = [
+        raw_bar(t0, "MESH6", "101"),
+        raw_bar(t0 + timedelta(minutes=1), "MESH6", "101"),
+        raw_bar(t0 + timedelta(minutes=1), "MESM6", "102"),
+        raw_bar(t0 + timedelta(minutes=2), "MESM6", "102"),
+    ]
+    events = [
+        ContractRollEvent(
+            "MES", t0 + timedelta(minutes=2), "MESH6", "101",
+            "MESM6", "102", "https://example.com/source-roll-calendar",
+        )
+    ]
+    selected, report = select_mapped_raw_contract_bars(
+        bars, events, expected_root_symbol="MES"
+    )
+    assert [(bar.contract_symbol, bar.instrument_id) for bar in selected] == [
+        ("MESH6", "101"), ("MESH6", "101"), ("MESM6", "102")
+    ]
+    assert report["status"] == "explicit_mapping_applied"
+    assert report["selected_bar_count"] == 3
+    assert report["excluded_non_active_contract_bar_count"] == 1
+
+
+def test_explicit_raw_contract_selector_fails_closed_without_roll_events() -> None:
+    t0 = datetime(2026, 3, 10, 14, 30, tzinfo=UTC)
+    with pytest.raises(ValueError, match="At least one source-backed roll event"):
+        select_mapped_raw_contract_bars(
+            [raw_bar(t0, "MESH6", "101")],
+            [],
+            expected_root_symbol="MES",
         )
