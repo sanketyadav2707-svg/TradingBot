@@ -168,6 +168,17 @@ def _build_parser() -> argparse.ArgumentParser:
     raw_candidates.add_argument("--config-dir", type=Path, default=Path("config"))
     raw_candidates.add_argument("--output", required=True, type=Path)
 
+    databento_cost = sub.add_parser(
+        "estimate-databento-cost",
+        help="Estimate historical data cost using metadata only; does not download data",
+    )
+    databento_cost.add_argument("--symbols", nargs="+", choices=["MES", "MNQ"], default=["MES", "MNQ"])
+    databento_cost.add_argument("--start", required=True, help="ISO-8601 timestamp with timezone")
+    databento_cost.add_argument("--end", required=True, help="ISO-8601 timestamp with timezone")
+    databento_cost.add_argument("--dataset", default="GLBX.MDP3")
+    databento_cost.add_argument("--schema", default="ohlcv-1m")
+    databento_cost.add_argument("--output", type=Path)
+
     databento = sub.add_parser(
         "fetch-databento",
         help="Fetch optional historical 1-minute futures data (requires data credits/API key)",
@@ -183,6 +194,18 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = _build_parser().parse_args()
+    if args.command == "estimate-databento-cost":
+        report = estimate_databento_historical_cost(
+            symbols=tuple(args.symbols),
+            start=args.start,
+            end=args.end,
+            dataset=args.dataset,
+            schema=args.schema,
+        )
+        if args.output:
+            report["report_file"] = str(write_cost_estimate(args.output, report))
+        print(json.dumps(report, indent=2))
+        return
     if args.command == "backtest-orb15-marketparquet":
         calendar = ExchangeSessionCalendar.from_json(args.calendar)
         bars, metadata = load_marketparquet_continuous_parquet(
@@ -369,6 +392,7 @@ def main() -> None:
 
     if args.command == "fetch-databento":
         from tradingbot.data.databento_history import fetch_databento_ohlcv
+from tradingbot.data.databento_cost import estimate_databento_historical_cost, write_cost_estimate
 
         result = fetch_databento_ohlcv(
             symbol=args.symbol,
