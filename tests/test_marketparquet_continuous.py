@@ -139,6 +139,10 @@ def test_marketparquet_cli_writes_explicitly_exploratory_orb15_report(tmp_path, 
     breakout["high"] = 103.0
     breakout["low"] = 100.0
     rows.append(breakout)
+    entry = _row(start + timedelta(minutes=16), close=100.75)
+    entry["high"] = 103.0
+    entry["low"] = 100.5
+    rows.append(entry)
     _write_parquet(folder / "2026-04-06.parquet", rows)
 
     calendar_file = tmp_path / "calendar.json"
@@ -168,7 +172,7 @@ def test_marketparquet_cli_writes_explicitly_exploratory_orb15_report(tmp_path, 
     stdout = json.loads(capsys.readouterr().out)
     report = json.loads(output.read_text(encoding="utf-8"))
     assert stdout["status"] == "exploratory_report_written"
-    assert stdout["bars"] == 16
+    assert stdout["bars"] == 17
     assert report["research_mode"] == "EXPLORATORY_CONTINUOUS_FUTURES_ONLY"
     assert report["not_raw_contract_data"] is True
     assert report["metadata"]["source_price_basis"] == "continuous_ratio_adjusted"
