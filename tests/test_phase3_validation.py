@@ -73,3 +73,39 @@ def test_holdout_split_rejects_naive_timestamps():
     )
     with pytest.raises(ValueError, match="timezone-aware"):
         split_chronological_holdout(bars)
+
+
+def test_frozen_evaluation_keeps_same_strategies_and_costs_in_both_periods():
+    from tradingbot.models import Instrument
+    from tradingbot.research.evaluation import evaluate_frozen_strategy_set
+
+    start = datetime(2026, 1, 1, 8, 30, tzinfo=CT)
+    bars = []
+    for day in range(180):
+        session_start = start + timedelta(days=day)
+        for minute in range(35):
+            stamp = session_start + timedelta(minutes=minute)
+            bars.append(ORBBar(
+                timestamp=stamp,
+                symbol="MES",
+                contract_id="MESH6|123",
+                open=6000.0,
+                high=6000.25,
+                low=5999.75,
+                close=6000.0,
+                volume=100,
+            ))
+    instrument = Instrument("MES", 0.25, 1.25, 5.0)
+    report = evaluate_frozen_strategy_set(bars, instrument)
+    assert report["split"]["holdout_calendar_days"] == 90
+    assert report["split"]["date_overlap"] is False
+    assert report["assumptions"]["parameters_tuned_on_holdout"] is False
+    assert report["assumptions"]["holdout_used_for_selection"] is False
+    expected = {
+        "orb15_0tick", "orb15_1tick", "orb15_2tick",
+        "vwap_pullback_0tick", "vwap_pullback_1tick", "vwap_pullback_2tick",
+        "compression_breakout_0tick", "compression_breakout_1tick",
+        "compression_breakout_2tick",
+    }
+    assert set(report["results"]["development"]) == expected
+    assert set(report["results"]["protected_holdout"]) == expected
