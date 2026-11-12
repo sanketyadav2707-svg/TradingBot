@@ -23,7 +23,7 @@ def test_quantconnect_individual_contract_notebook_is_valid_python() -> None:
 
 def test_quantconnect_notebook_requests_individual_contract_minute_history() -> None:
     source = _source()
-    assert "qb.history(\\n        FutureUniverse" in source
+    assert "qb.history(\n        FutureUniverse" in source
     assert "qb.history(\n            TradeBar," in source
     assert "Resolution.MINUTE" in source
     assert "Futures.Indices.MicroSP500EMini" in source
@@ -52,7 +52,6 @@ def test_quantconnect_notebook_displays_aggregate_diagnostics_only() -> None:
     rendered = [ast.unparse(node.args[0]) for node in displays]
     assert rendered[0] == "root_summary"
     assert "contract_summary.groupby" in rendered[1]
-    assert "bars" not in rendered[0] or "individual_contract_minute_bars" in rendered[0]
 
 
 def test_quantconnect_notebook_never_submits_orders() -> None:
