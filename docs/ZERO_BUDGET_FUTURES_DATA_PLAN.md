@@ -73,3 +73,19 @@ The user's Research notebook cannot currently start because QuantConnect request
 - Local five-day MarketParquet sample: available, continuous ratio-adjusted, not raw contracts.
 - A zero-cost, multi-month MES/MNQ individual-expiry minute dataset with verified licence: not yet identified.
 - Phase 3 implementation can continue; valid full-scale empirical strategy evaluation remains data-blocked.
+
+
+## Official exchange data reality check
+
+CME confirms historical Time & Sales, top-of-book and end-of-day products are available through DataMine, while its public product pages describe purchasing historical data. CME also states settlement files are made freely available at midnight CT, but those are settlement/end-of-day values, not a substitute for one-minute intraday OHLCV. The old settlement FTP paths were retired in January 2024.
+
+Useful official references:
+- CME historical data overview: https://www.cmegroup.com/market-data/real-time-and-historical-data.html
+- CME settlement publication FAQ: https://www.cmegroup.com/articles/faqs/access-to-cme-group-settlement-data-faq.html
+- CME DataMine: https://www.cmegroup.com/datamine.html
+
+This may support daily context and cross-checks, but it does not solve the missing free individual-expiry 1-minute MES/MNQ history.
+
+## Unverified third-party "free" samples
+
+Search results currently show a recently launched third-party site advertising free sample futures bars. Its public terms/provenance have not been sufficiently established in this project, and independent automated reputation pages flag the domain as very new and risky. It is deliberately not an approved data source. Do not enter personal details, download executables, provide payment details, or rely on its claimed dataset until publisher identity, licence, file integrity and provenance are independently verified. The project will not depend on it.
