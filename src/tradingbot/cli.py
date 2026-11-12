@@ -168,6 +168,24 @@ def _build_parser() -> argparse.ArgumentParser:
     raw_candidates.add_argument("--config-dir", type=Path, default=Path("config"))
     raw_candidates.add_argument("--output", required=True, type=Path)
 
+    inventory = sub.add_parser(
+        "inventory-data",
+        help="Inventory local CSV/Parquet schemas and classify raw-contract identity conservatively",
+    )
+    inventory.add_argument("--path", required=True, type=Path)
+    inventory.add_argument("--output", type=Path)
+
+    convert_ticks = sub.add_parser(
+        "convert-trade-parquet",
+        help="Convert explicit dated-contract trade Parquet into canonical raw 1-minute OHLCV CSV",
+    )
+    convert_ticks.add_argument("--input", required=True, type=Path)
+    convert_ticks.add_argument("--output", required=True, type=Path)
+    convert_ticks.add_argument("--symbol", required=True, choices=["MES", "MNQ"])
+    convert_ticks.add_argument("--provider-namespace", required=True)
+    convert_ticks.add_argument("--exchange", default="CME")
+    convert_ticks.add_argument("--metadata", type=Path)
+
     databento = sub.add_parser(
         "fetch-databento",
         help="Fetch optional historical 1-minute futures data (requires data credits/API key)",
@@ -365,6 +383,33 @@ def main() -> None:
             },
             "warning": "Five-day ratio-adjusted continuous data only; not raw-contract validation.",
         }, indent=2))
+        return
+
+    if args.command == "convert-trade-parquet":
+        from tradingbot.data.trade_ticks import convert_trade_parquet_to_raw_bars
+
+        report = convert_trade_parquet_to_raw_bars(
+            args.input,
+            args.output,
+            expected_root_symbol=args.symbol,
+            provider_namespace=args.provider_namespace,
+            expected_exchange=args.exchange,
+            metadata_path=args.metadata,
+        )
+        print(json.dumps(report, indent=2))
+        return
+
+    if args.command == "inventory-data":
+        from tradingbot.data.source_inventory import (
+            inventory_futures_data,
+            write_inventory_report,
+        )
+
+        report = inventory_futures_data(args.path)
+        if args.output:
+            report_path = write_inventory_report(args.output, report)
+            report["report"] = str(report_path)
+        print(json.dumps(report, indent=2))
         return
 
     if args.command == "fetch-databento":
