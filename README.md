@@ -2,7 +2,7 @@
 
 [![Python Checks](https://github.com/sanketyadav2707-svg/TradingBot/actions/workflows/tests.yml/badge.svg)](https://github.com/sanketyadav2707-svg/TradingBot/actions/workflows/tests.yml)
 
-A personal, research-first futures trading system being developed for eventual prop-firm evaluation. It is intentionally **offline-first, broker-neutral, and paper-only** until market data, legal eligibility, firm rules, and strategy performance are independently validated.
+A personal, research-first automated intraday futures trading system targeting 3–15 minute holding periods and eventual use with the owner's own capital. It is intentionally **offline-first, broker-neutral, and paper-only** until market data, legal eligibility, broker/API permissions, deployment resilience, and strategy performance are independently validated. Prop-firm compatibility is optional, not the core objective.
 
 > This repository is software research, not investment advice. No strategy is represented as profitable. The included EMA crossover is only a plumbing example and must not be used as a live strategy.
 
@@ -16,7 +16,7 @@ For bugs and feature proposals, use the repository issue templates.
 
 ## Current status
 
-- [30-Day Master Build Plan](docs/ONE_MONTH_MASTER_PLAN.md): 6 Nov to 5 Dec 2026 roadmap, daily milestones, strategy research, risk/compliance gates and multi-AI workflow.
+- [30-Day Master Build Plan](docs/ONE_MONTH_MASTER_PLAN.md): strategy research, risk/compliance gates and build milestones.\n- [VPS + Short-Horizon Automation Architecture](docs/VPS_SHORT_HORIZON_AUTOMATION_ARCHITECTURE.md): 3–15 minute intraday system, unattended VPS runtime, broker adapter, safety states, UI requirements and release gates.
 
 - Python 3.12+ project scaffold
 - CSV historical-data input with strict timestamp/OHLC validation
