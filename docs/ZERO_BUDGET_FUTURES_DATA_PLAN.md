@@ -89,3 +89,34 @@ This may support daily context and cross-checks, but it does not solve the missi
 ## Unverified third-party "free" samples
 
 Search results currently show a recently launched third-party site advertising free sample futures bars. Its public terms/provenance have not been sufficiently established in this project, and independent automated reputation pages flag the domain as very new and risky. It is deliberately not an approved data source. Do not enter personal details, download executables, provide payment details, or rely on its claimed dataset until publisher identity, licence, file integrity and provenance are independently verified. The project will not depend on it.
+
+
+## Newly identified source candidate: Historical Futures Data
+
+Research on 12 November 2026 identified a public dataset publisher at https://historicalfuturesdata.com. Its public instrument pages advertise:
+- A free, no-account, 24-hour raw MESZ6 trade sample dated 6 November 2026, with 1,347,771 trade records.
+- A free no-account latest-month 10-second continuous bar sample.
+- A free account tier with a limited latest-month bar sample; MNQ advertises three months.
+- Full individual-contract tick history is paid. The Standard archive is advertised at USD 59 one-time, so it is outside our budget.
+
+Official publisher pages reviewed:
+- MES instrument page: https://historicalfuturesdata.com/browse/MES
+- MNQ instrument page: https://historicalfuturesdata.com/browse/MNQ
+- Dataset documentation: https://historicalfuturesdata.com/docs
+- Pricing: https://historicalfuturesdata.com/pricing
+- MES sample methodology article: https://historicalfuturesdata.com/blog/mes-tick-data-historical
+
+### What this source can and cannot solve
+
+The one-day MES raw trade sample is useful for a technical ingestion and tick-to-minute aggregation test, not for strategy validation. Free monthly bars are documented as bars computed from adjusted continuous data, so they are not raw expiry-contract OHLC. A free account does not unlock the full per-contract tick history. It therefore does not yet solve our multi-year raw-contract requirement.
+
+The source pages provide detailed methodology and sample schema, but we have not established a clear explicit data-use licence/terms covering local storage, derived backtests and future commercial use. Before treating it as an approved research source, request written confirmation from the publisher. Do not create an account or share personal information unless necessary; the no-account sample is enough for a schema inspection after licence review.
+
+### New technical adapter
+
+`convert-trade-parquet` accepts a Parquet trade file only when it includes:
+`ts, price, volume, symbol, exchange`
+
+It rejects root-only continuous symbols, requires a dated contract code, enforces the expected exchange, and produces canonical UTC 1-minute OHLCV per contract. It uses a namespaced composite identity in the canonical `instrument_id` field and explicitly records that this is not a native provider ID.
+
+The adapter is for data-pipeline testing, not proof that the provider's data licence permits the intended downstream use. It does not infer executable bid/ask, queue priority or guaranteed fills. A trade-derived bar is not a quote bar.
