@@ -175,6 +175,17 @@ def _build_parser() -> argparse.ArgumentParser:
     inventory.add_argument("--path", required=True, type=Path)
     inventory.add_argument("--output", type=Path)
 
+    convert_ticks = sub.add_parser(
+        "convert-trade-parquet",
+        help="Convert explicit dated-contract trade Parquet into canonical raw 1-minute OHLCV CSV",
+    )
+    convert_ticks.add_argument("--input", required=True, type=Path)
+    convert_ticks.add_argument("--output", required=True, type=Path)
+    convert_ticks.add_argument("--symbol", required=True, choices=["MES", "MNQ"])
+    convert_ticks.add_argument("--provider-namespace", required=True)
+    convert_ticks.add_argument("--exchange", default="CME")
+    convert_ticks.add_argument("--metadata", type=Path)
+
     databento = sub.add_parser(
         "fetch-databento",
         help="Fetch optional historical 1-minute futures data (requires data credits/API key)",
@@ -372,6 +383,20 @@ def main() -> None:
             },
             "warning": "Five-day ratio-adjusted continuous data only; not raw-contract validation.",
         }, indent=2))
+        return
+
+    if args.command == "convert-trade-parquet":
+        from tradingbot.data.trade_ticks import convert_trade_parquet_to_raw_bars
+
+        report = convert_trade_parquet_to_raw_bars(
+            args.input,
+            args.output,
+            expected_root_symbol=args.symbol,
+            provider_namespace=args.provider_namespace,
+            expected_exchange=args.exchange,
+            metadata_path=args.metadata,
+        )
+        print(json.dumps(report, indent=2))
         return
 
     if args.command == "inventory-data":
