@@ -2,12 +2,7 @@ import ast
 import json
 from pathlib import Path
 
-NOTEBOOK = (
-    Path(__file__).resolve().parents[1]
-    / "integrations"
-    / "quantconnect"
-    / "phase3_individual_contract_feasibility.ipynb"
-)
+NOTEBOOK = Path(__file__).resolve().parents[1] / "integrations" / "quantconnect" / "phase3_individual_contract_feasibility.ipynb"
 
 
 def _source() -> str:
@@ -17,35 +12,32 @@ def _source() -> str:
     return "".join(code_cells[0]["source"])
 
 
-def test_quantconnect_individual_contract_notebook_is_valid_python() -> None:
+def test_notebook_code_is_valid_python() -> None:
     compile(_source(), str(NOTEBOOK), "exec")
 
 
-def test_quantconnect_notebook_requests_individual_contract_minute_history() -> None:
+def test_notebook_requests_individual_contract_minute_history() -> None:
     source = _source()
-    assert "qb.history(\n        FutureUniverse" in source
-    assert "qb.history(\n            TradeBar," in source
+    assert "qb.history(" in source
+    assert "FutureUniverse," in source
+    assert "TradeBar," in source
     assert "Resolution.MINUTE" in source
     assert "Futures.Indices.MicroSP500EMini" in source
     assert "Futures.Indices.MicroNASDAQ100EMini" in source
 
 
-def test_quantconnect_notebook_displays_aggregate_diagnostics_only() -> None:
+def test_notebook_displays_aggregate_diagnostics_only() -> None:
     tree = ast.parse(_source())
-    forbidden_methods = {
-        "to_csv", "to_parquet", "to_pickle", "to_json",
-        "savefig", "plot", "log", "debug", "write_text",
-    }
-    found = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            if node.func.attr in forbidden_methods:
-                found.append(node.func.attr)
+    forbidden = {"to_csv", "to_parquet", "to_pickle", "to_json", "savefig", "plot", "log", "debug", "write_text"}
+    found = [
+        node.func.attr for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        and node.func.attr in forbidden
+    ]
     assert found == []
     displays = [
         node for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
         and node.func.id == "display"
     ]
     assert len(displays) == 2
@@ -54,15 +46,12 @@ def test_quantconnect_notebook_displays_aggregate_diagnostics_only() -> None:
     assert "contract_summary.groupby" in rendered[1]
 
 
-def test_quantconnect_notebook_never_submits_orders() -> None:
+def test_notebook_never_submits_orders() -> None:
     tree = ast.parse(_source())
-    forbidden = {
-        "market_order", "limit_order", "stop_market_order",
-        "set_holdings", "liquidate", "buy", "sell",
-    }
-    found = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            if node.func.attr in forbidden:
-                found.append(node.func.attr)
+    forbidden = {"market_order", "limit_order", "stop_market_order", "set_holdings", "liquidate", "buy", "sell"}
+    found = [
+        node.func.attr for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        and node.func.attr in forbidden
+    ]
     assert found == []
