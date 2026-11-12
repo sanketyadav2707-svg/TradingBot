@@ -19,11 +19,11 @@ def test_notebook_code_is_valid_python() -> None:
 def test_notebook_requests_individual_contract_minute_history() -> None:
     source = _source()
     assert "qb.history(" in source
-    assert "FutureUniverse," in source
+    assert "history[FutureUniverse]" in source
     assert "TradeBar," in source
     assert "Resolution.MINUTE" in source
-    assert "Futures.Indices.MicroSP500EMini" in source
-    assert "Futures.Indices.MicroNASDAQ100EMini" in source
+    assert "Futures.Indices.MICRO_SP_500_E_MINI" in source
+    assert "Futures.Indices.MICRO_NASDAQ_100_E_MINI" in source
 
 
 def test_notebook_displays_aggregate_diagnostics_only() -> None:
@@ -40,10 +40,10 @@ def test_notebook_displays_aggregate_diagnostics_only() -> None:
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
         and node.func.id == "display"
     ]
-    assert len(displays) == 2
+    assert len(displays) == 3
     rendered = [ast.unparse(node.args[0]) for node in displays]
     assert rendered[0] == "root_summary"
-    assert "contract_summary.groupby" in rendered[1]
+    assert any("contract_summary.groupby" in expression for expression in rendered)
 
 
 def test_notebook_never_submits_orders() -> None:
