@@ -32,7 +32,7 @@ def _utc_datetime(value: Any) -> datetime:
 
 def _is_dated_contract(contract: str, root: str) -> bool:
     return bool(re.fullmatch(
-        re.escape(root) + r"[FGHJKMNQUVXZ]\\d{1,4}(?:-[A-Z0-9]+)?",
+        re.escape(root) + r"[FGHJKMNQUVXZ][0-9]{1,4}(?:-[A-Z0-9]+)?",
         contract,
     ))
 
