@@ -23,7 +23,7 @@ def test_quantconnect_individual_contract_notebook_is_valid_python() -> None:
 
 def test_quantconnect_notebook_requests_individual_contract_minute_history() -> None:
     source = _source()
-    assert "qb.history(FutureUniverse" in source
+    assert "qb.history(\\n        FutureUniverse" in source
     assert "qb.history(\n            TradeBar," in source
     assert "Resolution.MINUTE" in source
     assert "Futures.Indices.MicroSP500EMini" in source
