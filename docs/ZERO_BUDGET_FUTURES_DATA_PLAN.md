@@ -120,3 +120,10 @@ The source pages provide detailed methodology and sample schema, but we have not
 It rejects root-only continuous symbols, requires a dated contract code, enforces the expected exchange, and produces canonical UTC 1-minute OHLCV per contract. It uses a namespaced composite identity in the canonical `instrument_id` field and explicitly records that this is not a native provider ID.
 
 The adapter is for data-pipeline testing, not proof that the provider's data licence permits the intended downstream use. It does not infer executable bid/ask, queue priority or guaranteed fills. A trade-derived bar is not a quote bar.
+
+
+### Source trust gate: not approved yet
+
+A third-party domain-age/reputation lookup reported the domain registration on 20 October 2026 (about two weeks before this review) and privacy-redacted registrant details. This is not proof of fraud, but it materially raises the verification bar. We have not independently authenticated the publisher, traced the underlying exchange-data rights, or located clear terms granting personal research/backtest use.
+
+Decision: treat this publisher as an unverified technical sample only. Do not create an account, provide identity/payment details, rely on its free-tier history for research conclusions, or make it a project dependency until the publisher supplies written licensing and provenance answers. A public download button is not itself a data licence.
