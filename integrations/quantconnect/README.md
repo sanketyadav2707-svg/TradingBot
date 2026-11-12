@@ -264,3 +264,21 @@ The result audit is documented in `docs/ORB15_EVENT_SIM_FIRST_RUN_2026-11-06.md`
 The first JSON's chart point epoch values appeared inconsistent with the programmed Chicago opening-range and entry times. The next code revision adds algorithm/exchange time-zone fields, an 08:30 RTH bar time audit, and first/last three trade timestamp samples containing signal, entry, exit, algorithm and UTC times. The MFE/MAE chart series are also explicitly labelled in MNQ index points, not dollars.
 
 The audit revision and its regression tests passed GitHub Actions on commit `0bc54fd287c0d46173ede0511eff4bec13d38550` (run 42228033570; 67 tests passed). Do not alter the time windows until the new QuantConnect run's audit fields reconcile.
+
+
+## Individual-expiry contract minute-history feasibility (12 November 2026)
+
+The cloud Research notebook `phase3_individual_contract_feasibility.ipynb` tests a more specific question than the continuous mapped-bar probe: whether the account can enumerate historical MES/MNQ `FutureUniverse` contracts and request each individual contract's one-minute `TradeBar` history over the same one-year window.
+
+Run it in QuantConnect Cloud Research, not locally:
+1. Open a QuantConnect Research notebook.
+2. Copy the notebook's single code cell from this repository into the cloud notebook.
+3. Run it once without adding any export, logging, charting or raw-data display code.
+4. The notebook keeps raw OHLCV in memory and displays aggregate counts only: contract counts, total individual-contract minute bars, active dates, and time-gap counts.
+5. If the account denies a history request or the environment hits a resource limit, record the exact error and stop. Do not enable paid access.
+
+The notebook uses the documented `FutureUniverse` history and individual-contract `TradeBar` history APIs:
+- https://www.quantconnect.com/docs/v2/writing-algorithms/historical-data/asset-classes/futures
+- https://www.quantconnect.com/docs/v2/writing-algorithms/securities/asset-classes/futures/requesting-data/individual-contracts
+
+A successful run proves only that the Research environment returned individual-contract minute bars for the tested dates. It does not establish the final strategy evaluation, valid roll schedule, sufficient independent sample size, spread/fill realism or profitability. QuantConnect data must remain within the platform; only permitted aggregate research outputs may be used outside it.
