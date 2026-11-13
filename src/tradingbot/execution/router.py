@@ -11,7 +11,6 @@ from datetime import datetime
 from enum import Enum
 from math import isfinite
 from typing import Any, Callable
-from uuid import uuid4
 
 from tradingbot.execution.order_lifecycle import (
     OrderLifecycleError, OrderLifecycleStore, OrderState,
