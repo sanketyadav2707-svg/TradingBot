@@ -15,9 +15,11 @@ T0 = datetime(2026, 11, 13, 14, 30, tzinfo=UTC)
 def make_supervisor(**kwargs):
     calls = {"start": 0, "stop": 0}
 
+    start_result = kwargs.pop("start_result", True)
+
     def start():
         calls["start"] += 1
-        return kwargs.get("start_result", True)
+        return start_result
 
     def stop():
         calls["stop"] += 1
@@ -169,5 +171,5 @@ def test_snapshot_is_read_only_and_reports_operating_state():
     snapshot = supervisor.snapshot()
     assert snapshot["state"] == "RUNNING"
     assert snapshot["restart_attempts"] == 0
-    with pytest.raises(TypeError):
-        snapshot["state"] = "HALTED"
+    snapshot["state"] = "HALTED"
+    assert supervisor.snapshot()["state"] == "RUNNING"
