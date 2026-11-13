@@ -210,3 +210,29 @@ Important limitations:
 - A successful restart callback does not prove broker/account safety. Production wiring must inject broker-position, open-order, fill-journal, market-data and risk reconciliation checks.
 - The existing SQLite emergency-halt latch remains independent and is not cleared by the supervisor's operator reset.
 - This component is not yet wired into the dashboard runtime or an unattended live trading loop. No live broker is implemented or enabled.
+
+
+## 11. Durable order lifecycle and reconciliation implementation (13 November 2026)
+
+A broker-neutral SQLite order journal is implemented in `src/tradingbot/execution/order_lifecycle.py`. It is intentionally separate from the local paper fill ledger and does not introduce a live broker adapter.
+
+Implemented:
+- Stable client order IDs with canonical payload hashing. Reusing an ID with changed symbol, side, quantity or reference price is rejected.
+- Durable order intent creation before a caller attempts external submission.
+- Explicit states: PENDING_SUBMIT, SUBMITTED, ACKNOWLEDGED, PARTIALLY_FILLED, FILLED, CANCEL_PENDING, CANCELLED, REJECTED and UNKNOWN.
+- Validated state transitions; full quantity is required before FILLED.
+- Append-only lifecycle events and independently idempotent fill IDs.
+- Partial fills, cumulative quantity and weighted average fill price.
+- Fill overflow and conflicting duplicate execution protection.
+- Restart-safe reads from the same SQLite file.
+- Reconciliation against an authoritative broker snapshot: signed net position comparison, open-order set comparison and unresolved-order detection.
+- UNKNOWN and PENDING_SUBMIT orders block the safe-to-trade result. A missing or mismatched broker snapshot is never interpreted as flat/clear.
+
+Integration boundary and known limitations:
+- The ledger is a reusable component and is not yet wired into `ExecutionRouter` or `PaperAccountEngine`. The existing local paper broker continues to use its existing fill/account ledger.
+- No live broker adapter, network submission, cancel endpoint, reconnect loop or broker polling scheduler is implemented.
+- The reconciliation snapshot must be authoritative and complete for the same account, instruments and observation time. The caller must keep entries blocked whenever the report is not safe.
+- Broker snapshot reconciliation compares signed net position quantities and open client order IDs; it does not yet verify average prices, fees, executions-by-ID, protective stop/OCO orders or account balances.
+- A fill arriving after a final cancellation/rejection is treated as an invariant violation requiring manual reconciliation, not silently applied.
+- Order journal rows/events are durable in SQLite, but a production deployment still needs backups, retention controls, monitoring and operational alerting.
+- No live execution is enabled.
