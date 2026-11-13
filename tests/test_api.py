@@ -206,3 +206,39 @@ def test_pagination_returns_next_cursor_for_paper_fills(tmp_path) -> None:
     assert first["next_cursor"] == "2"
     assert len(second["items"]) == 1
     assert second["next_cursor"] is None
+
+
+def test_liveness_is_independent_of_dependency_readiness(tmp_path) -> None:
+    runtime = DashboardRuntime.from_config(database_path=tmp_path / "account.sqlite3")
+    runtime.account_store = None
+    client = TestClient(create_app(runtime))
+
+    live = client.get("/health/live")
+    ready = client.get("/health/ready")
+
+    assert live.status_code == 200
+    assert live.json()["status"] == "ok"
+    assert ready.status_code == 200
+    assert ready.json()["status"] == "degraded"
+    assert ready.json()["checks"]["paper_account"] == "error"
+    assert ready.json()["trading_enabled"] is False
+    assert ready.json()["broker_connected"] is False
+    assert ready.json()["market_data_connected"] is False
+
+
+def test_readiness_requires_configuration_instruments_and_paper_database(tmp_path) -> None:
+    client = _client(tmp_path)
+    response = client.get("/health/ready")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ready"
+    assert payload["checks"] == {
+        "configuration": "ok",
+        "risk_configuration": "ok",
+        "instruments": "ok",
+        "paper_account": "ok",
+    }
+    assert payload["trading_enabled"] is False
+    assert payload["broker_connected"] is False
+    assert payload["market_data_connected"] is False
+    assert payload["timestamp"].endswith("Z")

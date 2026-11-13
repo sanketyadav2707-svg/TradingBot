@@ -22,6 +22,7 @@ from tradingbot.api.schemas import (
     PaperFill,
     PaperFillsResponse,
     RiskSnapshotResponse,
+    ReadinessResponse,
 )
 
 
@@ -95,6 +96,44 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
             status="degraded" if dashboard_runtime.configuration_errors else "ok",
             version=package_version,
             timestamp=_utc_now(),
+        )
+
+    @app.get("/health/live", response_model=HealthResponse, tags=["health"])
+    def liveness() -> HealthResponse:
+        """Report only that the API process can answer requests."""
+        try:
+            package_version = version("personal-futures-tradingbot")
+        except PackageNotFoundError:
+            package_version = "0.1.0"
+        return HealthResponse(status="ok", version=package_version, timestamp=_utc_now())
+
+    @app.get("/health/ready", response_model=ReadinessResponse, tags=["health"])
+    def readiness() -> ReadinessResponse:
+        """Check dashboard dependencies without implying trading readiness."""
+        checks: dict[str, str] = {
+            "configuration": "error" if dashboard_runtime.configuration_errors else "ok",
+            "risk_configuration": "ok" if dashboard_runtime.risk_limits is not None else "error",
+            "instruments": "ok" if dashboard_runtime.instruments else "error",
+            "paper_account": "error",
+        }
+        store = dashboard_runtime.account_store
+        if store is not None:
+            try:
+                # A real read detects missing, corrupt, or inaccessible SQLite state.
+                store.get_summary()
+                checks["paper_account"] = "ok"
+            except Exception:
+                checks["paper_account"] = "error"
+
+        reasons = [f"{name}_unavailable_or_invalid" for name, status in checks.items() if status != "ok"]
+        return ReadinessResponse(
+            status="ready" if not reasons else "degraded",
+            timestamp=_utc_now(),
+            checks=checks,
+            reasons=reasons,
+            trading_enabled=False,
+            broker_connected=False,
+            market_data_connected=False,
         )
 
     @app.get("/api/v1/dashboard/summary", response_model=DashboardSummaryResponse, tags=["dashboard"])
