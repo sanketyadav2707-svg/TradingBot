@@ -29,6 +29,7 @@ def _submit_research_paper_fill(runtime, side: Side, reference_price: float, tim
             stop_ticks=8,
             reference_price=reference_price,
             timestamp=timestamp,
+            idempotency_key=f"api-test-{side.name.lower()}-{timestamp.isoformat()}",
         )
     )
 
