@@ -397,7 +397,7 @@ def test_reused_idempotency_key_with_changed_order_payload_fails_closed(tmp_path
         timestamp=T0,
         idempotency_key="strategy-session-42-signal-8",
     )
-    with pytest.raises(DuplicateFillError, match="different_fill_data"):
+    with pytest.raises(OrderRejected, match="durable_order_intent_rejected"):
         router.submit_entry(changed)
     assert store.get_summary()["fills_count"] == 1
     assert store.list_positions()[0]["quantity"] == 1
