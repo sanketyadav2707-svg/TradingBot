@@ -201,7 +201,7 @@ class EngineSupervisor:
             if self._state != SupervisorState.RUNNING:
                 raise RuntimeError("heartbeat_rejected_engine_not_running")
             if self._last_heartbeat is not None and at <= self._last_heartbeat:
-                raise ValueError("heartbeat_timestamp_must_move_forward")
+                raise ValueError("heartbeat timestamp must move forward")
             self._last_heartbeat = at
 
     def poll(self, *, timestamp: datetime) -> SupervisorState:
