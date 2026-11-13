@@ -153,7 +153,7 @@ def test_supervisor_rejects_naive_and_backwards_heartbeat_timestamps():
     assert supervisor.start(timestamp=T0)
     with pytest.raises(ValueError, match="timezone-aware"):
         supervisor.heartbeat(timestamp=T0.replace(tzinfo=None))
-    with pytest.raises(ValueError, match="move forward"):
+    with pytest.raises(ValueError, match="must move forward"):
         supervisor.heartbeat(timestamp=T0)
 
 
