@@ -75,6 +75,7 @@ def test_order_state_machine_and_partial_fill_weighted_average(tmp_path):
 def test_duplicate_fill_is_idempotent_and_conflicting_fill_fails(tmp_path):
     store = OrderLifecycleStore(tmp_path / "orders.sqlite3")
     create(store)
+    store.transition("client-001", OrderState.SUBMITTED, timestamp=T0)
     args = dict(
         client_order_id="client-001", fill_id="fill-1", quantity=1,
         fill_price=6000.25, commission=0.5, timestamp=T0,
