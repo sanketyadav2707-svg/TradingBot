@@ -42,6 +42,7 @@ class PaperAccountEngine:
         # Share the same durable SQLite database as accounting. Both journals
         # survive process restarts and are backed up as one account artifact.
         self.order_lifecycle = OrderLifecycleStore(store.path)
+        self._backfill_accounting_fills()
         self.commission = commission_per_contract_per_side_usd
         self.slippage_ticks = slippage_ticks_per_side
         ZoneInfo(risk_timezone)
@@ -60,6 +61,46 @@ class PaperAccountEngine:
         self._halt_event = threading.Event()
         if self.store.emergency_halt_active:
             self._halt_event.set()
+
+    def _backfill_accounting_fills(self) -> None:
+        """Rebuild lifecycle entries for legacy/accounting fills after interrupted writes."""
+        offset = 0
+        while True:
+            rows = self.store.list_fills(limit=100, offset=offset)
+            if not rows:
+                break
+            for row in rows:
+                order_id = str(row["order_id"])
+                existing = self.order_lifecycle.get_order(order_id)
+                if existing is not None and existing["state"] == "FILLED":
+                    continue
+                timestamp = datetime.fromisoformat(
+                    str(row["timestamp"]).replace("Z", "+00:00")
+                )
+                created = self.order_lifecycle.create_order(
+                    client_order_id=order_id,
+                    symbol=str(row["symbol"]),
+                    side=str(row["side"]),
+                    quantity=int(row["quantity"]),
+                    reference_price=row["requested_price"],
+                    timestamp=timestamp,
+                )
+                state = str(created["state"])
+                if state == "PENDING_SUBMIT":
+                    self.order_lifecycle.transition(
+                        order_id, OrderState.SUBMITTED, timestamp=timestamp
+                    )
+                self.order_lifecycle.record_fill(
+                    client_order_id=order_id,
+                    fill_id=order_id,
+                    quantity=int(row["quantity"]),
+                    fill_price=row["fill_price"],
+                    commission=row["commission_usd"],
+                    timestamp=timestamp,
+                )
+            offset += len(rows)
+            if len(rows) < 100:
+                break
 
     def _broker_for(self, instrument: Instrument) -> PaperBroker:
         if not isinstance(instrument, Instrument):
