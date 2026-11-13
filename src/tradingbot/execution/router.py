@@ -42,6 +42,7 @@ class OrderIntent:
     stop_ticks: int
     reference_price: float
     timestamp: datetime
+    idempotency_key: str | None = None
 
 
 class ExecutionRouter:
@@ -107,6 +108,12 @@ class ExecutionRouter:
             or intent.timestamp.utcoffset() is None
         ):
             raise OrderRejected("timestamp_must_be_timezone_aware")
+        if intent.idempotency_key is not None and (
+            not isinstance(intent.idempotency_key, str)
+            or not intent.idempotency_key.strip()
+            or len(intent.idempotency_key) > 128
+        ):
+            raise OrderRejected("idempotency_key_must_contain_1_to_128_characters")
         if (
             not isinstance(intent.reference_price, (int, float))
             or isinstance(intent.reference_price, bool)
@@ -168,4 +175,5 @@ class ExecutionRouter:
             quantity=decision.quantity,
             reference_price=intent.reference_price,
             timestamp=intent.timestamp,
+            order_id=intent.idempotency_key,
         )

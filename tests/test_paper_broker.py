@@ -57,3 +57,36 @@ def test_paper_broker_rejects_non_finite_reference_price() -> None:
             reference_price=float("nan"),
             timestamp=datetime(2026, 1, 5, 14, 30, tzinfo=timezone.utc),
         )
+
+
+def test_paper_broker_accepts_stable_order_id_for_retry() -> None:
+    broker = PaperBroker(Instrument("MES", 0.25, 1.25, 5.0))
+    timestamp = datetime(2026, 1, 5, 14, 30, tzinfo=timezone.utc)
+    first = broker.submit_market(
+        side=Side.LONG,
+        quantity=1,
+        reference_price=6000.0,
+        timestamp=timestamp,
+        order_id="signal-2026-01-05-mes-001",
+    )
+    retry = broker.submit_market(
+        side=Side.LONG,
+        quantity=1,
+        reference_price=6000.0,
+        timestamp=timestamp,
+        order_id="signal-2026-01-05-mes-001",
+    )
+    assert first.order_id == retry.order_id == "signal-2026-01-05-mes-001"
+
+
+@pytest.mark.parametrize("order_id", ["", "   ", "x" * 129])
+def test_paper_broker_rejects_invalid_stable_order_id(order_id: str) -> None:
+    broker = PaperBroker(Instrument("MES", 0.25, 1.25, 5.0))
+    with pytest.raises(ValueError, match="order_id must contain"):
+        broker.submit_market(
+            side=Side.LONG,
+            quantity=1,
+            reference_price=6000.0,
+            timestamp=datetime(2026, 1, 5, 14, 30, tzinfo=timezone.utc),
+            order_id=order_id,
+        )

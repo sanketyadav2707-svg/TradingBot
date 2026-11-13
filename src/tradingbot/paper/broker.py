@@ -49,7 +49,13 @@ class PaperBroker:
         self._on_fill = on_fill
 
     def submit_market(
-        self, *, side: Side, quantity: int, reference_price: float, timestamp: datetime
+        self,
+        *,
+        side: Side,
+        quantity: int,
+        reference_price: float,
+        timestamp: datetime,
+        order_id: str | None = None,
     ) -> PaperFill:
         if not isinstance(side, Side) or side not in (Side.LONG, Side.SHORT):
             raise ValueError("A market order side must be Side.LONG or Side.SHORT")
@@ -64,10 +70,15 @@ class PaperBroker:
         if not isinstance(timestamp, datetime) or timestamp.tzinfo is None or timestamp.utcoffset() is None:
             raise ValueError("Paper order timestamp must be timezone-aware")
 
+        if order_id is not None and (
+            not isinstance(order_id, str) or not order_id.strip() or len(order_id) > 128
+        ):
+            raise ValueError("order_id must contain 1 to 128 non-whitespace characters")
+
         # Negative futures prices are valid for some contracts; do not reject them.
         fill = reference_price + int(side) * self.slippage_ticks * self.instrument.tick_size
         record = PaperFill(
-            order_id=str(uuid4()),
+            order_id=order_id.strip() if order_id is not None else str(uuid4()),
             symbol=self.instrument.symbol,
             side=side,
             quantity=quantity,

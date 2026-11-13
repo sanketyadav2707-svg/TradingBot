@@ -20,6 +20,7 @@ class ExecutionPort(Protocol):
         quantity: int,
         reference_price: float,
         timestamp: datetime,
+        order_id: str | None = None,
     ) -> object:
         """Submit an order and return a provider-specific receipt."""
         ...

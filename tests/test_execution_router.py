@@ -106,3 +106,18 @@ def test_router_rejects_invalid_side_and_non_finite_reference_price() -> None:
     invalid_price = replace(_intent(), reference_price=float("nan"))
     with pytest.raises(OrderRejected, match="reference_price_must_be_finite"):
         router.submit_entry(invalid_price, _account())
+
+
+def test_router_passes_stable_idempotency_key_to_paper_broker() -> None:
+    router = _setup()
+    intent = replace(_intent(), idempotency_key="strategy-signal-0001")
+    receipt = router.submit_entry(intent, _account())
+    assert receipt.order_id == "strategy-signal-0001"
+
+
+def test_router_rejects_invalid_idempotency_key_before_submission() -> None:
+    router = _setup()
+    intent = replace(_intent(), idempotency_key=" " * 3)
+    with pytest.raises(OrderRejected, match="idempotency_key_must_contain"):
+        router.submit_entry(intent, _account())
+    assert router._broker.fills == []
