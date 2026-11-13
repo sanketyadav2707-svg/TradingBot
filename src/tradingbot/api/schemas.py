@@ -19,6 +19,15 @@ class HealthResponse(StrictResponse):
     version: str
     timestamp: str
 
+class ReadinessResponse(StrictResponse):
+    status: Literal["ready", "degraded"]
+    timestamp: str
+    checks: dict[str, Literal["ok", "error"]]
+    reasons: list[str]
+    trading_enabled: Literal[False] = False
+    broker_connected: Literal[False] = False
+    market_data_connected: Literal[False] = False
+
 
 class Money(StrictResponse):
     amount: str
