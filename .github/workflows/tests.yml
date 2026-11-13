@@ -45,6 +45,8 @@ jobs:
           done
 
           python -c "import json; d=json.load(open('/tmp/tradingbot-health.json')); assert d['status'] == 'ok', d; print('API health:', d['status'], 'version:', d['version'])"
+          curl --fail --silent http://127.0.0.1:8765/health/ready > /tmp/tradingbot-readiness.json
+          python -c "import json; d=json.load(open('/tmp/tradingbot-readiness.json')); assert d['status'] == 'ready' and all(v == 'ok' for v in d['checks'].values()), d; assert d['trading_enabled'] is False and d['broker_connected'] is False and d['market_data_connected'] is False, d; print('Service readiness:', d['status'], d['checks'])"
           curl --fail --silent http://127.0.0.1:8765/api/v1/instruments > /tmp/tradingbot-instruments.json
           python -c "import json; d=json.load(open('/tmp/tradingbot-instruments.json')); symbols={x['symbol'] for x in d['items']}; expected={'MES','MNQ','MYM','M2K','MGC','MCL'}; assert d['availability'] == 'AVAILABLE' and expected <= symbols, d; print('Configured instruments:', ', '.join(sorted(symbols)))"
           curl --fail --silent http://127.0.0.1:8765/api/v1/dashboard/summary > /tmp/tradingbot-summary.json
