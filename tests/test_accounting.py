@@ -487,3 +487,25 @@ def test_engine_backfills_preexisting_accounting_fills_into_order_journal(tmp_pa
     assert order["state"] == "FILLED"
     assert order["cumulative_filled"] == 1
     assert engine.recovery_required is False
+
+
+def test_engine_startup_fails_closed_when_accounting_and_lifecycle_fills_disagree(tmp_path) -> None:
+    database = tmp_path / "mismatched-ledgers.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    store.record_fill(make_fill("ledger-order-001", Side.LONG, 1, 100, 0.5), MES)
+
+    # First startup backfills the legacy accounting fill into the lifecycle journal.
+    engine = PaperAccountEngine(store, RiskLimits(max_contracts=1))
+    assert engine.order_lifecycle.get_order("ledger-order-001")["state"] == "FILLED"
+
+    # Simulate durable-journal corruption or an incomplete manual repair.
+    import sqlite3
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE order_fills SET commission = ? WHERE fill_id = ?",
+            ("9.99", "ledger-order-001"),
+        )
+
+    # Startup must not silently trust FILLED state and enable further execution.
+    with pytest.raises(RuntimeError, match="accounting_lifecycle_fill_mismatch"):
+        PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
