@@ -8,7 +8,8 @@ This module never starts a strategy, market-data feed, scheduler or background l
 from __future__ import annotations
 
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from tradingbot.accounting.sqlite_store import PaperAccountStore
@@ -73,11 +74,33 @@ class PaperAccountEngine:
             for row in rows:
                 order_id = str(row["order_id"])
                 existing = self.order_lifecycle.get_order(order_id)
-                if existing is not None and existing["state"] == "FILLED":
-                    continue
                 timestamp = datetime.fromisoformat(
                     str(row["timestamp"]).replace("Z", "+00:00")
                 )
+                if existing is not None and existing["state"] == "FILLED":
+                    # A terminal state is not proof that both ledgers agree.
+                    # Verify the exact execution before accepting startup recovery.
+                    journal_fills = self.order_lifecycle.get_fills(order_id)
+                    expected_timestamp = timestamp.astimezone(timezone.utc).isoformat(
+                        timespec="microseconds"
+                    ).replace("+00:00", "Z")
+                    matches = (
+                        len(journal_fills) == 1
+                        and journal_fills[0]["fill_id"] == order_id
+                        and int(journal_fills[0]["quantity"]) == int(row["quantity"])
+                        and Decimal(str(journal_fills[0]["fill_price"])) == Decimal(str(row["fill_price"]))
+                        and Decimal(str(journal_fills[0]["commission"])) == Decimal(str(row["commission_usd"]))
+                        and str(journal_fills[0]["timestamp"]) == expected_timestamp
+                        and int(existing["cumulative_filled"]) == int(row["quantity"])
+                        and str(existing["symbol"]) == str(row["symbol"]).upper()
+                        and str(existing["side"]) == str(row["side"]).upper()
+                    )
+                    if not matches:
+                        raise RuntimeError(
+                            f"accounting_lifecycle_fill_mismatch:{order_id}; "
+                            "manual reconciliation is required before execution"
+                        )
+                    continue
                 created = self.order_lifecycle.create_order(
                     client_order_id=order_id,
                     symbol=str(row["symbol"]),
