@@ -189,3 +189,24 @@ Passing these gates reduces risk; it does not guarantee profit or eliminate loss
 - No automatic increase in size after wins.
 - No strategy parameters tuned on the final holdout.
 - No false claim that a passing unit-test suite proves production reliability.
+
+## 10. Engine supervisor implementation boundary (13 November 2026)
+
+The reusable `EngineSupervisor` is implemented in `src/tradingbot/runtime/supervisor.py`. It is a synchronous, tick-driven watchdog intended to be polled by an external service manager or scheduler; it does not create hidden threads or run itself in the background.
+
+Implemented controls:
+- Timezone-aware, monotonic engine heartbeats and configurable heartbeat timeout.
+- Runtime health checks and explicit recovery/reconciliation checks.
+- Bounded restart attempts with configurable backoff.
+- No restart when reconciliation fails; the supervisor latches HALTED.
+- Stop failure latches HALTED and prevents a restart attempt.
+- Explicit operator reset with health and recovery checks.
+- Market timestamp freshness helper rejects missing, stale, invalid and future-dated observations.
+- Read-only state snapshot and transition event history for the process lifetime.
+
+Important limitations:
+- This supervisor is an in-process control component, not a durable process manager. Run it under an operating-system service manager such as systemd/launchd or an equivalent VPS supervisor.
+- Its event history and restart counter are currently in memory and reset with the process. Durable audit persistence and a production alert transport remain separate integration tasks.
+- A successful restart callback does not prove broker/account safety. Production wiring must inject broker-position, open-order, fill-journal, market-data and risk reconciliation checks.
+- The existing SQLite emergency-halt latch remains independent and is not cleared by the supervisor's operator reset.
+- This component is not yet wired into the dashboard runtime or an unattended live trading loop. No live broker is implemented or enabled.

@@ -87,6 +87,6 @@ def test_holding_time_ceiling_cannot_exceed_fifteen_minutes() -> None:
             max_hold_seconds=901,
         )
     except ValueError as exc:
-        assert "1 and 900" in str(exc)
+        assert "from 1 to 900" in str(exc)
     else:
         raise AssertionError("Expected >15 minute holding ceiling to be rejected")

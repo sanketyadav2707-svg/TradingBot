@@ -347,6 +347,7 @@ def test_same_idempotency_key_does_not_duplicate_fill_after_engine_restart(tmp_p
     first_store = PaperAccountStore(database, 50_000)
     first_engine = PaperAccountEngine(first_store, RiskLimits(max_contracts=1))
     first_router = first_engine.router_for(MES, require_firm_profile=False)
+    first_store.mark_to_market({"MES": 100}, T0)
     intent = OrderIntent(
         instrument=MES,
         side=Side.LONG,
@@ -376,6 +377,7 @@ def test_reused_idempotency_key_with_changed_order_payload_fails_closed(tmp_path
     store = PaperAccountStore(database, 50_000)
     engine = PaperAccountEngine(store, RiskLimits(max_contracts=1))
     router = engine.router_for(MES, require_firm_profile=False)
+    store.mark_to_market({"MES": 100}, T0)
     original = OrderIntent(
         instrument=MES,
         side=Side.LONG,
