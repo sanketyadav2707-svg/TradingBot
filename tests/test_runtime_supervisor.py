@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -8,8 +8,8 @@ from tradingbot.runtime.supervisor import (
     timestamp_is_fresh,
 )
 
-UTC = T0.tzinfo
-T0 = __import__("datetime").datetime(2026, 11, 13, 14, 30, tzinfo=UTC)
+UTC = timezone.utc
+T0 = datetime(2026, 11, 13, 14, 30, tzinfo=UTC)
 
 
 def make_supervisor(**kwargs):
@@ -17,7 +17,7 @@ def make_supervisor(**kwargs):
 
     def start():
         calls["start"] += 1
-        return kwargs.pop("start_result", True)
+        return kwargs.get("start_result", True)
 
     def stop():
         calls["stop"] += 1
