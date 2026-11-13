@@ -11,6 +11,11 @@ from datetime import datetime
 from enum import Enum
 from math import isfinite
 from typing import Any, Callable
+from uuid import uuid4
+
+from tradingbot.execution.order_lifecycle import (
+    OrderLifecycleError, OrderLifecycleStore, OrderState,
+)
 
 from tradingbot.compliance.rules import FirmComplianceGate
 from tradingbot.models import Instrument, Side
@@ -59,6 +64,7 @@ class ExecutionRouter:
         account_snapshot_provider: Callable[[OrderIntent], AccountRiskSnapshot] | None = None,
         halt_check: Callable[[], bool] | None = None,
         submission_lock: Any | None = None,
+        order_lifecycle: OrderLifecycleStore | None = None,
     ) -> None:
         if type(broker) is not PaperBroker:
             raise TypeError("paper_broker_only: custom and live broker adapters are not supported")
@@ -70,6 +76,7 @@ class ExecutionRouter:
         self._account_snapshot_provider = account_snapshot_provider
         self._halt_check = halt_check
         self._submission_lock = submission_lock
+        self._order_lifecycle = order_lifecycle
         self._halted = False
 
     def emergency_halt(self) -> None:
@@ -170,10 +177,75 @@ class ExecutionRouter:
             if not compliance.allowed:
                 raise OrderRejected(compliance.reason)
 
-        return self._broker.submit_market(
-            side=intent.side,
-            quantity=decision.quantity,
-            reference_price=intent.reference_price,
-            timestamp=intent.timestamp,
-            order_id=intent.idempotency_key,
-        )
+        if self._order_lifecycle is None:
+            return self._broker.submit_market(
+                side=intent.side,
+                quantity=decision.quantity,
+                reference_price=intent.reference_price,
+                timestamp=intent.timestamp,
+                order_id=intent.idempotency_key,
+            )
+
+        # A durable idempotency key is mandatory when journaling is enabled.
+        # Never manufacture a new key for a retryable strategy signal.
+        if intent.idempotency_key is None:
+            raise OrderRejected("durable_order_idempotency_key_required")
+        journal = self._order_lifecycle
+        try:
+            created = journal.create_order(
+                client_order_id=intent.idempotency_key,
+                symbol=intent.instrument.symbol,
+                side="LONG" if intent.side == Side.LONG else "SHORT",
+                quantity=decision.quantity,
+                reference_price=intent.reference_price,
+                timestamp=intent.timestamp,
+            )
+        except (ValueError, OrderLifecycleError) as exc:
+            raise OrderRejected(f"durable_order_intent_rejected:{exc}") from exc
+
+        state = OrderState(str(created["state"]))
+        if not bool(created.get("_created", False)):
+            # Completed order retry: reconstruct the original receipt. Never resubmit.
+            if state == OrderState.FILLED:
+                fills = journal.get_fills(intent.idempotency_key)
+                if int(created["cumulative_filled"]) != int(created["quantity"]) or len(fills) != 1:
+                    raise OrderRejected("completed_order_fill_history_requires_manual_reconciliation")
+                item = fills[0]
+                from tradingbot.paper.broker import PaperFill
+                return PaperFill(
+                    order_id=intent.idempotency_key,
+                    symbol=str(created["symbol"]),
+                    side=Side.LONG if created["side"] == "LONG" else Side.SHORT,
+                    quantity=int(item["quantity"]),
+                    requested_price=float(created["reference_price"]),
+                    fill_price=float(item["fill_price"]),
+                    commission_usd=float(item["commission"]),
+                    timestamp=datetime.fromisoformat(str(item["timestamp"]).replace("Z", "+00:00")),
+                )
+            raise OrderRejected(f"existing_order_not_resubmitted:{state.value}")
+
+        try:
+            journal.transition(
+                intent.idempotency_key, OrderState.SUBMITTED, timestamp=intent.timestamp
+            )
+            return self._broker.submit_market(
+                side=intent.side,
+                quantity=decision.quantity,
+                reference_price=intent.reference_price,
+                timestamp=intent.timestamp,
+                order_id=intent.idempotency_key,
+            )
+        except Exception as exc:
+            current = journal.get_order(intent.idempotency_key)
+            if current is not None and current["state"] == OrderState.SUBMITTED.value:
+                try:
+                    journal.transition(
+                        intent.idempotency_key, OrderState.UNKNOWN,
+                        timestamp=datetime.now(intent.timestamp.tzinfo),
+                        reason="paper_submission_or_persistence_outcome_uncertain",
+                    )
+                except Exception:
+                    pass
+            if isinstance(exc, OrderRejected):
+                raise
+            raise OrderRejected("order_outcome_unknown_entries_blocked") from exc
