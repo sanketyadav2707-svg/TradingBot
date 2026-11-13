@@ -223,7 +223,7 @@ class OrderLifecycleStore:
             if existing is not None:
                 if existing["payload_hash"] != digest:
                     raise DuplicateOrderError("client_order_id_reused_with_different_payload")
-                return self._order_dict(existing)
+                return {**self._order_dict(existing), "_created": False}
             connection.execute(
                 """INSERT INTO order_intents(
                     client_order_id,symbol,side,quantity,reference_price,payload_hash,
@@ -239,7 +239,7 @@ class OrderLifecycleStore:
             row = connection.execute(
                 "SELECT * FROM order_intents WHERE client_order_id = ?", (normalized_id,)
             ).fetchone()
-            return self._order_dict(row)
+            return {**self._order_dict(row), "_created": True}
 
     @staticmethod
     def _event(connection: sqlite3.Connection, order_id: str, event: str,
@@ -357,6 +357,35 @@ class OrderLifecycleStore:
                 "SELECT * FROM order_intents WHERE client_order_id = ?", (client_order_id,)
             ).fetchone()
             return self._order_dict(updated)
+
+    def get_fills(self, client_order_id: str) -> list[dict[str, object]]:
+        """Return durable executions for one client order in journal order."""
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """SELECT fill_id, quantity, fill_price, commission, timestamp
+                   FROM order_fills WHERE client_order_id=?
+                   ORDER BY timestamp, fill_id""",
+                (client_order_id,),
+            ).fetchall()
+        return [{
+            "fill_id": row["fill_id"], "quantity": row["quantity"],
+            "fill_price": row["fill_price"], "commission": row["commission"],
+            "timestamp": row["timestamp"],
+        } for row in rows]
+
+    def list_unresolved_orders(self, *, limit: int = 1000) -> list[dict[str, object]]:
+        """List all orders whose broker outcome or remaining quantity is unresolved."""
+        if type(limit) is not int or not 1 <= limit <= 1000:
+            raise ValueError("limit_must_be_between_1_and_1000")
+        states = tuple(state.value for state in _OPEN)
+        placeholders = ",".join("?" for _ in states)
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                f"""SELECT * FROM order_intents WHERE state IN ({placeholders})
+                    ORDER BY created_at, client_order_id LIMIT ?""",
+                (*states, limit),
+            ).fetchall()
+        return [self._order_dict(row) for row in rows]
 
     def get_order(self, client_order_id: str) -> dict[str, object] | None:
         with self._lock, self._connection() as connection:
