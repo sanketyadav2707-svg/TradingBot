@@ -178,6 +178,14 @@ class PaperAccountStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_account_events_time
                     ON account_events(timestamp, id);
+                CREATE TABLE IF NOT EXISTS lifecycle_outbox (
+                    order_id TEXT PRIMARY KEY,
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    delivered_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_lifecycle_outbox_pending
+                    ON lifecycle_outbox(delivered_at, created_at);
                 """
             )
             # Upgrade pre-specification databases only when no open lots need
@@ -532,7 +540,58 @@ class PaperAccountStore:
                 ),
             )
             self._write_snapshot(connection, timestamp, "FILL", normalized_id)
+            # Transactional outbox: the accounting fill and its lifecycle
+            # delivery intent commit or roll back together.
+            connection.execute(
+                """INSERT INTO lifecycle_outbox(order_id, payload_json, created_at)
+                   VALUES (?, ?, ?)""",
+                (normalized_id, json.dumps({
+                    "order_id": normalized_id, "symbol": symbol,
+                    "side": "LONG" if side == int(Side.LONG) else "SHORT",
+                    "quantity": fill.quantity,
+                    "requested_price": _number(requested),
+                    "fill_price": _number(price),
+                    "commission": _number(commission),
+                    "timestamp": timestamp,
+                }, sort_keys=True)),
+            )
         return True
+
+    def pending_lifecycle_outbox(self, *, limit: int = 500) -> list[dict[str, Any]]:
+        """Return committed fills whose lifecycle-journal delivery is not acknowledged."""
+        if type(limit) is not int or not 1 <= limit <= 1000:
+            raise ValueError("limit_must_be_between_1_and_1000")
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """SELECT order_id, payload_json, created_at FROM lifecycle_outbox
+                   WHERE delivered_at IS NULL ORDER BY created_at, order_id LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [{
+            "order_id": row["order_id"],
+            "payload": json.loads(row["payload_json"]),
+            "created_at": row["created_at"],
+        } for row in rows]
+
+    def mark_lifecycle_outbox_delivered(self, order_id: str, *, timestamp: datetime | None = None) -> bool:
+        """Acknowledge delivery only after the lifecycle journal has committed the fill."""
+        if not isinstance(order_id, str) or not order_id.strip():
+            raise ValueError("order_id_must_be_non_empty")
+        delivered_at = _timestamp(timestamp or datetime.now(timezone.utc))
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT delivered_at FROM lifecycle_outbox WHERE order_id = ?",
+                (order_id.strip(),),
+            ).fetchone()
+            if row is None:
+                return False
+            if row["delivered_at"] is not None:
+                return False
+            connection.execute(
+                "UPDATE lifecycle_outbox SET delivered_at = ? WHERE order_id = ? AND delivered_at IS NULL",
+                (delivered_at, order_id.strip()),
+            )
+            return True
 
     def mark_to_market(self, prices: Mapping[str, float | Decimal], timestamp: datetime) -> None:
         """Persist externally observed marks. This method does not fetch market data."""
