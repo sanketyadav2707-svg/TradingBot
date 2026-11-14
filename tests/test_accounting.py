@@ -7,6 +7,7 @@ import pytest
 from tradingbot.accounting import DuplicateFillError, PaperAccountEngine, PaperAccountStore
 from tradingbot.models import Instrument, Side
 from tradingbot.execution.router import AccountRiskSnapshot, OrderIntent, OrderRejected
+from tradingbot.execution.order_lifecycle import OrderLifecycleStore, OrderState
 from tradingbot.risk.limits import RiskLimits
 from tradingbot.paper.broker import PaperBroker, PaperFill
 
@@ -537,3 +538,30 @@ def test_startup_fails_closed_instead_of_double_counting_partial_journal_fill(tm
 
     with pytest.raises(RuntimeError, match="accounting_lifecycle_partial_or_state_mismatch"):
         PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=2))
+
+
+def test_startup_fails_closed_when_lifecycle_fill_is_missing_from_accounting(tmp_path) -> None:
+    database = tmp_path / "lifecycle-only-fill.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    journal = OrderLifecycleStore(database)
+    order_id = "lifecycle-only-001"
+    journal.create_order(
+        client_order_id=order_id,
+        symbol="MES",
+        side="LONG",
+        quantity=1,
+        reference_price=100,
+        timestamp=T0,
+    )
+    journal.transition(order_id, OrderState.SUBMITTED, timestamp=T0)
+    journal.record_fill(
+        client_order_id=order_id,
+        fill_id=order_id,
+        quantity=1,
+        fill_price=100.25,
+        commission=0.5,
+        timestamp=T0,
+    )
+
+    with pytest.raises(RuntimeError, match="lifecycle_fill_missing_from_accounting"):
+        PaperAccountEngine(store, RiskLimits(max_contracts=1))
