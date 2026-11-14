@@ -92,6 +92,7 @@ class PaperAccountEngine:
                         and Decimal(str(journal_fills[0]["commission"])) == Decimal(str(row["commission_usd"]))
                         and str(journal_fills[0]["timestamp"]) == expected_timestamp
                         and int(existing["cumulative_filled"]) == int(row["quantity"])
+                        and Decimal(str(existing["reference_price"])) == Decimal(str(row["requested_price"]))
                         and str(existing["symbol"]) == str(row["symbol"]).upper()
                         and str(existing["side"]) == str(row["side"]).upper()
                     )
