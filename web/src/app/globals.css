@@ -58,3 +58,26 @@ input::placeholder { color: #64748b; }
     transition-duration: .01ms !important;
   }
 }
+
+
+/* Consistent surface feedback without implying that demo data is live. */
+@media (hover: hover) and (pointer: fine) {
+  section.rounded-xl {
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+  section.rounded-xl:hover {
+    border-color: rgba(71, 104, 130, .62);
+  }
+  tbody tr {
+    transition: background-color 120ms ease;
+  }
+  tbody tr:hover {
+    background: rgba(148, 163, 184, .035);
+  }
+}
+:where(input, select, button) { font: inherit; }
+table { border-collapse: separate; border-spacing: 0; }
+@media (max-width: 640px) {
+  main { min-width: 0; }
+  table { font-size: 10px; }
+}
