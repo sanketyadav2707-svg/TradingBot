@@ -394,12 +394,15 @@ class OrderLifecycleStore:
             ).fetchone()
         return self._order_dict(row) if row is not None else None
 
-    def list_orders(self, *, limit: int = 100) -> list[dict[str, object]]:
+    def list_orders(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, object]]:
         if type(limit) is not int or not 1 <= limit <= 1000:
             raise ValueError("limit_must_be_between_1_and_1000")
+        if type(offset) is not int or offset < 0:
+            raise ValueError("offset_must_be_non_negative_integer")
         with self._lock, self._connection() as connection:
             rows = connection.execute(
-                "SELECT * FROM order_intents ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
+                "SELECT * FROM order_intents ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?",
+                (limit, offset),
             ).fetchall()
         return [self._order_dict(row) for row in rows]
 
