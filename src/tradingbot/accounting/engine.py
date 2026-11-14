@@ -144,6 +144,76 @@ class PaperAccountEngine:
             offset += len(rows)
             if len(rows) < 100:
                 break
+        self._validate_lifecycle_against_accounting()
+
+    def _validate_lifecycle_against_accounting(self) -> None:
+        """Fail closed if any journal execution is absent from or differs from accounting."""
+        accounting_by_id: dict[str, dict[str, object]] = {}
+        offset = 0
+        while True:
+            rows = self.store.list_fills(limit=100, offset=offset)
+            if not rows:
+                break
+            for row in rows:
+                order_id = str(row["order_id"])
+                if order_id in accounting_by_id:
+                    raise RuntimeError(
+                        f"duplicate_accounting_order_id:{order_id}; manual reconciliation required"
+                    )
+                accounting_by_id[order_id] = row
+            offset += len(rows)
+            if len(rows) < 100:
+                break
+
+        offset = 0
+        while True:
+            orders = self.order_lifecycle.list_orders(limit=100, offset=offset)
+            if not orders:
+                break
+            for order in orders:
+                order_id = str(order["client_order_id"])
+                journal_fills = self.order_lifecycle.get_fills(order_id)
+                accounting = accounting_by_id.get(order_id)
+                state = str(order["state"])
+                if not journal_fills:
+                    if state == OrderState.FILLED.value or int(order["cumulative_filled"]) != 0:
+                        raise RuntimeError(
+                            f"lifecycle_fill_missing_from_journal:{order_id}; manual reconciliation required"
+                        )
+                    continue
+                if accounting is None:
+                    raise RuntimeError(
+                        f"lifecycle_fill_missing_from_accounting:{order_id}; "
+                        "manual reconciliation is required before execution"
+                    )
+                if len(journal_fills) != 1 or state != OrderState.FILLED.value:
+                    raise RuntimeError(
+                        f"lifecycle_partial_fill_not_supported_by_accounting:{order_id}; "
+                        "manual reconciliation is required before execution"
+                    )
+                fill = journal_fills[0]
+                timestamp = datetime.fromisoformat(
+                    str(accounting["timestamp"]).replace("Z", "+00:00")
+                ).astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+                matches = (
+                    str(fill["fill_id"]) == order_id
+                    and int(fill["quantity"]) == int(accounting["quantity"])
+                    and Decimal(str(fill["fill_price"])) == Decimal(str(accounting["fill_price"]))
+                    and Decimal(str(fill["commission"])) == Decimal(str(accounting["commission_usd"]))
+                    and str(fill["timestamp"]) == timestamp
+                    and int(order["cumulative_filled"]) == int(accounting["quantity"])
+                    and Decimal(str(order["reference_price"])) == Decimal(str(accounting["requested_price"]))
+                    and str(order["symbol"]) == str(accounting["symbol"]).upper()
+                    and str(order["side"]) == str(accounting["side"]).upper()
+                )
+                if not matches:
+                    raise RuntimeError(
+                        f"lifecycle_accounting_fill_mismatch:{order_id}; "
+                        "manual reconciliation is required before execution"
+                    )
+            offset += len(orders)
+            if len(orders) < 100:
+                break
 
     def _broker_for(self, instrument: Instrument) -> PaperBroker:
         if not isinstance(instrument, Instrument):
