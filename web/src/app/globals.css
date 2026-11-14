@@ -34,3 +34,50 @@ button { cursor: pointer; }
 }
 .eyebrow { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
 .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-variant-numeric: tabular-nums; }
+
+
+/* Dashboard interaction and readability polish */
+html { scroll-behavior: smooth; }
+body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+button, a, input, select { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, .8);
+  outline-offset: 2px;
+}
+button { transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease; }
+button:active { transform: translateY(1px); }
+input::placeholder { color: #64748b; }
+::selection { color: #f8fafc; background: rgba(34, 211, 238, .28); }
+:focus:not(:focus-visible) { outline: none; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+
+/* Consistent surface feedback without implying that demo data is live. */
+@media (hover: hover) and (pointer: fine) {
+  section.rounded-xl {
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+  section.rounded-xl:hover {
+    border-color: rgba(71, 104, 130, .62);
+  }
+  tbody tr {
+    transition: background-color 120ms ease;
+  }
+  tbody tr:hover {
+    background: rgba(148, 163, 184, .035);
+  }
+}
+:where(input, select, button) { font: inherit; }
+table { border-collapse: separate; border-spacing: 0; }
+@media (max-width: 640px) {
+  main { min-width: 0; }
+  table { font-size: 10px; }
+}

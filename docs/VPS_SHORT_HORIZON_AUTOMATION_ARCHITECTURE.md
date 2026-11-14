@@ -236,3 +236,27 @@ Integration boundary and known limitations:
 - A fill arriving after a final cancellation/rejection is treated as an invariant violation requiring manual reconciliation, not silently applied.
 - Order journal rows/events are durable in SQLite, but a production deployment still needs backups, retention controls, monitoring and operational alerting.
 - No live execution is enabled.
+
+
+## 12. Order lifecycle integration with the paper execution engine (13 November 2026)
+
+The durable order journal is now connected to `ExecutionRouter` and `PaperAccountEngine` for local paper execution.
+
+Implemented flow:
+1. The existing halt, instrument, account-risk, and compliance gates run before an order can be created.
+2. Journal-backed routers require a caller-supplied stable idempotency key. They do not invent a new key for retries.
+3. A durable `PENDING_SUBMIT` order intent is written before the paper broker is called.
+4. The journal transitions to `SUBMITTED` before the paper broker is called.
+5. Paper fill persistence updates the existing accounting ledger and then the lifecycle fill journal. The broker only acknowledges the simulated fill after the callback returns successfully.
+6. A retry of a fully filled order reconstructs the original paper receipt from the durable journal and does not submit again.
+7. Any submission/persistence exception with a still-submitted order marks it `UNKNOWN` and blocks subsequent entries.
+8. On engine startup, accounting fills not represented in the lifecycle journal are backfilled by stable order/fill ID. This repairs the specific crash window where accounting committed but lifecycle persistence did not.
+9. `recovery_required` exposes unresolved journal state. The engine accepts an externally verified broker snapshot for comparison but does not auto-clear unknown orders or emergency halts.
+
+Important boundaries:
+- This is a local paper-engine integration only. The existing PaperBroker remains in-memory and simulated; this is not a live broker connection.
+- The paper fill callback writes two logical records sequentially in the same SQLite database, not in one shared transaction. The startup backfill handles the known accounting-committed/lifecycle-missing case. If the lifecycle record exists but accounting persistence is missing, manual reconciliation is required; the system must not assume a position is flat.
+- The lifecycle order is sized using the risk-approved quantity. The same stable key must be reused for a retry of the same strategy signal and must never be reused for a different signal.
+- The current PaperBroker generates one full fill per market order. Partial-fill state handling exists in the journal but is not exercised by this in-memory broker integration.
+- A real broker adapter must provide broker-side client-order-ID idempotency, authoritative order/execution snapshots, account identity, and reconciliation before any live submission is considered.
+- Reconciliation does not automatically release the emergency halt or resolve uncertain orders. No live execution is enabled.

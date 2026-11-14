@@ -2,12 +2,12 @@ name: Web checks
 
 on:
   push:
-    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account"]
+    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account", "feature/order-lifecycle-engine-integration"]
     paths:
       - "web/**"
       - ".github/workflows/web.yml"
   pull_request:
-    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service"]
+    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/order-lifecycle-engine-integration"]
     paths:
       - "web/**"
       - ".github/workflows/web.yml"

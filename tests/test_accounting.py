@@ -7,6 +7,7 @@ import pytest
 from tradingbot.accounting import DuplicateFillError, PaperAccountEngine, PaperAccountStore
 from tradingbot.models import Instrument, Side
 from tradingbot.execution.router import AccountRiskSnapshot, OrderIntent, OrderRejected
+from tradingbot.execution.order_lifecycle import OrderLifecycleStore, OrderState
 from tradingbot.risk.limits import RiskLimits
 from tradingbot.paper.broker import PaperBroker, PaperFill
 
@@ -196,6 +197,7 @@ def test_paper_account_engine_persists_risk_gated_router_fills(tmp_path) -> None
         stop_ticks=8,
         reference_price=100,
         timestamp=T0,
+        idempotency_key="paper-engine-signal-001",
     )
     fill = router.submit_entry(intent)
 
@@ -396,7 +398,170 @@ def test_reused_idempotency_key_with_changed_order_payload_fails_closed(tmp_path
         timestamp=T0,
         idempotency_key="strategy-session-42-signal-8",
     )
-    with pytest.raises(DuplicateFillError, match="different_fill_data"):
+    with pytest.raises(OrderRejected, match="durable_order_intent_rejected"):
         router.submit_entry(changed)
     assert store.get_summary()["fills_count"] == 1
     assert store.list_positions()[0]["quantity"] == 1
+
+
+def test_engine_integrates_order_journal_and_accounting_idempotently(tmp_path) -> None:
+    database = tmp_path / "integrated.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    engine = PaperAccountEngine(store, RiskLimits(max_contracts=1))
+    store.mark_to_market({"MES": 100}, T0)
+    router = engine.router_for(MES, require_firm_profile=False)
+    intent = OrderIntent(
+        instrument=MES, side=Side.LONG, stop_ticks=8,
+        reference_price=100, timestamp=T0,
+        idempotency_key="integration-signal-001",
+    )
+
+    first = router.submit_entry(intent)
+    second = router.submit_entry(intent)
+
+    assert first.order_id == second.order_id == "integration-signal-001"
+    assert first.fill_price == second.fill_price
+    assert store.get_summary()["fills_count"] == 1
+    assert engine.order_lifecycle.get_order("integration-signal-001")["state"] == "FILLED"
+    assert engine.order_lifecycle.get_order("integration-signal-001")["cumulative_filled"] == 1
+    assert engine.recovery_required is False
+
+
+def test_engine_requires_stable_idempotency_key_when_journal_is_enabled(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "missing-key.sqlite3", 50_000)
+    engine = PaperAccountEngine(store, RiskLimits(max_contracts=1))
+    store.mark_to_market({"MES": 100}, T0)
+    router = engine.router_for(MES, require_firm_profile=False)
+    intent = OrderIntent(
+        instrument=MES, side=Side.LONG, stop_ticks=8,
+        reference_price=100, timestamp=T0,
+    )
+    with pytest.raises(OrderRejected, match="durable_order_idempotency_key_required"):
+        router.submit_entry(intent)
+    assert store.get_summary()["fills_count"] == 0
+    assert engine.order_lifecycle.list_orders() == []
+
+
+def test_uncertain_persistence_blocks_entries_then_restart_backfills_accounting_fill(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "recovery.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    engine = PaperAccountEngine(store, RiskLimits(max_contracts=1))
+    store.mark_to_market({"MES": 100}, T0)
+    router = engine.router_for(MES, require_firm_profile=False)
+
+    def fail_lifecycle_persistence(**_kwargs):
+        raise RuntimeError("simulated_journal_write_failure")
+
+    monkeypatch.setattr(engine.order_lifecycle, "record_fill", fail_lifecycle_persistence)
+    intent = OrderIntent(
+        instrument=MES, side=Side.LONG, stop_ticks=8,
+        reference_price=100, timestamp=T0,
+        idempotency_key="uncertain-signal-001",
+    )
+    with pytest.raises(OrderRejected, match="order_outcome_unknown"):
+        router.submit_entry(intent)
+
+    assert store.get_summary()["fills_count"] == 1
+    assert engine.recovery_required is True
+    with pytest.raises(OrderRejected, match="emergency_halt_active"):
+        router.submit_entry(OrderIntent(
+            instrument=MES, side=Side.LONG, stop_ticks=8,
+            reference_price=100, timestamp=T0,
+            idempotency_key="new-signal-002",
+        ))
+
+    reopened_store = PaperAccountStore(database, 50_000)
+    recovered_engine = PaperAccountEngine(reopened_store, RiskLimits(max_contracts=1))
+    assert recovered_engine.recovery_required is False
+    assert recovered_engine.order_lifecycle.get_order("uncertain-signal-001")["state"] == "FILLED"
+    assert reopened_store.get_summary()["fills_count"] == 1
+
+
+def test_engine_backfills_preexisting_accounting_fills_into_order_journal(tmp_path) -> None:
+    database = tmp_path / "legacy-fills.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    store.record_fill(make_fill("legacy-order-001", Side.LONG, 1, 100, 0.5), MES)
+
+    engine = PaperAccountEngine(store, RiskLimits(max_contracts=1))
+
+    order = engine.order_lifecycle.get_order("legacy-order-001")
+    assert order["state"] == "FILLED"
+    assert order["cumulative_filled"] == 1
+    assert engine.recovery_required is False
+
+
+def test_engine_startup_fails_closed_when_accounting_and_lifecycle_fills_disagree(tmp_path) -> None:
+    database = tmp_path / "mismatched-ledgers.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    store.record_fill(make_fill("ledger-order-001", Side.LONG, 1, 100, 0.5), MES)
+
+    # First startup backfills the legacy accounting fill into the lifecycle journal.
+    engine = PaperAccountEngine(store, RiskLimits(max_contracts=1))
+    assert engine.order_lifecycle.get_order("ledger-order-001")["state"] == "FILLED"
+
+    # Simulate durable-journal corruption or an incomplete manual repair.
+    import sqlite3
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE order_fills SET commission = ? WHERE fill_id = ?",
+            ("9.99", "ledger-order-001"),
+        )
+
+    # Startup must not silently trust FILLED state and enable further execution.
+    with pytest.raises(RuntimeError, match="accounting_lifecycle_fill_mismatch"):
+        PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+
+
+def test_startup_fails_closed_instead_of_double_counting_partial_journal_fill(tmp_path) -> None:
+    database = tmp_path / "partial-ledger.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    store.record_fill(make_fill("partial-order-001", Side.LONG, 2, 100, 1.0), MES)
+
+    # Simulate a journal that already contains one execution for this order,
+    # while the accounting ledger contains an aggregate order-level fill.
+    engine = PaperAccountEngine(store, RiskLimits(max_contracts=2))
+    journal = engine.order_lifecycle
+    # Backfill above has made it FILLED. Recreate the inconsistent partial state
+    # directly in a fresh lifecycle database for deterministic recovery testing.
+    with sqlite3.connect(database) as connection:
+        connection.execute("DELETE FROM order_fills WHERE client_order_id = ?", ("partial-order-001",))
+        connection.execute(
+            "UPDATE order_intents SET state='PARTIALLY_FILLED', cumulative_filled=1, "
+            "average_fill_price='100' WHERE client_order_id = ?",
+            ("partial-order-001",),
+        )
+        connection.execute(
+            "INSERT INTO order_fills(fill_id, client_order_id, quantity, fill_price, commission, timestamp) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("partial-exec-001", "partial-order-001", 1, "100", "0.5", T0.isoformat().replace("+00:00", "Z")),
+        )
+
+    with pytest.raises(RuntimeError, match="accounting_lifecycle_partial_or_state_mismatch"):
+        PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=2))
+
+
+def test_startup_fails_closed_when_lifecycle_fill_is_missing_from_accounting(tmp_path) -> None:
+    database = tmp_path / "lifecycle-only-fill.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    journal = OrderLifecycleStore(database)
+    order_id = "lifecycle-only-001"
+    journal.create_order(
+        client_order_id=order_id,
+        symbol="MES",
+        side="LONG",
+        quantity=1,
+        reference_price=100,
+        timestamp=T0,
+    )
+    journal.transition(order_id, OrderState.SUBMITTED, timestamp=T0)
+    journal.record_fill(
+        client_order_id=order_id,
+        fill_id=order_id,
+        quantity=1,
+        fill_price=100.25,
+        commission=0.5,
+        timestamp=T0,
+    )
+
+    with pytest.raises(RuntimeError, match="lifecycle_fill_missing_from_accounting"):
+        PaperAccountEngine(store, RiskLimits(max_contracts=1))
