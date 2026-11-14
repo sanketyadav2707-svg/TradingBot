@@ -509,3 +509,31 @@ def test_engine_startup_fails_closed_when_accounting_and_lifecycle_fills_disagre
     # Startup must not silently trust FILLED state and enable further execution.
     with pytest.raises(RuntimeError, match="accounting_lifecycle_fill_mismatch"):
         PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+
+
+def test_startup_fails_closed_instead_of_double_counting_partial_journal_fill(tmp_path) -> None:
+    database = tmp_path / "partial-ledger.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    store.record_fill(make_fill("partial-order-001", Side.LONG, 2, 100, 1.0), MES)
+
+    # Simulate a journal that already contains one execution for this order,
+    # while the accounting ledger contains an aggregate order-level fill.
+    engine = PaperAccountEngine(store, RiskLimits(max_contracts=2))
+    journal = engine.order_lifecycle
+    # Backfill above has made it FILLED. Recreate the inconsistent partial state
+    # directly in a fresh lifecycle database for deterministic recovery testing.
+    with sqlite3.connect(database) as connection:
+        connection.execute("DELETE FROM order_fills WHERE client_order_id = ?", ("partial-order-001",))
+        connection.execute(
+            "UPDATE order_intents SET state='PARTIALLY_FILLED', cumulative_filled=1, "
+            "average_fill_price='100' WHERE client_order_id = ?",
+            ("partial-order-001",),
+        )
+        connection.execute(
+            "INSERT INTO order_fills(fill_id, client_order_id, quantity, fill_price, commission, timestamp) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("partial-exec-001", "partial-order-001", 1, "100", "0.5", T0.isoformat().replace("+00:00", "Z")),
+        )
+
+    with pytest.raises(RuntimeError, match="accounting_lifecycle_partial_or_state_mismatch"):
+        PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=2))
