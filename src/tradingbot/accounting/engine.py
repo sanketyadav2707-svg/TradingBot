@@ -110,7 +110,25 @@ class PaperAccountEngine:
                     timestamp=timestamp,
                 )
                 state = str(created["state"])
-                if state == "PENDING_SUBMIT":
+                # Accounting currently stores one aggregate fill per order ID.
+                # Never add that aggregate on top of an existing journal execution.
+                journal_fills = self.order_lifecycle.get_fills(order_id)
+                if (
+                    int(created["cumulative_filled"]) != 0
+                    or journal_fills
+                    or state not in {
+                        OrderState.PENDING_SUBMIT.value,
+                        OrderState.SUBMITTED.value,
+                        OrderState.ACKNOWLEDGED.value,
+                        OrderState.CANCEL_PENDING.value,
+                        OrderState.UNKNOWN.value,
+                    }
+                ):
+                    raise RuntimeError(
+                        f"accounting_lifecycle_partial_or_state_mismatch:{order_id}; "
+                        "manual reconciliation is required before execution"
+                    )
+                if state == OrderState.PENDING_SUBMIT.value:
                     self.order_lifecycle.transition(
                         order_id, OrderState.SUBMITTED, timestamp=timestamp
                     )
