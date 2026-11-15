@@ -2,7 +2,7 @@
 
 [![Python Checks](https://github.com/sanketyadav2707-svg/TradingBot/actions/workflows/tests.yml/badge.svg)](https://github.com/sanketyadav2707-svg/TradingBot/actions/workflows/tests.yml)
 
-A personal, research-first automated intraday futures trading system targeting 3–15 minute holding periods and eventual use with the owner's own capital. It is intentionally **offline-first, broker-neutral, and paper-only** until market data, legal eligibility, broker/API permissions, deployment resilience, and strategy performance are independently validated. Prop-firm compatibility is optional, not the core objective.
+A personal, research-first, capital-first automated intraday trading system targeting 3–15 minute holding periods for the owner's own capital. India/NSE is the primary market profile; US futures research is preserved as an optional, isolated integration. It is intentionally **offline-first, broker-neutral, and paper-only** until market data, legal eligibility, broker/API permissions, deployment resilience, and strategy performance are independently validated. Prop-firm compatibility is optional, not the core objective.
 
 > This repository is software research, not investment advice. No strategy is represented as profitable. The included EMA crossover is only a plumbing example and must not be used as a live strategy.
 
