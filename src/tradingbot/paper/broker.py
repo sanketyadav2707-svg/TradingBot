@@ -21,6 +21,7 @@ class PaperFill:
     fill_price: float
     commission_usd: float
     timestamp: datetime
+    currency_code: str = "USD"
 
 
 class PaperBroker:
@@ -86,6 +87,7 @@ class PaperBroker:
             fill_price=fill,
             commission_usd=self.commission * quantity,
             timestamp=timestamp,
+            currency_code=self.instrument.currency_code,
         )
         # Persist first. If the durable sink rejects the fill, the broker's
         # in-memory history is not advanced, avoiding a split-brain fill record.
