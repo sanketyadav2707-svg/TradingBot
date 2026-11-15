@@ -660,3 +660,14 @@ def test_execution_lock_serializes_separate_engine_instances(tmp_path) -> None:
     assert not thread_one.is_alive()
     assert not thread_two.is_alive()
     assert second_inside.is_set()
+
+
+
+def test_risk_inputs_reject_future_mark_and_equity_snapshot(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "future-mark-risk.sqlite3", 50_000)
+    store.record_fill(make_fill("marked-entry", Side.LONG, 1, 100, timestamp=T0), MES)
+    future = T0 + timedelta(minutes=5)
+    store.mark_to_market({"MES": 110}, future)
+
+    with pytest.raises(ValueError, match="risk_snapshot_timestamp_precedes_account_mark"):
+        store.get_risk_inputs(T0 + timedelta(minutes=2), timezone_name="UTC")
