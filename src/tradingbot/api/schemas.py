@@ -59,8 +59,8 @@ class InstrumentMetadata(StrictResponse):
     name: str
     exchange: str
     tick_size: str
-    tick_value: Money
-    point_value: Money
+    tick_value_usd: Money
+    point_value_usd: Money
 
 
 class InstrumentsResponse(StrictResponse):
