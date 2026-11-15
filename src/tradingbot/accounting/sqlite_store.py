@@ -176,6 +176,18 @@ class PaperAccountStore:
                     reference_id TEXT,
                     payload_json TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS lifecycle_outbox (
+                    order_id TEXT PRIMARY KEY REFERENCES fills(order_id),
+                    symbol TEXT NOT NULL,
+                    side TEXT NOT NULL CHECK (side IN ('LONG', 'SHORT')),
+                    quantity INTEGER NOT NULL CHECK (quantity > 0),
+                    fill_price TEXT NOT NULL,
+                    commission_usd TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    delivered_at TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_lifecycle_outbox_pending
+                    ON lifecycle_outbox(delivered_at, order_id);
                 CREATE INDEX IF NOT EXISTS idx_account_events_time
                     ON account_events(timestamp, id);
                 """
@@ -199,6 +211,16 @@ class PaperAccountStore:
                     for name in missing:
                         connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} TEXT")
 
+            # Upgrade existing accounting fills into the durable delivery outbox.
+            # Existing lifecycle records are safe to replay because fill IDs are idempotent.
+            connection.execute(
+                """INSERT OR IGNORE INTO lifecycle_outbox(
+                    order_id, symbol, side, quantity, fill_price, commission_usd, timestamp
+                )
+                SELECT order_id, symbol, CASE WHEN side > 0 THEN 'LONG' ELSE 'SHORT' END,
+                       quantity, fill_price, commission_usd, timestamp
+                FROM fills"""
+            )
             connection.execute(
                 "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('starting_balance_usd', ?)",
                 (_number(starting_balance),),
@@ -408,6 +430,18 @@ class PaperAccountStore:
                     commission_usd, tick_size, tick_value_usd, point_value_usd, timestamp
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (normalized_id, *candidate),
+            )
+            # This outbox row is committed in the SAME transaction as the
+            # accounting fill and position/P&L updates. Lifecycle delivery can
+            # therefore be retried after a process crash without losing the fill.
+            connection.execute(
+                """INSERT INTO lifecycle_outbox(
+                    order_id, symbol, side, quantity, fill_price, commission_usd, timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    normalized_id, symbol, "LONG" if side > 0 else "SHORT",
+                    fill.quantity, _number(price), _number(commission), timestamp,
+                ),
             )
             remaining = fill.quantity
             fee_per_contract = commission / Decimal(fill.quantity)
@@ -849,6 +883,37 @@ class PaperAccountStore:
                 "entry_time": row["entry_time"], "exit_time": row["exit_time"],
                 "opening_fill_id": row["opening_fill_id"], "closing_fill_id": row["closing_fill_id"],
             } for row in rows]
+
+    def list_pending_lifecycle_outbox(self, limit: int = 100) -> list[dict[str, Any]]:
+        if type(limit) is not int or not 1 <= limit <= 1000:
+            raise ValueError("limit must be an integer between 1 and 1000")
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """SELECT order_id, symbol, side, quantity, fill_price,
+                          commission_usd, timestamp
+                   FROM lifecycle_outbox WHERE delivered_at IS NULL
+                   ORDER BY timestamp, order_id LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def mark_lifecycle_outbox_delivered(self, order_id: str) -> bool:
+        if not isinstance(order_id, str) or not order_id.strip():
+            raise ValueError("order_id_must_be_non_empty")
+        with self._transaction() as connection:
+            cursor = connection.execute(
+                """UPDATE lifecycle_outbox SET delivered_at = ?
+                   WHERE order_id = ? AND delivered_at IS NULL""",
+                (_timestamp(datetime.now(timezone.utc)), order_id.strip()),
+            )
+            if cursor.rowcount:
+                connection.execute(
+                    """INSERT INTO account_events(
+                        timestamp, event_type, symbol, reference_id, payload_json
+                    ) VALUES (?, 'LIFECYCLE_OUTBOX_DELIVERED', NULL, ?, '{}')""",
+                    (_timestamp(datetime.now(timezone.utc)), order_id.strip()),
+                )
+            return cursor.rowcount == 1
 
     def list_fills(self, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
         self._validate_page(limit, offset)

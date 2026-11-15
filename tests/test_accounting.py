@@ -565,3 +565,35 @@ def test_startup_fails_closed_when_lifecycle_fill_is_missing_from_accounting(tmp
 
     with pytest.raises(RuntimeError, match="lifecycle_fill_missing_from_accounting"):
         PaperAccountEngine(store, RiskLimits(max_contracts=1))
+
+
+def test_accounting_fill_and_lifecycle_outbox_are_committed_together(tmp_path) -> None:
+    database = tmp_path / "outbox-atomic.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+
+    store.record_fill(make_fill("outbox-order-001", Side.LONG, 1, 100, 0.5), MES)
+
+    pending = store.list_pending_lifecycle_outbox()
+    assert len(pending) == 1
+    assert pending[0]["order_id"] == "outbox-order-001"
+    assert pending[0]["quantity"] == 1
+    assert pending[0]["side"] == "LONG"
+    assert store.mark_lifecycle_outbox_delivered("outbox-order-001") is True
+    assert store.list_pending_lifecycle_outbox() == []
+    assert store.mark_lifecycle_outbox_delivered("outbox-order-001") is False
+
+
+def test_startup_replays_pending_outbox_after_interrupted_lifecycle_delivery(tmp_path) -> None:
+    database = tmp_path / "outbox-recovery.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    store.record_fill(make_fill("outbox-recovery-001", Side.LONG, 1, 100, 0.5), MES)
+
+    # Simulate a process stopping after the accounting transaction committed,
+    # but before the lifecycle projection and outbox acknowledgement.
+    assert len(store.list_pending_lifecycle_outbox()) == 1
+
+    engine = PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+    order = engine.order_lifecycle.get_order("outbox-recovery-001")
+    assert order["state"] == "FILLED"
+    assert len(engine.order_lifecycle.get_fills("outbox-recovery-001")) == 1
+    assert engine.store.list_pending_lifecycle_outbox() == []

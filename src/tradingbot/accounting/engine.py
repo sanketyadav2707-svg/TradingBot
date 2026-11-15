@@ -45,6 +45,7 @@ class PaperAccountEngine:
         # survive process restarts and are backed up as one account artifact.
         self.order_lifecycle = OrderLifecycleStore(store.path)
         self._backfill_accounting_fills()
+        self._drain_lifecycle_outbox()
         self.commission = commission_per_contract_per_side_usd
         self.slippage_ticks = slippage_ticks_per_side
         ZoneInfo(risk_timezone)
@@ -146,6 +147,33 @@ class PaperAccountEngine:
                 break
         self._validate_lifecycle_against_accounting()
 
+    def _drain_lifecycle_outbox(self) -> int:
+        """Idempotently project accounting-committed fills into the lifecycle journal.
+
+        The accounting fill and outbox row share one SQLite transaction. If this
+        projection fails or the process stops, the pending row remains durable
+        and is retried on the next startup or fill callback.
+        """
+        delivered = 0
+        while True:
+            pending = self.store.list_pending_lifecycle_outbox(limit=100)
+            if not pending:
+                break
+            for row in pending:
+                self.order_lifecycle.record_fill(
+                    client_order_id=str(row["order_id"]),
+                    fill_id=str(row["order_id"]),
+                    quantity=int(row["quantity"]),
+                    fill_price=row["fill_price"],
+                    commission=row["commission_usd"],
+                    timestamp=datetime.fromisoformat(
+                        str(row["timestamp"]).replace("Z", "+00:00")
+                    ),
+                )
+                self.store.mark_lifecycle_outbox_delivered(str(row["order_id"]))
+                delivered += 1
+        return delivered
+
     def _validate_lifecycle_against_accounting(self) -> None:
         """Fail closed if any journal execution is absent from or differs from accounting."""
         accounting_by_id: dict[str, dict[str, object]] = {}
@@ -235,14 +263,7 @@ class PaperAccountEngine:
                 # idempotent and keyed by the broker fill ID. Any failure bubbles
                 # up so PaperBroker does not acknowledge the simulated execution.
                 self.store.record_fill(fill, instrument)
-                self.order_lifecycle.record_fill(
-                    client_order_id=fill.order_id,
-                    fill_id=fill.order_id,
-                    quantity=fill.quantity,
-                    fill_price=fill.fill_price,
-                    commission=fill.commission_usd,
-                    timestamp=fill.timestamp,
-                )
+                self._drain_lifecycle_outbox()
 
             broker = PaperBroker(
                 instrument,
