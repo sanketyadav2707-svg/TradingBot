@@ -61,12 +61,15 @@ class PaperAccountStore:
     Decimal values serialized as text in SQLite.
     """
 
-    def __init__(self, database_path: str | Path, starting_balance_usd: float | Decimal) -> None:
+    def __init__(self, database_path: str | Path, starting_balance_usd: float | Decimal, currency_code: str = "USD") -> None:
         self.path = Path(database_path).expanduser().resolve()
         if str(database_path) == ":memory:":
             raise ValueError("Use a temporary SQLite file for tests; in-memory databases are unsupported")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        if not isinstance(currency_code, str) or len(currency_code) != 3 or not currency_code.isalpha() or currency_code != currency_code.upper():
+            raise ValueError("currency_code must be a three-letter uppercase ISO 4217 code")
+        self.currency_code = currency_code
         starting_balance = _decimal(starting_balance_usd, "starting_balance_usd")
         if starting_balance <= 0:
             raise ValueError("starting_balance_usd must be positive")
@@ -228,6 +231,19 @@ class PaperAccountStore:
             connection.execute(
                 "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('emergency_halt_active', '0')"
             )
+            # Legacy databases have no denomination field; their historical USD
+            # schema is explicitly upgraded as USD, never guessed to be INR.
+            connection.execute(
+                "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('currency_code', 'USD')"
+            )
+            stored_currency = connection.execute(
+                "SELECT value FROM account_meta WHERE key = 'currency_code'"
+            ).fetchone()["value"]
+            if stored_currency != self.currency_code:
+                raise ValueError(
+                    f"paper account currency mismatch: database={stored_currency}, requested={self.currency_code}; "
+                    "create a separate database for another currency"
+                )
             stored_balance = Decimal(connection.execute(
                 "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
             ).fetchone()["value"])
@@ -389,6 +405,8 @@ class PaperAccountStore:
             raise ValueError("Fill quantity must be a positive integer")
         if not isinstance(fill.order_id, str) or not fill.order_id.strip():
             raise ValueError("Fill order_id cannot be empty")
+        if instrument.currency_code != self.currency_code or getattr(fill, "currency_code", "USD") != self.currency_code:
+            raise ValueError("instrument/fill currency does not match paper account currency")
 
         requested = _decimal(fill.requested_price, "requested_price")
         price = _decimal(fill.fill_price, "fill_price")
