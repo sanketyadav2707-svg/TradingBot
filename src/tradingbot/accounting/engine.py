@@ -147,7 +147,7 @@ class PaperAccountEngine:
                 break
         self._validate_lifecycle_against_accounting()
 
-    def _drain_lifecycle_outbox(self, *, order_id: str | None = None) -> int:
+    def _drain_lifecycle_outbox(self) -> int:
         """Idempotently project accounting-committed fills into the lifecycle journal.
 
         The accounting fill and outbox row share one SQLite transaction. If this
@@ -157,8 +157,6 @@ class PaperAccountEngine:
         delivered = 0
         while True:
             pending = self.store.list_pending_lifecycle_outbox(limit=100)
-            if order_id is not None:
-                pending = [row for row in pending if row["order_id"] == order_id]
             if not pending:
                 break
             for row in pending:
@@ -174,8 +172,6 @@ class PaperAccountEngine:
                 )
                 self.store.mark_lifecycle_outbox_delivered(str(row["order_id"]))
                 delivered += 1
-            if order_id is not None:
-                break
         return delivered
 
     def _validate_lifecycle_against_accounting(self) -> None:
@@ -267,7 +263,7 @@ class PaperAccountEngine:
                 # idempotent and keyed by the broker fill ID. Any failure bubbles
                 # up so PaperBroker does not acknowledge the simulated execution.
                 self.store.record_fill(fill, instrument)
-                self._drain_lifecycle_outbox(order_id=fill.order_id)
+                self._drain_lifecycle_outbox()
 
             broker = PaperBroker(
                 instrument,
