@@ -597,3 +597,78 @@ def test_startup_replays_pending_outbox_after_interrupted_lifecycle_delivery(tmp
     assert order["state"] == "FILLED"
     assert len(engine.order_lifecycle.get_fills("outbox-recovery-001")) == 1
     assert engine.store.list_pending_lifecycle_outbox() == []
+
+def test_outbox_insert_failure_rolls_back_entire_accounting_fill(tmp_path) -> None:
+    database = tmp_path / "outbox-rollback.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+
+    # Force the outbox insert to fail after the fills row has been inserted.
+    # The accounting transaction must roll back every related ledger mutation.
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            CREATE TRIGGER reject_lifecycle_outbox_insert
+            BEFORE INSERT ON lifecycle_outbox
+            BEGIN
+                SELECT RAISE(ABORT, 'simulated_outbox_storage_failure');
+            END;
+            """
+        )
+
+    with pytest.raises(sqlite3.IntegrityError, match="simulated_outbox_storage_failure"):
+        store.record_fill(make_fill("outbox-rollback-001", Side.LONG, 2, 100, 1.0), MES)
+
+    with sqlite3.connect(database) as connection:
+        for table in ("fills", "open_lots", "closed_trades", "lifecycle_outbox"):
+            count = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            assert count == 0, f"{table} must roll back with the failed outbox insert"
+
+    assert store.list_fills() == []
+    assert store.list_pending_lifecycle_outbox() == []
+
+def test_outbox_replay_after_lifecycle_commit_before_ack_is_idempotent(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "outbox-ack-crash.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    fill = make_fill("outbox-ack-crash-001", Side.LONG, 1, 100, 0.5)
+    store.record_fill(fill, MES)
+
+    # Simulate the crash window after the lifecycle journal committed the fill,
+    # but before the accounting outbox row could be acknowledged.
+    journal = OrderLifecycleStore(database)
+    journal.create_order(
+        client_order_id=fill.order_id,
+        symbol=fill.symbol,
+        side="LONG",
+        quantity=fill.quantity,
+        reference_price=fill.requested_price,
+        timestamp=fill.timestamp,
+    )
+    journal.transition(fill.order_id, OrderState.SUBMITTED, timestamp=fill.timestamp)
+    journal.record_fill(
+        client_order_id=fill.order_id,
+        fill_id=fill.order_id,
+        quantity=fill.quantity,
+        fill_price=fill.fill_price,
+        commission=fill.commission_usd,
+        timestamp=fill.timestamp,
+    )
+    assert len(store.list_pending_lifecycle_outbox()) == 1
+
+    original_ack = PaperAccountStore.mark_lifecycle_outbox_delivered
+    def fail_ack_once(self, order_id: str) -> bool:
+        if self.path == database:
+            raise sqlite3.OperationalError("simulated_ack_storage_failure")
+        return original_ack(self, order_id)
+
+    monkeypatch.setattr(PaperAccountStore, "mark_lifecycle_outbox_delivered", fail_ack_once)
+    with pytest.raises(sqlite3.OperationalError, match="simulated_ack_storage_failure"):
+        PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+
+    # Lifecycle already has the execution exactly once; pending outbox replay
+    # must compare as an exact duplicate, then acknowledge it on the next boot.
+    monkeypatch.setattr(PaperAccountStore, "mark_lifecycle_outbox_delivered", original_ack)
+    recovered = PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+    fills = recovered.order_lifecycle.get_fills(fill.order_id)
+    assert len(fills) == 1
+    assert fills[0]["fill_id"] == fill.order_id
+    assert recovered.store.list_pending_lifecycle_outbox() == []
