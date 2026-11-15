@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+from threading import Event, Thread
+from multiprocessing import Event as ProcessEvent, Process
 import sqlite3
 from decimal import Decimal
 
@@ -10,6 +12,15 @@ from tradingbot.execution.router import AccountRiskSnapshot, OrderIntent, OrderR
 from tradingbot.execution.order_lifecycle import OrderLifecycleStore, OrderState
 from tradingbot.risk.limits import RiskLimits
 from tradingbot.paper.broker import PaperBroker, PaperFill
+
+
+def _process_hold_account_execution_lock(database_path, acquired, release) -> None:
+    from pathlib import Path
+    from tradingbot.accounting.engine import _AccountExecutionLock
+
+    with _AccountExecutionLock(Path(database_path)):
+        acquired.set()
+        release.wait(timeout=5)
 
 
 MES = Instrument("MES", 0.25, 1.25, 5.0)
@@ -626,3 +637,95 @@ def test_risk_inputs_use_only_fills_available_at_requested_time(tmp_path) -> Non
     assert values["equity_usd"] == pytest.approx(50_005.0)
     assert values["daily_pnl_usd"] == pytest.approx(5.0)
     assert values["trades_today"] == 1
+
+
+
+def test_execution_lock_serializes_separate_engine_instances(tmp_path) -> None:
+    database = tmp_path / "shared-account.sqlite3"
+    first = PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+    second = PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+    first_inside = Event()
+    release_first = Event()
+    second_inside = Event()
+
+    def hold_first() -> None:
+        with first._execution_lock:
+            first_inside.set()
+            assert release_first.wait(timeout=3)
+
+    def enter_second() -> None:
+        assert first_inside.wait(timeout=3)
+        with second._execution_lock:
+            second_inside.set()
+
+    thread_one = Thread(target=hold_first)
+    thread_two = Thread(target=enter_second)
+    thread_one.start()
+    thread_two.start()
+    assert first_inside.wait(timeout=3)
+    assert not second_inside.wait(timeout=0.15)
+    release_first.set()
+    thread_one.join(timeout=3)
+    thread_two.join(timeout=3)
+    assert not thread_one.is_alive()
+    assert not thread_two.is_alive()
+    assert second_inside.is_set()
+
+
+
+def test_risk_inputs_reject_future_mark_and_equity_snapshot(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "future-mark-risk.sqlite3", 50_000)
+    store.record_fill(make_fill("marked-entry", Side.LONG, 1, 100, timestamp=T0), MES)
+    future = T0 + timedelta(minutes=5)
+    store.mark_to_market({"MES": 110}, future)
+
+    with pytest.raises(ValueError, match="risk_snapshot_timestamp_precedes_account_mark"):
+        store.get_risk_inputs(T0 + timedelta(minutes=2), timezone_name="UTC")
+
+
+
+def test_account_execution_lock_serializes_separate_processes(tmp_path) -> None:
+    database = tmp_path / "multiprocess-account.sqlite3"
+    first_acquired, first_release = ProcessEvent(), ProcessEvent()
+    second_acquired, second_release = ProcessEvent(), ProcessEvent()
+    first = Process(
+        target=_process_hold_account_execution_lock,
+        args=(str(database), first_acquired, first_release),
+    )
+    second = Process(
+        target=_process_hold_account_execution_lock,
+        args=(str(database), second_acquired, second_release),
+    )
+    first.start()
+    assert first_acquired.wait(timeout=3)
+    second.start()
+    assert not second_acquired.wait(timeout=0.2)
+    first_release.set()
+    assert second_acquired.wait(timeout=3)
+    second_release.set()
+    first.join(timeout=3)
+    second.join(timeout=3)
+    assert first.exitcode == 0
+    assert second.exitcode == 0
+
+
+
+def test_emergency_halt_from_another_engine_instance_blocks_entries(tmp_path) -> None:
+    database = tmp_path / "shared-halt.sqlite3"
+    first = PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+    second = PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+    router = second.router_for(MES, require_firm_profile=False)
+
+    first.emergency_halt("halt-from-peer-engine")
+
+    intent = OrderIntent(
+        instrument=MES,
+        side=Side.LONG,
+        stop_ticks=8,
+        reference_price=100,
+        timestamp=T0 + timedelta(minutes=1),
+        idempotency_key="blocked-after-peer-halt",
+    )
+    with pytest.raises(OrderRejected, match="emergency_halt_active"):
+        router.submit_entry(intent)
+    assert second.store.get_summary()["fills_count"] == 0

@@ -7,6 +7,7 @@ This module never starts a strategy, market-data feed, scheduler or background l
 
 from __future__ import annotations
 
+import fcntl
 import threading
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -21,6 +22,40 @@ from tradingbot.execution.order_lifecycle import (
 from tradingbot.models import Instrument
 from tradingbot.paper.broker import PaperBroker
 from tradingbot.risk.limits import RiskGuard, RiskLimits
+
+
+class _AccountExecutionLock:
+    """Serialize risk-check-to-fill sections across threads and local processes.
+
+    The lock file is stable for the lifetime of the account database. POSIX
+    advisory locks are released by the OS if a process exits or crashes.
+    Keep the lock file; unlinking it while another process holds it can split
+    the lock into two independent inodes.
+    """
+
+    def __init__(self, database_path) -> None:
+        self.path = database_path.with_name(database_path.name + ".execution.lock")
+        self._thread_lock = threading.RLock()
+
+    def __enter__(self):
+        self._thread_lock.acquire()
+        try:
+            self._handle = self.path.open("a+b")
+            fcntl.flock(self._handle.fileno(), fcntl.LOCK_EX)
+            return self
+        except BaseException:
+            handle = getattr(self, "_handle", None)
+            if handle is not None:
+                handle.close()
+            self._thread_lock.release()
+            raise
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        try:
+            fcntl.flock(self._handle.fileno(), fcntl.LOCK_UN)
+            self._handle.close()
+        finally:
+            self._thread_lock.release()
 
 
 class PaperAccountEngine:
@@ -60,7 +95,7 @@ class PaperAccountEngine:
         )
         self._brokers: dict[str, PaperBroker] = {}
         self._lock = threading.RLock()
-        self._execution_lock = threading.RLock()
+        self._execution_lock = _AccountExecutionLock(store.path)
         self._halt_event = threading.Event()
         if self.store.emergency_halt_active:
             self._halt_event.set()
@@ -305,7 +340,11 @@ class PaperAccountEngine:
             compliance_gate=compliance_gate,
             require_firm_profile=require_firm_profile,
             account_snapshot_provider=account_snapshot_provider,
-            halt_check=lambda: self._halt_event.is_set() or bool(self.order_lifecycle.list_unresolved_orders()),
+            halt_check=lambda: (
+                self._halt_event.is_set()
+                or self.store.emergency_halt_active
+                or bool(self.order_lifecycle.list_unresolved_orders())
+            ),
             submission_lock=self._execution_lock,
             order_lifecycle=self.order_lifecycle,
         )
