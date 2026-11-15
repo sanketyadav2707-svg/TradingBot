@@ -741,7 +741,7 @@ class PaperAccountStore:
             if future_mark is not None:
                 raise ValueError("risk_snapshot_timestamp_precedes_account_mark")
             future_snapshot = connection.execute(
-                "SELECT 1 FROM equity_snapshots WHERE timestamp > ? LIMIT 1", (current_time,)
+                "SELECT 1 FROM equity_snapshots WHERE timestamp > ? AND source != 'ACCOUNT_INITIALIZED' LIMIT 1", (current_time,)
             ).fetchone()
             if future_snapshot is not None:
                 raise ValueError("risk_snapshot_timestamp_precedes_equity_snapshot")
