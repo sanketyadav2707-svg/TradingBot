@@ -1,0 +1,45 @@
+# NSE market profile scaffold.
+# This file records exchange/session conventions only; it is not yet consumed by
+# the live runtime. Instrument specifications must be loaded from current
+# NSE security/contract master data, never inferred from these defaults.
+
+[market]
+id = "NSE_INDIA"
+exchange = "NSE"
+country = "IN"
+currency = "INR"
+timezone = "Asia/Kolkata"
+calendar_source = "https://www.nseindia.com/resources/exchange-communication-holidays"
+instrument_master_source = "https://www.nseindia.com/static/products-services/equity-derivatives-contract-information"
+verified_for_live_use = false
+
+[segments.equities]
+regular_open = "09:15"
+regular_close = "15:30"
+pre_open_start = "09:00"
+pre_open_end = "09:15"
+closing_auction_enabled = false # Revisit against current NSE CAS rollout and product scope.
+trade_weekdays = [0, 1, 2, 3, 4]
+holiday_calendar_required = true
+
+[segments.equity_derivatives]
+regular_open = "09:15"
+regular_close_before_2026_12_07 = "15:30"
+regular_close_from_2026_12_07 = "15:45"
+index_expiry_close_from_2026_12_07 = "15:30"
+pre_open_start = "09:00"
+pre_open_end = "09:15"
+trade_weekdays = [0, 1, 2, 3, 4]
+holiday_calendar_required = true
+schedule_effective_date = "2026-12-07"
+schedule_source = "https://www.nseindia.com/static/trade/platform-services-non-neat-decision-support-tools-algorithm-trading"
+
+[instruments]
+specification_source = "exchange_master"
+refresh_frequency = "each_trading_day"
+require_exchange_token = true
+require_expiry_for_derivatives = true
+require_lot_size_for_derivatives = true
+require_tick_size = true
+allow_stale_master = false
+allow_guessed_contract_specs = false
