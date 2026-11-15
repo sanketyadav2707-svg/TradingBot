@@ -91,6 +91,15 @@ class DashboardRuntime:
         except (OSError, KeyError, TypeError, ValueError, tomllib.TOMLDecodeError):
             errors.append("instrument_configuration_unavailable_or_invalid")
 
+        if runtime.risk_limits is not None and runtime.instruments:
+            mismatched = [
+                symbol for symbol, record in runtime.instruments.items()
+                if record.instrument.currency_code != runtime.risk_limits.currency_code
+            ]
+            if mismatched:
+                errors.append("instrument_currency_does_not_match_account_currency")
+                runtime.instruments.clear()
+
         if runtime.risk_limits is not None:
             try:
                 selected_db = database_path
