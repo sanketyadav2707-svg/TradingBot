@@ -30,7 +30,7 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _money(value: str | float | int | Decimal | None) -> Money | None:
+def _money(value: str | float | int | Decimal | None, currency: str = "USD") -> Money | None:
     if value is None:
         return None
     try:
@@ -39,7 +39,7 @@ def _money(value: str | float | int | Decimal | None) -> Money | None:
         raise ValueError("Money values must be valid finite decimals") from exc
     if not amount.is_finite():
         raise ValueError("Money values must be finite")
-    return Money(amount=format(amount.quantize(Decimal("0.01")), "f"), currency="USD")
+    return Money(amount=format(amount.quantize(Decimal("0.01")), "f"), currency=currency)
 
 
 def _cursor_offset(cursor: str | None) -> int:
@@ -142,12 +142,12 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
         snapshot = store.get_summary() if store is not None else None
         source = "sqlite-paper-account" if snapshot is not None else "local-config-only"
         account = {
-            "balance": _money(snapshot["balance_usd"]) if snapshot else None,
-            "equity": _money(snapshot["equity_usd"]) if snapshot else None,
-            "realized_pnl": _money(snapshot["realized_net_pnl_usd"]) if snapshot else None,
-            "unrealized_pnl": _money(snapshot["unrealized_pnl_usd"]) if snapshot else None,
-            "net_pnl": _money(snapshot["net_pnl_usd"]) if snapshot else None,
-            "max_drawdown": _money(snapshot["max_drawdown_usd"]) if snapshot else None,
+            "balance": _money(snapshot["balance_usd"], store.currency_code) if snapshot else None,
+            "equity": _money(snapshot["equity_usd"], store.currency_code) if snapshot else None,
+            "realized_pnl": _money(snapshot["realized_net_pnl_usd"], store.currency_code) if snapshot else None,
+            "unrealized_pnl": _money(snapshot["unrealized_pnl_usd"], store.currency_code) if snapshot else None,
+            "net_pnl": _money(snapshot["net_pnl_usd"], store.currency_code) if snapshot else None,
+            "max_drawdown": _money(snapshot["max_drawdown_usd"], store.currency_code) if snapshot else None,
         }
         return DashboardSummaryResponse(
             meta=meta(source, snapshot["as_of"] if snapshot else None),
@@ -164,8 +164,8 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
                 name=record.name,
                 exchange=record.exchange,
                 tick_size=format(Decimal(str(record.instrument.tick_size)), "f"),
-                tick_value_usd=_money(record.instrument.tick_value_usd),
-                point_value_usd=_money(record.instrument.point_value_usd),
+                tick_value=_money(record.instrument.tick_value_usd, record.instrument.currency_code),
+                point_value=_money(record.instrument.point_value_usd, record.instrument.currency_code),
             )
             for symbol, record in sorted(dashboard_runtime.instruments.items())
         ]
@@ -191,7 +191,7 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
                 "side": item["side"],
                 "quantity": item["quantity"],
                 "average_price": item["average_entry_price"],
-                "unrealized_pnl": _money(item["unrealized_pnl_usd"]),
+                "unrealized_pnl": _money(item["unrealized_pnl_usd"], store.currency_code),
                 "mark_price": item["mark_price"],
                 "mark_timestamp": item["mark_timestamp"],
                 "opened_at": item["opened_at"],
@@ -223,7 +223,7 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
                 "exit_time": row["exit_time"],
                 "entry_price": row["entry_price"],
                 "exit_price": row["exit_price"],
-                "net_pnl": _money(row["net_pnl_usd"]),
+                "net_pnl": _money(row["net_pnl_usd"], store.currency_code),
                 "exit_reason": "OPPOSING_FILL_FIFO",
             }
             for row in rows
@@ -257,7 +257,7 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
                 quantity=row["quantity"],
                 requested_price=row["requested_price"],
                 fill_price=row["fill_price"],
-                commission=_money(row["commission_usd"]),
+                commission=_money(row["commission_usd"], store.currency_code),
                 timestamp=row["timestamp"],
             )
             for row in rows
@@ -293,7 +293,7 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
             if lower_bound is None or stamp >= lower_bound:
                 selected.append({
                     "timestamp": row["timestamp"],
-                    "equity": _money(row["equity_usd"]),
+                    "equity": _money(row["equity_usd"], store.currency_code),
                 })
         return {
             "availability": "AVAILABLE" if selected else "NOT_PERSISTED",
@@ -318,7 +318,7 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
             gate="UNKNOWN",
             reasons=reasons,
             daily_loss_used=None,
-            daily_loss_limit=_money(limits.max_daily_loss_usd) if limits else None,
+            daily_loss_limit=_money(limits.max_daily_loss_usd, limits.currency_code) if limits else None,
             open_positions=account_snapshot["open_positions"] if account_snapshot else None,
             max_contracts=limits.max_contracts if limits else None,
             execution_halted=store.emergency_halt_active if store is not None else None,
