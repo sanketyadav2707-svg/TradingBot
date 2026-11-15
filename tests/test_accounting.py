@@ -625,3 +625,50 @@ def test_outbox_insert_failure_rolls_back_entire_accounting_fill(tmp_path) -> No
 
     assert store.list_fills() == []
     assert store.list_pending_lifecycle_outbox() == []
+
+def test_outbox_replay_after_lifecycle_commit_before_ack_is_idempotent(tmp_path, monkeypatch) -> None:
+    database = tmp_path / "outbox-ack-crash.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+    fill = make_fill("outbox-ack-crash-001", Side.LONG, 1, 100, 0.5)
+    store.record_fill(fill, MES)
+
+    # Simulate the crash window after the lifecycle journal committed the fill,
+    # but before the accounting outbox row could be acknowledged.
+    journal = OrderLifecycleStore(database)
+    journal.create_order(
+        client_order_id=fill.order_id,
+        symbol=fill.symbol,
+        side="LONG",
+        quantity=fill.quantity,
+        reference_price=fill.requested_price,
+        timestamp=fill.timestamp,
+    )
+    journal.transition(fill.order_id, OrderState.SUBMITTED, timestamp=fill.timestamp)
+    journal.record_fill(
+        client_order_id=fill.order_id,
+        fill_id=fill.order_id,
+        quantity=fill.quantity,
+        fill_price=fill.fill_price,
+        commission=fill.commission_usd,
+        timestamp=fill.timestamp,
+    )
+    assert len(store.list_pending_lifecycle_outbox()) == 1
+
+    original_ack = PaperAccountStore.mark_lifecycle_outbox_delivered
+    def fail_ack_once(self, order_id: str) -> bool:
+        if self.path == database:
+            raise sqlite3.OperationalError("simulated_ack_storage_failure")
+        return original_ack(self, order_id)
+
+    monkeypatch.setattr(PaperAccountStore, "mark_lifecycle_outbox_delivered", fail_ack_once)
+    with pytest.raises(sqlite3.OperationalError, match="simulated_ack_storage_failure"):
+        PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+
+    # Lifecycle already has the execution exactly once; pending outbox replay
+    # must compare as an exact duplicate, then acknowledge it on the next boot.
+    monkeypatch.setattr(PaperAccountStore, "mark_lifecycle_outbox_delivered", original_ack)
+    recovered = PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+    fills = recovered.order_lifecycle.get_fills(fill.order_id)
+    assert len(fills) == 1
+    assert fills[0]["fill_id"] == fill.order_id
+    assert recovered.store.list_pending_lifecycle_outbox() == []
