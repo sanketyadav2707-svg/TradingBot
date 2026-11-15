@@ -2,7 +2,7 @@
 
 [![Python Checks](https://github.com/sanketyadav2707-svg/TradingBot/actions/workflows/tests.yml/badge.svg)](https://github.com/sanketyadav2707-svg/TradingBot/actions/workflows/tests.yml)
 
-A personal, research-first automated intraday futures trading system targeting 3–15 minute holding periods and eventual use with the owner's own capital. It is intentionally **offline-first, broker-neutral, and paper-only** until market data, legal eligibility, broker/API permissions, deployment resilience, and strategy performance are independently validated. Prop-firm compatibility is optional, not the core objective.
+A personal, research-first, capital-first automated intraday trading system targeting 3–15 minute holding periods for the owner's own capital. India/NSE is the primary market profile; US futures research is preserved as an optional, isolated integration. It is intentionally **offline-first, broker-neutral, and paper-only** until market data, legal eligibility, broker/API permissions, deployment resilience, and strategy performance are independently validated. Prop-firm compatibility is optional, not the core objective.
 
 > This repository is software research, not investment advice. No strategy is represented as profitable. The included EMA crossover is only a plumbing example and must not be used as a live strategy.
 
@@ -16,7 +16,11 @@ For bugs and feature proposals, use the repository issue templates.
 
 ## Current status
 
-- [30-Day Master Build Plan](docs/ONE_MONTH_MASTER_PLAN.md): strategy research, risk/compliance gates and build milestones.\n- [VPS + Short-Horizon Automation Architecture](docs/VPS_SHORT_HORIZON_AUTOMATION_ARCHITECTURE.md): 3–15 minute intraday system, unattended VPS runtime, broker adapter, safety states, UI requirements and release gates.
+- [30-Day Master Build Plan](docs/ONE_MONTH_MASTER_PLAN.md): strategy research, risk/compliance gates and build milestones.
+- [India-First Migration Plan](docs/INDIA_MARKET_MIGRATION_PLAN.md): staged migration, preserved US components, INR support, NSE market data, compliance and release gates.
+- [NSE Market Profile Scaffold](config/markets/india_nse.toml): source-backed session conventions only; not consumed by live runtime.
+- [US Research Master Plan](docs/ONE_MONTH_MASTER_PLAN.md): preserved MES/MNQ research plan.
+- [VPS + Short-Horizon Automation Architecture](docs/VPS_SHORT_HORIZON_AUTOMATION_ARCHITECTURE.md): 3–15 minute intraday system, unattended VPS runtime, broker adapter, safety states, UI requirements and release gates.
 
 - Python 3.12+ project scaffold
 - CSV historical-data input with strict timestamp/OHLC validation
@@ -85,7 +89,7 @@ tests/                   Automated tests
 
 ## Current market research position
 
-No contract has been selected as the live target. Start with MES and MNQ side-by-side, then compare MGC and MCL. M2K and MYM remain secondary candidates. Selection requires measured intraday spread, slippage, session volume, volatility, data quality, and allowed-symbol checks, not a subjective preference. See [Market Research](docs/MARKET_RESEARCH.md).
+India/NSE is now the primary market for future capital deployment. No NSE instrument or broker has been selected yet. Candidate segments are cash equities and index futures; options are deferred for the first research cycle. Selection requires source-backed instrument specifications, executable liquidity, realistic costs, data quality, capital/margin fit and current broker/API compliance. See [India-First Migration Plan](docs/INDIA_MARKET_MIGRATION_PLAN.md).\n\nThe MES/MNQ/MGC/MCL/M2K/MYM research remains preserved as an optional US-futures integration. Its CME-specific assumptions must not leak into the NSE runtime.
 
 ## Prop-firm approach
 
