@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from threading import Event, Thread
 import sqlite3
 from decimal import Decimal
 
@@ -626,3 +627,36 @@ def test_risk_inputs_use_only_fills_available_at_requested_time(tmp_path) -> Non
     assert values["equity_usd"] == pytest.approx(50_005.0)
     assert values["daily_pnl_usd"] == pytest.approx(5.0)
     assert values["trades_today"] == 1
+
+
+
+def test_execution_lock_serializes_separate_engine_instances(tmp_path) -> None:
+    database = tmp_path / "shared-account.sqlite3"
+    first = PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+    second = PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+    first_inside = Event()
+    release_first = Event()
+    second_inside = Event()
+
+    def hold_first() -> None:
+        with first._execution_lock:
+            first_inside.set()
+            assert release_first.wait(timeout=3)
+
+    def enter_second() -> None:
+        assert first_inside.wait(timeout=3)
+        with second._execution_lock:
+            second_inside.set()
+
+    thread_one = Thread(target=hold_first)
+    thread_two = Thread(target=enter_second)
+    thread_one.start()
+    thread_two.start()
+    assert first_inside.wait(timeout=3)
+    assert not second_inside.wait(timeout=0.15)
+    release_first.set()
+    thread_one.join(timeout=3)
+    thread_two.join(timeout=3)
+    assert not thread_one.is_alive()
+    assert not thread_two.is_alive()
+    assert second_inside.is_set()
