@@ -211,6 +211,16 @@ class PaperAccountStore:
                     for name in missing:
                         connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} TEXT")
 
+            # Upgrade existing accounting fills into the durable delivery outbox.
+            # Existing lifecycle records are safe to replay because fill IDs are idempotent.
+            connection.execute(
+                """INSERT OR IGNORE INTO lifecycle_outbox(
+                    order_id, symbol, side, quantity, fill_price, commission_usd, timestamp
+                )
+                SELECT order_id, symbol, CASE WHEN side > 0 THEN 'LONG' ELSE 'SHORT' END,
+                       quantity, fill_price, commission_usd, timestamp
+                FROM fills"""
+            )
             connection.execute(
                 "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('starting_balance_usd', ?)",
                 (_number(starting_balance),),
