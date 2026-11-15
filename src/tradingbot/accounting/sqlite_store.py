@@ -224,6 +224,12 @@ class PaperAccountStore:
                        quantity, fill_price, commission_usd, timestamp
                 FROM fills"""
             )
+            # Detect whether this is a genuinely new ledger before inserting
+            # its opening balance. Pre-currency ledgers are legacy USD accounts.
+            prior_balance = connection.execute(
+                "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
+            ).fetchone()
+            legacy_existing_account = prior_balance is not None
             connection.execute(
                 "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('starting_balance_usd', ?)",
                 (_number(starting_balance),),
@@ -231,10 +237,12 @@ class PaperAccountStore:
             connection.execute(
                 "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('emergency_halt_active', '0')"
             )
-            # Legacy databases have no denomination field; their historical USD
-            # schema is explicitly upgraded as USD, never guessed to be INR.
+            # Existing pre-currency databases are explicitly USD. New ledgers
+            # take the requested ISO currency. Never infer/relabel old balances.
+            initial_currency = "USD" if legacy_existing_account else self.currency_code
             connection.execute(
-                "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('currency_code', 'USD')"
+                "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('currency_code', ?)",
+                (initial_currency,),
             )
             stored_currency = connection.execute(
                 "SELECT value FROM account_meta WHERE key = 'currency_code'"
