@@ -735,6 +735,16 @@ class PaperAccountStore:
             ).fetchone()
             if future_fill is not None:
                 raise ValueError("risk_snapshot_timestamp_precedes_account_fill")
+            future_mark = connection.execute(
+                "SELECT 1 FROM marks WHERE timestamp > ? LIMIT 1", (current_time,)
+            ).fetchone()
+            if future_mark is not None:
+                raise ValueError("risk_snapshot_timestamp_precedes_account_mark")
+            future_snapshot = connection.execute(
+                "SELECT 1 FROM equity_snapshots WHERE timestamp > ? LIMIT 1", (current_time,)
+            ).fetchone()
+            if future_snapshot is not None:
+                raise ValueError("risk_snapshot_timestamp_precedes_equity_snapshot")
 
             summary = self._summary(connection)
             equity_value = summary["equity_usd"]
