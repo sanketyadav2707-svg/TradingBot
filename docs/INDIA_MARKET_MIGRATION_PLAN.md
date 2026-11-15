@@ -10,7 +10,7 @@ No claim of profitability or "perfect" execution is made.
 
 Do not rewrite the project from scratch and do not delete the US work.
 
-Retain the broker-neutral domain, risk, accounting, lifecycle, paper execution, API, dashboard, test harness, and deterministic research components. Treat the CME/US futures work as a preserved optional research integration. The primary application profile will move to India/NSE only after the market configuration, data, and cost model have been validated.
+Retain the broker-neutral domain, risk, accounting, lifecycle, paper execution, API, dashboard, test harness, and deterministic research components. Treat the CME/US futures work as a preserved optional research integration. The primary application profile will move to India/NSE only after market configuration, data, and cost models are validated.
 
 ## 2. Existing assets to preserve
 
@@ -35,19 +35,25 @@ These components are not to be deleted. They must be isolated behind explicit ma
 ## 4. India/NSE market facts currently used for planning
 
 - Exchange timezone: Asia/Kolkata.
-- NSE equity cash regular session: 09:15–15:30 IST, excluding exchange holidays.
-- NSE equity derivatives: the currently published schedule and the announced 7 December 2026 change must be versioned. The November 2026 NSE circular schedules 09:15–15:45 from 7 December 2026, with expiring index derivatives ceasing at 15:30. Do not assume one static close time for all dates/products.
-- Exchange holidays, special sessions, pre-open and closing-auction windows require source-backed calendar data. Until implemented and verified, unknown dates/sessions fail closed.
+- NSE equity cash regular session: 09:15–15:30 IST, excluding exchange holidays. The cash segment also has a closing-auction session; it must be modelled as a separate session, not confused with the normal continuous session.
+- NSE equity derivatives regular session as of 16 November 2026: 09:15–15:40 IST.
+- From 7 December 2026, the revised schedule applies: stock derivatives trade until 15:45 on all trading days; index derivatives trade until 15:45 except expiring index derivatives, which cease at 15:30. The schedule must be selected by segment, instrument and effective date, not one static close time.
+- Equity cash pre-open: 09:00–09:15. Derivatives pre-open schedule and eligible products must be separately modelled; do not enable pre-open execution by default.
+- Exchange holidays, special sessions, pre-open, closing-auction and transition windows require source-backed calendar data. Until implemented and verified, unknown dates/sessions fail closed.
 - Derivative lot sizes, permitted symbols, quantity freeze limits, tick sizes and expiry calendars must come from current NSE contract/security master data. Do not hardcode stale lot sizes or assume one tick size across all instruments.
-- NSE's retail-algo framework and broker-specific API onboarding are prerequisites to any live API integration. No live order route is enabled by this migration.
+- NSE retail-algo framework and broker-specific API onboarding are prerequisites to any live API integration. NSE FAQ states client static IP is mandatory for tech-savvy investors using API; API sessions must be logged out daily. API-originated orders are treated as algo orders and need correct tagging. NSE FAQ also states market and IOC orders are not permitted through algo in the cited framework; verify current broker/exchange implementation before designing order types.
+- This is an engineering summary, not legal advice. The broker must confirm the exact client category, API onboarding, algo registration/tagging, static-IP, order-type and order-rate treatment for the user's setup.
 
 Official references:
 - NSE market timings and holidays: https://www.nseindia.com/resources/exchange-communication-holidays
+- NSE market timings: https://www.nseindia.com/static/market-data/market-timings
+- NSE Closing Auction Session 2.0 FAQ (applicable 7 December 2026): https://nsearchives.nseindia.com/web/mediaattachment/2026-11/FAQs_for_CM_and_FO_FOR_CAS_2.0_20261109152618.pdf
 - NSE equity-derivatives contract specifications: https://www.nseindia.com/static/products-services/equity-derivatives-contract-specifications
 - NSE contract information and permitted lot-size files: https://www.nseindia.com/static/products-services/equity-derivatives-contract-information
 - NSE retail algo framework: https://www.nseindia.com/static/trade/platform-services-non-neat-decision-support-tools-algorithm-trading
 - NSE retail algo FAQs: https://nsearchives.nseindia.com/web/sites/default/files/inline-files/FAQ_Retail%20Algo_03112025_NSE.pdf
 - NSE implementation standards circular: https://nsearchives.nseindia.com/content/circulars/INVG67858.pdf
+- NSE circular and implementation page updated 27 May 2026: https://www.nseindia.com/static/trade/platform-services-non-neat-decision-support-tools-algorithm-trading
 
 ## 5. Required engineering migration
 
@@ -65,7 +71,7 @@ Current domain and accounting APIs use USD-specific names. Before INR support:
 - Use Decimal for monetary amounts and deterministic rounding rules.
 - Keep tick size, tick value, point value, lot size, quantity step, contract multiplier and currency separate.
 - Add migration tests for existing USD paper databases. Existing databases must not be silently reinterpreted as INR.
-- Ensure P&L, risk limits, dashboard labels, API schemas and exports always display the account currency.
+- Ensure P&L, risk limits, dashboard labels, API schemas and exports always display account currency.
 - Support multiple accounts with distinct currencies without implicit FX conversion.
 
 ### M2: Market and instrument metadata
@@ -94,7 +100,7 @@ Current domain and accounting APIs use USD-specific names. Before INR support:
 
 ### M5: Broker adapter and paper execution
 - Broker integration must implement the existing ExecutionPort/router boundary; strategies never call broker APIs directly.
-- First adapter candidate is not selected yet. Compare official API access, fees, data entitlement, order types, static-IP/authentication rules, rate limits, websocket stability, partial-fill semantics, order/position reconciliation and support.
+- Broker adapter candidate is not selected yet. Compare official API access, fees, data entitlement, order types, static-IP/authentication rules, rate limits, websocket stability, partial-fill semantics, order/position reconciliation and support.
 - Add broker sandbox/paper adapter only after terms and data entitlement are verified.
 - Idempotency, partial-fill accounting, reconnect/reconciliation, emergency halt and audit trail are release blockers.
 - No live order path is to be enabled by changing a config value.
