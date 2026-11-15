@@ -340,7 +340,11 @@ class PaperAccountEngine:
             compliance_gate=compliance_gate,
             require_firm_profile=require_firm_profile,
             account_snapshot_provider=account_snapshot_provider,
-            halt_check=lambda: self._halt_event.is_set() or bool(self.order_lifecycle.list_unresolved_orders()),
+            halt_check=lambda: (
+                self._halt_event.is_set()
+                or self.store.emergency_halt_active
+                or bool(self.order_lifecycle.list_unresolved_orders())
+            ),
             submission_lock=self._execution_lock,
             order_lifecycle=self.order_lifecycle,
         )
