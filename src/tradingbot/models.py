@@ -115,15 +115,15 @@ class BacktestResult:
             longest_losing_streak = max(longest_losing_streak, streak)
         return {
             "symbol": self.symbol,
-            "currency": self.currency_code,
-            "starting_balance": round(self.starting_balance_usd, 2),
-            "ending_balance": round(self.ending_balance_usd, 2),
-            "total_net_pnl": round(self.total_net_pnl_usd, 2),
+            "currency_code": self.currency_code,
+            "starting_balance_usd": round(self.starting_balance_usd, 2),
+            "ending_balance_usd": round(self.ending_balance_usd, 2),
+            "total_net_pnl_usd": round(self.total_net_pnl_usd, 2),
             "return_pct": round(100 * self.total_net_pnl_usd / self.starting_balance_usd, 4),
             "trades": count,
             "win_rate_pct": round(100 * len(winners) / count, 2) if count else 0.0,
             "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else None,
-            "expectancy_per_trade": round(self.total_net_pnl_usd / count, 2) if count else 0.0,
-            "max_drawdown": round(self.max_drawdown_usd, 2),
+            "expectancy_per_trade_usd": round(self.total_net_pnl_usd / count, 2) if count else 0.0,
+            "max_drawdown_usd": round(self.max_drawdown_usd, 2),
             "longest_losing_streak": longest_losing_streak,
         }
