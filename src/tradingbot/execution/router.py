@@ -37,6 +37,7 @@ class AccountRiskSnapshot:
     peak_equity_usd: float
     daily_pnl_usd: float
     trades_today: int
+    currency_code: str = "USD"
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +138,7 @@ class ExecutionRouter:
             broker_instrument.tick_size == requested_instrument.tick_size
             and broker_instrument.tick_value_usd == requested_instrument.tick_value_usd
             and broker_instrument.point_value_usd == requested_instrument.point_value_usd
+            and broker_instrument.currency_code == requested_instrument.currency_code
         )
         if not same_contract or not same_specification:
             raise OrderRejected("broker_instrument_mismatch")
@@ -155,6 +157,8 @@ class ExecutionRouter:
 
         if not isinstance(account, AccountRiskSnapshot):
             raise OrderRejected("invalid_account_snapshot_type")
+        if account.currency_code != intent.instrument.currency_code or account.currency_code != self.risk_guard.limits.currency_code:
+            raise OrderRejected("account_instrument_currency_mismatch")
 
         decision = self.risk_guard.evaluate_entry(
             instrument=intent.instrument,
