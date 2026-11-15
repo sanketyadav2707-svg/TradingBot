@@ -164,8 +164,8 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
                 name=record.name,
                 exchange=record.exchange,
                 tick_size=format(Decimal(str(record.instrument.tick_size)), "f"),
-                tick_value=_money(record.instrument.tick_value_usd, record.instrument.currency_code),
-                point_value=_money(record.instrument.point_value_usd, record.instrument.currency_code),
+                tick_value_usd=_money(record.instrument.tick_value_usd, record.instrument.currency_code),
+                point_value_usd=_money(record.instrument.point_value_usd, record.instrument.currency_code),
             )
             for symbol, record in sorted(dashboard_runtime.instruments.items())
         ]
