@@ -597,3 +597,31 @@ def test_startup_replays_pending_outbox_after_interrupted_lifecycle_delivery(tmp
     assert order["state"] == "FILLED"
     assert len(engine.order_lifecycle.get_fills("outbox-recovery-001")) == 1
     assert engine.store.list_pending_lifecycle_outbox() == []
+
+def test_outbox_insert_failure_rolls_back_entire_accounting_fill(tmp_path) -> None:
+    database = tmp_path / "outbox-rollback.sqlite3"
+    store = PaperAccountStore(database, 50_000)
+
+    # Force the outbox insert to fail after the fills row has been inserted.
+    # The accounting transaction must roll back every related ledger mutation.
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            CREATE TRIGGER reject_lifecycle_outbox_insert
+            BEFORE INSERT ON lifecycle_outbox
+            BEGIN
+                SELECT RAISE(ABORT, 'simulated_outbox_storage_failure');
+            END;
+            """
+        )
+
+    with pytest.raises(sqlite3.IntegrityError, match="simulated_outbox_storage_failure"):
+        store.record_fill(make_fill("outbox-rollback-001", Side.LONG, 2, 100, 1.0), MES)
+
+    with sqlite3.connect(database) as connection:
+        for table in ("fills", "open_lots", "closed_trades", "lifecycle_outbox"):
+            count = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            assert count == 0, f"{table} must roll back with the failed outbox insert"
+
+    assert store.list_fills() == []
+    assert store.list_pending_lifecycle_outbox() == []
