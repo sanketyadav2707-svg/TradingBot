@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from threading import Event, Thread
+from multiprocessing import Event as ProcessEvent, Process
 import sqlite3
 from decimal import Decimal
 
@@ -11,6 +12,15 @@ from tradingbot.execution.router import AccountRiskSnapshot, OrderIntent, OrderR
 from tradingbot.execution.order_lifecycle import OrderLifecycleStore, OrderState
 from tradingbot.risk.limits import RiskLimits
 from tradingbot.paper.broker import PaperBroker, PaperFill
+
+
+def _process_hold_account_execution_lock(database_path, acquired, release) -> None:
+    from pathlib import Path
+    from tradingbot.accounting.engine import _AccountExecutionLock
+
+    with _AccountExecutionLock(Path(database_path)):
+        acquired.set()
+        release.wait(timeout=5)
 
 
 MES = Instrument("MES", 0.25, 1.25, 5.0)
@@ -671,3 +681,29 @@ def test_risk_inputs_reject_future_mark_and_equity_snapshot(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="risk_snapshot_timestamp_precedes_account_mark"):
         store.get_risk_inputs(T0 + timedelta(minutes=2), timezone_name="UTC")
+
+
+
+def test_account_execution_lock_serializes_separate_processes(tmp_path) -> None:
+    database = tmp_path / "multiprocess-account.sqlite3"
+    first_acquired, first_release = ProcessEvent(), ProcessEvent()
+    second_acquired, second_release = ProcessEvent(), ProcessEvent()
+    first = Process(
+        target=_process_hold_account_execution_lock,
+        args=(str(database), first_acquired, first_release),
+    )
+    second = Process(
+        target=_process_hold_account_execution_lock,
+        args=(str(database), second_acquired, second_release),
+    )
+    first.start()
+    assert first_acquired.wait(timeout=3)
+    second.start()
+    assert not second_acquired.wait(timeout=0.2)
+    first_release.set()
+    assert second_acquired.wait(timeout=3)
+    second_release.set()
+    first.join(timeout=3)
+    second.join(timeout=3)
+    assert first.exitcode == 0
+    assert second.exitcode == 0
