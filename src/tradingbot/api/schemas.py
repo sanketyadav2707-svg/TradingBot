@@ -31,7 +31,7 @@ class ReadinessResponse(StrictResponse):
 
 class Money(StrictResponse):
     amount: str
-    currency: Literal["USD"] = "USD"
+    currency: str
 
 
 class ApiMeta(StrictResponse):
@@ -59,8 +59,8 @@ class InstrumentMetadata(StrictResponse):
     name: str
     exchange: str
     tick_size: str
-    tick_value_usd: Money
-    point_value_usd: Money
+    tick_value: Money
+    point_value: Money
 
 
 class InstrumentsResponse(StrictResponse):
