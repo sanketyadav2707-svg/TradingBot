@@ -707,3 +707,25 @@ def test_account_execution_lock_serializes_separate_processes(tmp_path) -> None:
     second.join(timeout=3)
     assert first.exitcode == 0
     assert second.exitcode == 0
+
+
+
+def test_emergency_halt_from_another_engine_instance_blocks_entries(tmp_path) -> None:
+    database = tmp_path / "shared-halt.sqlite3"
+    first = PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+    second = PaperAccountEngine(PaperAccountStore(database, 50_000), RiskLimits(max_contracts=1))
+    router = second.router_for(MES, require_firm_profile=False)
+
+    first.emergency_halt("halt-from-peer-engine")
+
+    intent = OrderIntent(
+        instrument=MES,
+        side=Side.LONG,
+        stop_ticks=8,
+        reference_price=100,
+        timestamp=T0 + timedelta(minutes=1),
+        idempotency_key="blocked-after-peer-halt",
+    )
+    with pytest.raises(OrderRejected, match="emergency_halt_active"):
+        router.submit_entry(intent)
+    assert second.store.get_summary()["fills_count"] == 0
