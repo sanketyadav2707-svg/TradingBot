@@ -597,3 +597,32 @@ def test_startup_replays_pending_outbox_after_interrupted_lifecycle_delivery(tmp
     assert order["state"] == "FILLED"
     assert len(engine.order_lifecycle.get_fills("outbox-recovery-001")) == 1
     assert engine.store.list_pending_lifecycle_outbox() == []
+
+
+
+def test_risk_inputs_reject_future_dated_fill_instead_of_leaking_future_pnl(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "future-risk.sqlite3", 50_000)
+    store.record_fill(make_fill("historical-entry", Side.LONG, 1, 100, timestamp=T0), MES)
+    store.record_fill(
+        make_fill("future-exit", Side.SHORT, 1, 101, timestamp=T0 + timedelta(minutes=5)),
+        MES,
+    )
+
+    # Current ledger state is flat and includes the future realized profit.
+    # A risk decision at +2 minutes must not see that later execution.
+    with pytest.raises(ValueError, match="risk_snapshot_timestamp_precedes_account_fill"):
+        store.get_risk_inputs(T0 + timedelta(minutes=2), timezone_name="UTC")
+
+
+def test_risk_inputs_use_only_fills_available_at_requested_time(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "historical-risk.sqlite3", 50_000)
+    store.record_fill(make_fill("entry-before-cutoff", Side.LONG, 1, 100, timestamp=T0), MES)
+    store.record_fill(
+        make_fill("exit-before-cutoff", Side.SHORT, 1, 101, timestamp=T0 + timedelta(minutes=1)),
+        MES,
+    )
+
+    values = store.get_risk_inputs(T0 + timedelta(minutes=2), timezone_name="UTC")
+    assert values["equity_usd"] == pytest.approx(50_005.0)
+    assert values["daily_pnl_usd"] == pytest.approx(5.0)
+    assert values["trades_today"] == 1

@@ -726,6 +726,16 @@ class PaperAccountStore:
         day_start = _timestamp(day_start_utc)
 
         with self._lock, self._connection() as connection:
+            # The account summary and peak-equity series are current-state
+            # aggregates. They cannot safely answer a historical risk query if
+            # a later fill is already present in the ledger. Fail closed rather
+            # than leaking future realized P&L into an earlier order decision.
+            future_fill = connection.execute(
+                "SELECT 1 FROM fills WHERE timestamp > ? LIMIT 1", (current_time,)
+            ).fetchone()
+            if future_fill is not None:
+                raise ValueError("risk_snapshot_timestamp_precedes_account_fill")
+
             summary = self._summary(connection)
             equity_value = summary["equity_usd"]
             if equity_value is None:
