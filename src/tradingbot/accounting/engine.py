@@ -75,6 +75,8 @@ class PaperAccountEngine:
             raise TypeError("store must be a PaperAccountStore")
         if not isinstance(risk_limits, RiskLimits):
             raise TypeError("risk_limits must be RiskLimits")
+        if store.currency_code != risk_limits.currency_code:
+            raise ValueError("paper account and risk-limit currencies must match")
         self.store = store
         # Share the same durable SQLite database as accounting. Both journals
         # survive process restarts and are backed up as one account artifact.
@@ -281,6 +283,8 @@ class PaperAccountEngine:
     def _broker_for(self, instrument: Instrument) -> PaperBroker:
         if not isinstance(instrument, Instrument):
             raise TypeError("instrument must be an Instrument")
+        if instrument.currency_code != self.store.currency_code:
+            raise ValueError("instrument currency does not match paper account currency")
         symbol = instrument.symbol.strip().upper()
         self.store.validate_instrument(instrument)
         with self._lock:
@@ -331,7 +335,7 @@ class PaperAccountEngine:
                 timezone_name=risk_timezone,
                 max_mark_age_seconds=self.max_mark_age_seconds,
             )
-            return AccountRiskSnapshot(**values)
+            return AccountRiskSnapshot(**values, currency_code=self.store.currency_code)
 
         return ExecutionRouter(
             broker=self._broker_for(instrument),
