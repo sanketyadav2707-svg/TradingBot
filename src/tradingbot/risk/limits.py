@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import isfinite
+import re
 
 from tradingbot.models import Instrument
 
 
 def _finite_number(value: object) -> bool:
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and isfinite(value)
-    )
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,22 +21,18 @@ class RiskLimits:
     max_risk_per_trade_usd: float = 50.0
     max_contracts: int = 1
     max_trades_per_day: int = 4
+    # Legacy *_usd field names remain stable; this field is the denomination.
+    currency_code: str = "USD"
 
     def __post_init__(self) -> None:
-        numeric = (
-            self.starting_balance_usd,
-            self.max_daily_loss_usd,
-            self.max_total_drawdown_usd,
-            self.max_risk_per_trade_usd,
-        )
+        numeric = (self.starting_balance_usd, self.max_daily_loss_usd,
+                   self.max_total_drawdown_usd, self.max_risk_per_trade_usd)
         if any(not _finite_number(value) or value <= 0 for value in numeric):
             raise ValueError("All balance and risk limits must be finite and positive")
-        if (
-            type(self.max_contracts) is not int
-            or type(self.max_trades_per_day) is not int
-            or self.max_contracts < 1
-            or self.max_trades_per_day < 1
-        ):
+        if not isinstance(self.currency_code, str) or not re.fullmatch(r"[A-Z]{3}", self.currency_code):
+            raise ValueError("currency_code must be a three-letter uppercase ISO 4217 code")
+        if (type(self.max_contracts) is not int or type(self.max_trades_per_day) is not int
+                or self.max_contracts < 1 or self.max_trades_per_day < 1):
             raise ValueError("Contract and trade limits must be positive integers")
 
 
@@ -53,16 +46,9 @@ class RiskDecision:
 class RiskGuard:
     """Size a single entry using stop distance and a conservative friction estimate."""
 
-    def __init__(
-        self,
-        limits: RiskLimits,
-        commission_per_contract_per_side_usd: float = 0.0,
-        slippage_ticks_per_side: int = 1,
-    ) -> None:
-        if (
-            not _finite_number(commission_per_contract_per_side_usd)
-            or commission_per_contract_per_side_usd < 0
-        ):
+    def __init__(self, limits: RiskLimits, commission_per_contract_per_side_usd: float = 0.0,
+                 slippage_ticks_per_side: int = 1) -> None:
+        if not _finite_number(commission_per_contract_per_side_usd) or commission_per_contract_per_side_usd < 0:
             raise ValueError("Commission must be finite and non-negative")
         if type(slippage_ticks_per_side) is not int or slippage_ticks_per_side < 0:
             raise ValueError("Slippage ticks must be a non-negative integer")
@@ -70,33 +56,20 @@ class RiskGuard:
         self.commission = float(commission_per_contract_per_side_usd)
         self.slippage_ticks = slippage_ticks_per_side
 
-    def evaluate_entry(
-        self,
-        *,
-        instrument: Instrument,
-        stop_ticks: int,
-        equity_usd: float,
-        peak_equity_usd: float,
-        daily_pnl_usd: float,
-        trades_today: int,
-    ) -> RiskDecision:
+    def evaluate_entry(self, *, instrument: Instrument, stop_ticks: int, equity_usd: float,
+                       peak_equity_usd: float, daily_pnl_usd: float, trades_today: int) -> RiskDecision:
+        if instrument.currency_code != self.limits.currency_code:
+            return RiskDecision(False, 0, "instrument_account_currency_mismatch")
         if type(stop_ticks) is not int or stop_ticks < 1:
             return RiskDecision(False, 0, "stop_distance_must_be_positive")
-
         account_values = (equity_usd, peak_equity_usd, daily_pnl_usd)
-        if (
-            any(not _finite_number(value) for value in account_values)
-            or type(trades_today) is not int
-            or trades_today < 0
-            or peak_equity_usd < equity_usd
-        ):
+        if (any(not _finite_number(value) for value in account_values)
+                or type(trades_today) is not int or trades_today < 0 or peak_equity_usd < equity_usd):
             return RiskDecision(False, 0, "invalid_account_snapshot")
-
         if equity_usd <= 0:
             return RiskDecision(False, 0, "non_positive_equity")
         if trades_today >= self.limits.max_trades_per_day:
             return RiskDecision(False, 0, "max_trades_per_day_reached")
-
         drawdown = max(0.0, peak_equity_usd - equity_usd)
         remaining_drawdown = self.limits.max_total_drawdown_usd - drawdown
         remaining_daily = self.limits.max_daily_loss_usd + daily_pnl_usd
@@ -104,23 +77,14 @@ class RiskGuard:
             return RiskDecision(False, 0, "maximum_total_drawdown_reached")
         if remaining_daily <= 0:
             return RiskDecision(False, 0, "maximum_daily_loss_reached")
-
         slippage_risk = 2 * self.slippage_ticks * instrument.tick_value_usd
         stop_risk = stop_ticks * instrument.tick_value_usd
         round_trip_commission = 2 * self.commission
         estimated_risk_per_contract = stop_risk + slippage_risk + round_trip_commission
         if not isfinite(estimated_risk_per_contract) or estimated_risk_per_contract <= 0:
             return RiskDecision(False, 0, "invalid_risk_calculation")
-
-        budget = min(
-            self.limits.max_risk_per_trade_usd,
-            remaining_daily,
-            remaining_drawdown,
-        )
-        quantity = min(
-            self.limits.max_contracts,
-            int(budget // estimated_risk_per_contract),
-        )
+        budget = min(self.limits.max_risk_per_trade_usd, remaining_daily, remaining_drawdown)
+        quantity = min(self.limits.max_contracts, int(budget // estimated_risk_per_contract))
         if quantity < 1:
             return RiskDecision(False, 0, "risk_budget_too_small_for_one_contract")
         return RiskDecision(True, quantity, "approved")
