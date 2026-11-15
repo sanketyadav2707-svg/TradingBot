@@ -85,7 +85,7 @@ tests/                   Automated tests
 
 ## Current market research position
 
-No contract has been selected as the live target. Start with MES and MNQ side-by-side, then compare MGC and MCL. M2K and MYM remain secondary candidates. Selection requires measured intraday spread, slippage, session volume, volatility, data quality, and allowed-symbol checks, not a subjective preference. See [Market Research](docs/MARKET_RESEARCH.md).
+India/NSE is now the primary market for future capital deployment. No NSE instrument or broker has been selected yet. Candidate segments are cash equities and index futures; options are deferred for the first research cycle. Selection requires source-backed instrument specifications, executable liquidity, realistic costs, data quality, capital/margin fit and current broker/API compliance. See [India-First Migration Plan](docs/INDIA_MARKET_MIGRATION_PLAN.md).\n\nThe MES/MNQ/MGC/MCL/M2K/MYM research remains preserved as an optional US-futures integration. Its CME-specific assumptions must not leak into the NSE runtime.
 
 ## Prop-firm approach
 
