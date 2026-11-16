@@ -2,12 +2,12 @@ name: Web checks
 
 on:
   push:
-    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account", "feature/order-lifecycle-engine-integration"]
+    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/persistent-paper-account", "feature/order-lifecycle-engine-integration", "integration/phase1-ui-currency-and-phase2-runtime"]
     paths:
       - "web/**"
       - ".github/workflows/web.yml"
   pull_request:
-    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/order-lifecycle-engine-integration"]
+    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/order-lifecycle-engine-integration", "feat/currency-aware-accounting-foundation"]
     paths:
       - "web/**"
       - ".github/workflows/web.yml"
@@ -34,6 +34,8 @@ jobs:
           node-version: "22"
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
+      - name: Currency formatting unit tests
+        run: npm test
       - name: Lint
         run: npm run lint
       - name: Type check

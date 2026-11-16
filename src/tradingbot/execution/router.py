@@ -176,6 +176,7 @@ class ExecutionRouter:
                 timestamp=intent.timestamp,
                 symbol=intent.instrument.symbol,
                 quantity=decision.quantity,
+                lot_size=intent.instrument.lot_size,
             )
             if not compliance.allowed:
                 raise OrderRejected(compliance.reason)

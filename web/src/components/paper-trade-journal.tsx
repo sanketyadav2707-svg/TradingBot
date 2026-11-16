@@ -3,23 +3,18 @@
 import { useEffect, useState } from "react";
 import { Clock3, Database, RefreshCw } from "lucide-react";
 import { tradingBotApi } from "@/lib/api/client";
-import type { Position, Trade } from "@/lib/api/types";
+import type { Money, Position, Trade } from "@/lib/api/types";
+import { formatMoney } from "@/lib/format-money.mjs";
 
-function amount(value: string | null | undefined): string {
+function price(value: string | null | undefined, currency: string): string {
   if (value === null || value === undefined) return "Awaiting mark";
-  const number = Number(value);
-  return Number.isFinite(number)
-    ? new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(number)
-    : "Unavailable";
+  return formatMoney({ amount: value, currency });
 }
 
-function pnl(value: { amount: string; currency: "USD" } | null): string {
-  if (!value) return "Awaiting mark";
-  const n = Number(value.amount);
-  if (!Number.isFinite(n)) return "Unavailable";
-  const formatted = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Math.abs(n));
-  return `${n > 0 ? "+" : n < 0 ? "−" : ""}${formatted}`;
+function pnl(value: Money | null): string {
+  return value ? formatMoney(value, { signDisplay: "always" }) : "Awaiting mark";
 }
+
 
 export function PaperTradeJournal() {
   const [positions, setPositions] = useState<Position[]>([]);
@@ -82,8 +77,8 @@ export function PaperTradeJournal() {
                   <td className="px-3 py-3 font-mono font-bold">{position.symbol}</td>
                   <td className={`px-3 py-3 font-bold ${position.side === "LONG" ? "text-emerald-300" : "text-rose-300"}`}>{position.side}</td>
                   <td className="px-3 py-3 text-right font-mono">{position.quantity}</td>
-                  <td className="px-3 py-3 text-right font-mono">{amount(position.average_price)}</td>
-                  <td className="px-3 py-3 text-right font-mono">{amount(position.mark_price)}</td>
+                  <td className="px-3 py-3 text-right font-mono">{price(position.average_price, position.currency_code)}</td>
+                  <td className="px-3 py-3 text-right font-mono">{price(position.mark_price, position.currency_code)}</td>
                   <td className="px-3 py-3 text-right font-mono">{pnl(position.unrealized_pnl)}</td>
                   <td className="px-3 py-3 text-slate-500">{position.mark_timestamp ? new Date(position.mark_timestamp).toLocaleString() : "No mark"}<div className="mt-1 text-[8px] text-slate-600">Opened {new Date(position.opened_at).toLocaleString()}</div></td>
                 </tr>
@@ -113,8 +108,8 @@ export function PaperTradeJournal() {
                   <td className="px-3 py-3 font-mono font-bold">{trade.symbol}</td>
                   <td className={`px-3 py-3 font-bold ${trade.side === "LONG" ? "text-emerald-300" : "text-rose-300"}`}>{trade.side}</td>
                   <td className="px-3 py-3 text-right font-mono">{trade.quantity}</td>
-                  <td className="px-3 py-3 text-right font-mono">{amount(trade.entry_price)}</td>
-                  <td className="px-3 py-3 text-right font-mono">{amount(trade.exit_price)}</td>
+                  <td className="px-3 py-3 text-right font-mono">{price(trade.entry_price, trade.net_pnl.currency)}</td>
+                  <td className="px-3 py-3 text-right font-mono">{price(trade.exit_price, trade.net_pnl.currency)}</td>
                   <td className={`px-3 py-3 text-right font-mono font-bold ${n >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{pnl(trade.net_pnl)}</td>
                 </tr>;
               })}

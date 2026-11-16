@@ -5,7 +5,9 @@ currency_code = "USD"
 name = "Micro E-mini S&P 500"
 exchange = "CME"
 tick_size = 0.25
+tick_value = 1.25
 tick_value_usd = 1.25
+point_value = 5.0
 point_value_usd = 5.0
 
 [instruments.MNQ]
@@ -13,7 +15,9 @@ currency_code = "USD"
 name = "Micro E-mini Nasdaq-100"
 exchange = "CME"
 tick_size = 0.25
+tick_value = 0.50
 tick_value_usd = 0.50
+point_value = 2.0
 point_value_usd = 2.0
 
 [instruments.MYM]
@@ -21,7 +25,9 @@ currency_code = "USD"
 name = "Micro E-mini Dow"
 exchange = "CBOT"
 tick_size = 1.0
+tick_value = 0.50
 tick_value_usd = 0.50
+point_value = 0.50
 point_value_usd = 0.50
 
 [instruments.M2K]
@@ -29,7 +35,9 @@ currency_code = "USD"
 name = "Micro E-mini Russell 2000"
 exchange = "CME"
 tick_size = 0.10
+tick_value = 0.50
 tick_value_usd = 0.50
+point_value = 5.0
 point_value_usd = 5.0
 
 [instruments.MGC]
@@ -37,7 +45,9 @@ currency_code = "USD"
 name = "Micro Gold"
 exchange = "COMEX"
 tick_size = 0.10
+tick_value = 1.00
 tick_value_usd = 1.00
+point_value = 10.0
 point_value_usd = 10.0
 
 [instruments.MCL]
@@ -45,5 +55,7 @@ currency_code = "USD"
 name = "Micro WTI Crude Oil"
 exchange = "NYMEX"
 tick_size = 0.01
+tick_value = 1.00
 tick_value_usd = 1.00
+point_value = 100.0
 point_value_usd = 100.0

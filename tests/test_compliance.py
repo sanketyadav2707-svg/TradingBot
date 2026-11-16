@@ -60,3 +60,33 @@ def test_profile_rejects_invalid_entry_and_flatten_order() -> None:
 def test_profile_rejects_blank_allowed_symbols() -> None:
     with pytest.raises(ValueError, match="non-empty symbol strings"):
         replace(_profile(), allowed_symbols=("MES", " "))
+
+
+
+def test_compliance_max_contracts_counts_whole_exchange_lots() -> None:
+    profile = replace(
+        _profile(),
+        allowed_symbols=("NIFTY_TEST",),
+        max_contracts=2,
+    )
+    gate = FirmComplianceGate(profile)
+    now = datetime(2026, 11, 4, 14, 0, tzinfo=ZoneInfo("America/Chicago"))
+
+    assert gate.check_entry(
+        timestamp=now,
+        symbol="NIFTY_TEST",
+        quantity=130,
+        lot_size=65,
+    ).allowed
+    assert gate.check_entry(
+        timestamp=now,
+        symbol="NIFTY_TEST",
+        quantity=195,
+        lot_size=65,
+    ).reason == "contract_limit_exceeded"
+    assert gate.check_entry(
+        timestamp=now,
+        symbol="NIFTY_TEST",
+        quantity=66,
+        lot_size=65,
+    ).reason == "quantity_must_be_a_valid_lot_multiple"

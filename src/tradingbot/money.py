@@ -96,8 +96,10 @@ class InstrumentEconomics:
     tick_size: Decimal
     tick_value: Money
     point_value: Money
+    # Quantities are raw exchange units; lot_size is the minimum lot size.
     lot_size: int = 1
     quantity_step: int = 1
+    quantity_freeze: int = 100
 
     def __post_init__(self) -> None:
         if not isinstance(self.symbol, str) or not self.symbol.strip():
@@ -113,10 +115,14 @@ class InstrumentEconomics:
             raise ValueError("tick_value_must_equal_tick_size_times_point_value")
         if type(self.lot_size) is not int or self.lot_size < 1:
             raise ValueError("lot_size must be a positive integer")
-        if type(self.quantity_step) is not int or self.quantity_step < 1:
-            raise ValueError("quantity_step must be a positive integer")
-        if self.lot_size % self.quantity_step:
-            raise ValueError("lot_size_must_be_multiple_of_quantity_step")
+        if (
+            type(self.quantity_step) is not int
+            or self.quantity_step < self.lot_size
+            or self.quantity_step % self.lot_size
+        ):
+            raise ValueError("quantity_step_must_be_a_multiple_of_lot_size")
+        if type(self.quantity_freeze) is not int or self.quantity_freeze < self.lot_size:
+            raise ValueError("quantity_freeze_must_be_at_least_one_lot")
         object.__setattr__(self, "tick_size", tick_size)
 
 

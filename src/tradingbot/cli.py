@@ -5,8 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import tomllib
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from tradingbot.backtest.engine import BacktestConfig, BacktestEngine
 from tradingbot.compliance.rules import FirmComplianceGate, FirmRuleProfile
@@ -35,6 +36,12 @@ from tradingbot.data.raw_futures import (
     validate_raw_futures_bars,
     write_dataset_manifest,
     write_raw_futures_csv,
+)
+from tradingbot.markets.nse_calendar import (
+    NSE_MASTER_VARIANTS,
+    build_nse_master_manifest,
+    load_normalized_instrument_master,
+    write_nse_master_manifest,
 )
 from tradingbot.models import Instrument
 from tradingbot.risk.limits import RiskGuard, RiskLimits
@@ -90,6 +97,19 @@ def _build_parser() -> argparse.ArgumentParser:
     raw_validate.add_argument("--dataset", default="unspecified")
     raw_validate.add_argument("--schema", default="ohlcv-1m")
     raw_validate.add_argument("--calendar", type=Path, help="Optional verified exchange calendar JSON")
+
+    validate_nse_master = sub.add_parser(
+        "validate-nse-master",
+        help="Validate a normalized daily NSE MII master, enforce source variant, and atomically write its SHA-256 manifest",
+    )
+    validate_nse_master.add_argument("--csv", required=True, type=Path)
+    validate_nse_master.add_argument("--manifest", required=True, type=Path)
+    validate_nse_master.add_argument(
+        "--source-variant",
+        choices=NSE_MASTER_VARIANTS,
+        default="NSE_EXCLUSIVE",
+    )
+    validate_nse_master.add_argument("--max-age-days", type=int, default=1)
 
     convert_databento = sub.add_parser(
         "convert-databento-csv",
@@ -201,6 +221,37 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = _build_parser().parse_args()
+    if args.command == "validate-nse-master":
+        retrieved_at = datetime.now(timezone.utc)
+        records = load_normalized_instrument_master(
+            args.csv,
+            retrieved_at,
+            source_variant=args.source_variant,
+        )
+        as_of = retrieved_at.astimezone(ZoneInfo("Asia/Kolkata")).date()
+        for record in records:
+            record.validate_freshness(as_of, max_age_days=args.max_age_days)
+        manifest = build_nse_master_manifest(
+            records,
+            source_variant=args.source_variant,
+            validated_as_of=as_of,
+            max_age_days=args.max_age_days,
+        )
+        write_nse_master_manifest(args.manifest, manifest)
+        print(json.dumps({
+            "status": "validated",
+            "source_variant": args.source_variant,
+            "record_count": manifest["record_count"],
+            "nse_tradable_count": manifest["nse_tradable_count"],
+            "excluded_bse_only_count": manifest["excluded_bse_only_count"],
+            "source_as_of": manifest["source_as_of"],
+            "normalized_file_sha256": manifest["normalized_file_sha256"],
+            "manifest_sha256": manifest["manifest_sha256"],
+            "manifest": str(args.manifest),
+            "trading_enabled": False,
+        }, indent=2))
+        return
+
     if args.command == "backtest-orb15-marketparquet":
         calendar = ExchangeSessionCalendar.from_json(args.calendar)
         bars, metadata = load_marketparquet_continuous_parquet(

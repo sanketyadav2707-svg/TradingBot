@@ -42,7 +42,7 @@ def test_paper_broker_rejects_fractional_slippage_ticks() -> None:
 def test_paper_broker_rejects_non_integer_quantity_and_invalid_side() -> None:
     broker = PaperBroker(Instrument("MES", 0.25, 1.25, 5.0))
     timestamp = datetime(2026, 1, 5, 14, 30, tzinfo=timezone.utc)
-    with pytest.raises(ValueError, match="integer between"):
+    with pytest.raises(ValueError, match="integer raw-unit quantity"):
         broker.submit_market(side=Side.LONG, quantity=1.5, reference_price=6000, timestamp=timestamp)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="side must be"):
         broker.submit_market(side=2, quantity=1, reference_price=6000, timestamp=timestamp)  # type: ignore[arg-type]
@@ -89,4 +89,50 @@ def test_paper_broker_rejects_invalid_stable_order_id(order_id: str) -> None:
             reference_price=6000.0,
             timestamp=datetime(2026, 1, 5, 14, 30, tzinfo=timezone.utc),
             order_id=order_id,
+        )
+
+
+
+def test_paper_broker_enforces_lot_multiple_and_quantity_freeze() -> None:
+    instrument = Instrument(
+        "NIFTY_TEST",
+        tick_size=0.05,
+        tick_value_usd=0.05,
+        point_value_usd=1.0,
+        currency_code="INR",
+        lot_size=65,
+        quantity_step=65,
+        quantity_freeze=130,
+    )
+    broker = PaperBroker(instrument)
+    timestamp = datetime(2026, 11, 16, 4, 0, tzinfo=timezone.utc)
+
+    fill = broker.submit_market(
+        side=Side.LONG,
+        quantity=130,
+        reference_price=25000,
+        timestamp=timestamp,
+    )
+    assert fill.quantity == 130
+
+    with pytest.raises(ValueError, match="at least one lot"):
+        broker.submit_market(
+            side=Side.LONG,
+            quantity=1,
+            reference_price=25000,
+            timestamp=timestamp,
+        )
+    with pytest.raises(ValueError, match="multiple of instrument.quantity_step"):
+        broker.submit_market(
+            side=Side.LONG,
+            quantity=66,
+            reference_price=25000,
+            timestamp=timestamp,
+        )
+    with pytest.raises(ValueError, match="quantity freeze"):
+        broker.submit_market(
+            side=Side.LONG,
+            quantity=195,
+            reference_price=25000,
+            timestamp=timestamp,
         )

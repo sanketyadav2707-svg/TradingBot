@@ -118,6 +118,9 @@ class PaperAccountStore:
                     tick_size TEXT NOT NULL,
                     tick_value_usd TEXT NOT NULL,
                     point_value_usd TEXT NOT NULL,
+                    lot_size INTEGER NOT NULL DEFAULT 1,
+                    quantity_step INTEGER NOT NULL DEFAULT 1,
+                    quantity_freeze INTEGER NOT NULL DEFAULT 100,
                     timestamp TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS open_lots (
@@ -130,6 +133,9 @@ class PaperAccountStore:
                     tick_size TEXT NOT NULL,
                     tick_value_usd TEXT NOT NULL,
                     point_value_usd TEXT NOT NULL,
+                    lot_size INTEGER NOT NULL DEFAULT 1,
+                    quantity_step INTEGER NOT NULL DEFAULT 1,
+                    quantity_freeze INTEGER NOT NULL DEFAULT 100,
                     opened_at TEXT NOT NULL,
                     opening_fill_id TEXT NOT NULL REFERENCES fills(order_id)
                 );
@@ -149,7 +155,10 @@ class PaperAccountStore:
                     entry_time TEXT NOT NULL,
                     exit_time TEXT NOT NULL,
                     opening_fill_id TEXT NOT NULL REFERENCES fills(order_id),
-                    closing_fill_id TEXT NOT NULL REFERENCES fills(order_id)
+                    closing_fill_id TEXT NOT NULL REFERENCES fills(order_id),
+                    lot_size INTEGER NOT NULL DEFAULT 1,
+                    quantity_step INTEGER NOT NULL DEFAULT 1,
+                    quantity_freeze INTEGER NOT NULL DEFAULT 100
                 );
                 CREATE INDEX IF NOT EXISTS idx_closed_trades_exit_time
                     ON closed_trades(exit_time, id);
@@ -195,113 +204,187 @@ class PaperAccountStore:
                     ON account_events(timestamp, id);
                 """
             )
-            # Upgrade pre-specification databases only when no open lots need
-            # contract metadata that the older schema never stored.
-            for table in ("fills", "open_lots"):
-                columns = {
-                    row["name"] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
-                }
-                missing = [name for name in ("tick_size", "tick_value_usd", "point_value_usd") if name not in columns]
-                if missing:
-                    open_lots_count = connection.execute(
-                        "SELECT COUNT(*) AS n FROM open_lots"
-                    ).fetchone()["n"]
-                    if open_lots_count:
-                        raise RuntimeError(
-                            "paper account database lacks full contract specifications for open lots; "
-                            "reconcile/close positions before upgrading the ledger"
-                        )
-                    for name in missing:
-                        connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} TEXT")
-
-            # Upgrade existing accounting fills into the durable delivery outbox.
-            # Existing lifecycle records are safe to replay because fill IDs are idempotent.
-            connection.execute(
-                """INSERT OR IGNORE INTO lifecycle_outbox(
-                    order_id, symbol, side, quantity, fill_price, commission_usd, timestamp
-                )
-                SELECT order_id, symbol, CASE WHEN side > 0 THEN 'LONG' ELSE 'SHORT' END,
-                       quantity, fill_price, commission_usd, timestamp
-                FROM fills"""
-            )
-            # Detect whether this is a genuinely new ledger before inserting
-            # its opening balance. Pre-currency ledgers are legacy USD accounts.
-            prior_balance = connection.execute(
-                "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
-            ).fetchone()
-            legacy_existing_account = prior_balance is not None
-            connection.execute(
-                "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('starting_balance_usd', ?)",
-                (_number(starting_balance),),
-            )
-            connection.execute(
-                "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('emergency_halt_active', '0')"
-            )
-            # Existing pre-currency databases are explicitly USD. New ledgers
-            # take the requested ISO currency. Never infer/relabel old balances.
-            initial_currency = "USD" if legacy_existing_account else self.currency_code
-            connection.execute(
-                "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('currency_code', ?)",
-                (initial_currency,),
-            )
-            stored_currency = connection.execute(
-                "SELECT value FROM account_meta WHERE key = 'currency_code'"
-            ).fetchone()["value"]
-            if stored_currency != self.currency_code:
-                raise ValueError(
-                    f"paper account currency mismatch: database={stored_currency}, requested={self.currency_code}; "
-                    "create a separate database for another currency"
-                )
-            # Schema v2 makes denomination explicit on every monetary ledger row.
-            # Existing rows receive the already-established account currency;
-            # a legacy ledger is always classified as USD above.
-            currency_tables = ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox")
-            for table in currency_tables:
-                columns = {
-                    row["name"] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
-                }
-                if "currency_code" not in columns:
-                    connection.execute(
-                        f"ALTER TABLE {table} ADD COLUMN currency_code TEXT NOT NULL DEFAULT 'USD'"
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                # Upgrade pre-specification databases only when no open lots need
+                # contract metadata that the older schema never stored.
+                for table in ("fills", "open_lots"):
+                    columns = {
+                        row["name"] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+                    }
+                    missing = [name for name in ("tick_size", "tick_value_usd", "point_value_usd") if name not in columns]
+                    if missing:
+                        open_lots_count = connection.execute(
+                            "SELECT COUNT(*) AS n FROM open_lots"
+                        ).fetchone()["n"]
+                        if open_lots_count:
+                            raise RuntimeError(
+                                "paper account database lacks full contract specifications for open lots; "
+                                "reconcile/close positions before upgrading the ledger"
+                            )
+                        for name in missing:
+                            connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} TEXT")
+    
+                # Preserve exchange quantity rules for every fill, open lot and closed trade.
+                # Legacy databases predate this metadata and are safely interpreted as
+                # unit-lot instruments until their positions are reconciled.
+                for table in ("fills", "open_lots", "closed_trades"):
+                    columns = {
+                        row["name"] for row in connection.execute(
+                            f"PRAGMA table_info({table})"
+                        ).fetchall()
+                    }
+                    quantity_columns = (
+                        ("lot_size", "INTEGER NOT NULL DEFAULT 1"),
+                        ("quantity_step", "INTEGER NOT NULL DEFAULT 1"),
+                        ("quantity_freeze", "INTEGER NOT NULL DEFAULT 100"),
                     )
+                    for name, definition in quantity_columns:
+                        if name not in columns:
+                            connection.execute(
+                                f"ALTER TABLE {table} ADD COLUMN {name} {definition}"
+                            )
+                # Upgrade existing accounting fills into the durable delivery outbox.
+                # Existing lifecycle records are safe to replay because fill IDs are idempotent.
                 connection.execute(
-                    f"UPDATE {table} SET currency_code = ? WHERE currency_code = 'USD' AND ? != 'USD'",
-                    (self.currency_code, self.currency_code),
+                    """INSERT OR IGNORE INTO lifecycle_outbox(
+                        order_id, symbol, side, quantity, fill_price, commission_usd, timestamp
+                    )
+                    SELECT order_id, symbol, CASE WHEN side > 0 THEN 'LONG' ELSE 'SHORT' END,
+                           quantity, fill_price, commission_usd, timestamp
+                    FROM fills"""
                 )
-                mismatches = connection.execute(
-                    f"SELECT COUNT(*) AS n FROM {table} WHERE currency_code != ?",
-                    (self.currency_code,),
+                # Detect whether this is a genuinely new ledger before inserting
+                # its opening balance. Pre-currency ledgers are legacy USD accounts.
+                prior_balance = connection.execute(
+                    "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
+                ).fetchone()
+                legacy_existing_account = prior_balance is not None
+                connection.execute(
+                    "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('starting_balance_usd', ?)",
+                    (_number(starting_balance),),
+                )
+                connection.execute(
+                    "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('emergency_halt_active', '0')"
+                )
+                # Existing pre-currency databases are explicitly USD. New ledgers
+                # take the requested ISO currency. Never infer/relabel old balances.
+                initial_currency = "USD" if legacy_existing_account else self.currency_code
+                connection.execute(
+                    "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('currency_code', ?)",
+                    (initial_currency,),
+                )
+                stored_currency = connection.execute(
+                    "SELECT value FROM account_meta WHERE key = 'currency_code'"
+                ).fetchone()["value"]
+                if stored_currency != self.currency_code:
+                    raise ValueError(
+                        f"paper account currency mismatch: database={stored_currency}, requested={self.currency_code}; "
+                        "create a separate database for another currency"
+                    )
+                # The neutral view depends on per-row currency columns. Drop it
+                # before any legacy schema repair, then recreate it after validation.
+                connection.execute("DROP VIEW IF EXISTS account_money_v3")
+                # Schema v2 makes denomination explicit on every monetary ledger row.
+                # Existing rows receive the already-established account currency;
+                # a legacy ledger is always classified as USD above.
+                currency_tables = ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox")
+                for table in currency_tables:
+                    columns = {
+                        row["name"] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+                    }
+                    if "currency_code" not in columns:
+                        connection.execute(
+                            f"ALTER TABLE {table} ADD COLUMN currency_code TEXT NOT NULL DEFAULT 'USD'"
+                        )
+                    connection.execute(
+                        f"UPDATE {table} SET currency_code = ? WHERE currency_code = 'USD' AND ? != 'USD'",
+                        (self.currency_code, self.currency_code),
+                    )
+                    mismatches = connection.execute(
+                        f"SELECT COUNT(*) AS n FROM {table} WHERE currency_code != ?",
+                        (self.currency_code,),
+                    ).fetchone()["n"]
+                    if mismatches:
+                        raise RuntimeError(f"ledger_currency_mismatch:{table}")
+                # Version 3 exposes a currency-neutral read model while retaining
+                # the legacy *_usd storage columns as compatibility aliases.
+                connection.execute(
+                    """CREATE VIEW IF NOT EXISTS account_money_v3 AS
+                       SELECT 'account' AS entity_type, 'account' AS entity_id,
+                              'starting_balance' AS field_name, value AS amount,
+                              (SELECT value FROM account_meta WHERE key='currency_code') AS currency_code
+                       FROM account_meta WHERE key='starting_balance_usd'
+                       UNION ALL
+                       SELECT 'fill', order_id, 'commission', commission_usd, currency_code FROM fills
+                       UNION ALL
+                       SELECT 'fill', order_id, 'tick_value', tick_value_usd, currency_code FROM fills
+                       UNION ALL
+                       SELECT 'fill', order_id, 'point_value', point_value_usd, currency_code FROM fills
+                       UNION ALL
+                       SELECT 'open_lot', CAST(id AS TEXT), 'entry_commission_remaining',
+                              entry_commission_remaining, currency_code FROM open_lots
+                       UNION ALL
+                       SELECT 'open_lot', CAST(id AS TEXT), 'tick_value', tick_value_usd, currency_code FROM open_lots
+                       UNION ALL
+                       SELECT 'open_lot', CAST(id AS TEXT), 'point_value', point_value_usd, currency_code FROM open_lots
+                       UNION ALL
+                       SELECT 'closed_trade', CAST(id AS TEXT), 'gross_pnl', gross_pnl_usd, currency_code FROM closed_trades
+                       UNION ALL
+                       SELECT 'closed_trade', CAST(id AS TEXT), 'entry_commission', entry_commission_usd, currency_code FROM closed_trades
+                       UNION ALL
+                       SELECT 'closed_trade', CAST(id AS TEXT), 'exit_commission', exit_commission_usd, currency_code FROM closed_trades
+                       UNION ALL
+                       SELECT 'closed_trade', CAST(id AS TEXT), 'net_pnl', net_pnl_usd, currency_code FROM closed_trades
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'balance', balance_usd, currency_code FROM equity_snapshots
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'realized_gross_pnl', realized_gross_pnl_usd, currency_code FROM equity_snapshots
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'commissions', commissions_usd, currency_code FROM equity_snapshots
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'unrealized_pnl', unrealized_pnl_usd, currency_code
+                       FROM equity_snapshots WHERE unrealized_pnl_usd IS NOT NULL
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'equity', equity_usd, currency_code
+                       FROM equity_snapshots WHERE equity_usd IS NOT NULL
+                       UNION ALL
+                       SELECT 'lifecycle_outbox', order_id, 'commission', commission_usd, currency_code
+                       FROM lifecycle_outbox"""
+                )
+                connection.execute(
+                    "INSERT INTO account_meta(key, value) VALUES ('schema_version', '4') "
+                    "ON CONFLICT(key) DO UPDATE SET value = '4'"
+                )
+                stored_balance = Decimal(connection.execute(
+                    "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
+                ).fetchone()["value"])
+                if stored_balance != starting_balance:
+                    raise ValueError(
+                        "starting_balance_usd does not match the existing persistent paper account; "
+                        "refusing to silently reset or reinterpret account history"
+                    )
+                snapshots = connection.execute(
+                    "SELECT COUNT(*) AS n FROM equity_snapshots"
                 ).fetchone()["n"]
-                if mismatches:
-                    raise RuntimeError(f"ledger_currency_mismatch:{table}")
-            connection.execute(
-                "INSERT INTO account_meta(key, value) VALUES ('schema_version', '2') "
-                "ON CONFLICT(key) DO UPDATE SET value = '2'"
-            )
-            stored_balance = Decimal(connection.execute(
-                "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
-            ).fetchone()["value"])
-            if stored_balance != starting_balance:
-                raise ValueError(
-                    "starting_balance_usd does not match the existing persistent paper account; "
-                    "refusing to silently reset or reinterpret account history"
-                )
-            snapshots = connection.execute(
-                "SELECT COUNT(*) AS n FROM equity_snapshots"
-            ).fetchone()["n"]
-            if snapshots == 0:
-                created_at = _timestamp(datetime.now(timezone.utc))
-                connection.execute(
-                    """INSERT INTO account_events(
-                        timestamp, event_type, symbol, reference_id, payload_json
-                    ) VALUES (?, 'ACCOUNT_INITIALIZED', NULL, NULL, ?)""",
-                    (
-                        created_at,
-                        json.dumps({"starting_balance_usd": _number(starting_balance)}, sort_keys=True),
-                    ),
-                )
-                self._write_snapshot(connection, created_at, "ACCOUNT_INITIALIZED", None)
-
+                if snapshots == 0:
+                    created_at = _timestamp(datetime.now(timezone.utc))
+                    connection.execute(
+                        """INSERT INTO account_events(
+                            timestamp, event_type, symbol, reference_id, payload_json
+                        ) VALUES (?, 'ACCOUNT_INITIALIZED', NULL, NULL, ?)""",
+                        (
+                            created_at,
+                            json.dumps({"starting_balance_usd": _number(starting_balance)}, sort_keys=True),
+                        ),
+                    )
+                    self._write_snapshot(connection, created_at, "ACCOUNT_INITIALIZED", None)
+    
+                connection.execute("COMMIT")
+            except Exception:
+                if connection.in_transaction:
+                    connection.execute("ROLLBACK")
+                raise
     @property
     def starting_balance_usd(self) -> Decimal:
         with self._connection() as connection:
@@ -358,13 +441,16 @@ class PaperAccountStore:
         symbol = instrument.symbol.strip().upper()
         with self._lock, self._connection() as connection:
             rows = connection.execute(
-                "SELECT tick_size, tick_value_usd, point_value_usd FROM open_lots WHERE symbol = ?",
+                "SELECT tick_size, tick_value_usd, point_value_usd, lot_size, quantity_step, quantity_freeze FROM open_lots WHERE symbol = ?",
                 (symbol,),
             ).fetchall()
         expected = (
             Decimal(str(instrument.tick_size)),
             Decimal(str(instrument.tick_value_usd)),
             Decimal(str(instrument.point_value_usd)),
+            instrument.lot_size,
+            instrument.quantity_step,
+            instrument.quantity_freeze,
         )
         if any(
             row["tick_size"] is None
@@ -374,6 +460,9 @@ class PaperAccountStore:
                 Decimal(row["tick_size"]),
                 Decimal(row["tick_value_usd"]),
                 Decimal(row["point_value_usd"]),
+                int(row["lot_size"]),
+                int(row["quantity_step"]),
+                int(row["quantity_freeze"]),
             ) != expected
             for row in rows
         ):
@@ -435,8 +524,12 @@ class PaperAccountStore:
             raise ValueError("Fill symbol must match the supplied instrument")
         if not isinstance(fill.side, Side) or fill.side not in (Side.LONG, Side.SHORT):
             raise ValueError("Fill side must be LONG or SHORT")
-        if type(fill.quantity) is not int or fill.quantity < 1:
-            raise ValueError("Fill quantity must be a positive integer")
+        if type(fill.quantity) is not int or fill.quantity < instrument.lot_size:
+            raise ValueError("Fill quantity must be at least one tradable lot")
+        if fill.quantity > instrument.quantity_freeze:
+            raise ValueError("Fill quantity exceeds the instrument quantity freeze")
+        if fill.quantity % instrument.quantity_step:
+            raise ValueError("Fill quantity must be a multiple of instrument.quantity_step")
         if not isinstance(fill.order_id, str) or not fill.order_id.strip():
             raise ValueError("Fill order_id cannot be empty")
         if instrument.currency_code != self.currency_code or getattr(fill, "currency_code", "USD") != self.currency_code:
@@ -462,7 +555,8 @@ class PaperAccountStore:
             candidate = (
                 symbol, side, fill.quantity, _number(requested), _number(price),
                 _number(commission), _number(tick_size), _number(tick_value),
-                _number(point_value), timestamp,
+                _number(point_value), instrument.lot_size, instrument.quantity_step,
+                instrument.quantity_freeze, timestamp,
             )
             if existing is not None:
                 actual = (
@@ -470,6 +564,7 @@ class PaperAccountStore:
                     existing["requested_price"], existing["fill_price"],
                     existing["commission_usd"], existing["tick_size"],
                     existing["tick_value_usd"], existing["point_value_usd"],
+                    existing["lot_size"], existing["quantity_step"], existing["quantity_freeze"],
                     existing["timestamp"],
                 )
                 if actual != candidate:
@@ -479,8 +574,9 @@ class PaperAccountStore:
             connection.execute(
                 """INSERT INTO fills(
                     order_id, symbol, side, quantity, requested_price, fill_price,
-                    commission_usd, tick_size, tick_value_usd, point_value_usd, timestamp, currency_code
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    commission_usd, tick_size, tick_value_usd, point_value_usd,
+                    lot_size, quantity_step, quantity_freeze, timestamp, currency_code
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (normalized_id, *candidate, self.currency_code),
             )
             # This outbox row is committed in the SAME transaction as the
@@ -504,6 +600,9 @@ class PaperAccountStore:
                 Decimal(row["tick_size"]) != tick_size
                 or Decimal(row["tick_value_usd"]) != tick_value
                 or Decimal(row["point_value_usd"]) != point_value
+                or int(row["lot_size"]) != instrument.lot_size
+                or int(row["quantity_step"]) != instrument.quantity_step
+                or int(row["quantity_freeze"]) != instrument.quantity_freeze
                 for row in open_lots
             ):
                 raise ValueError(
@@ -520,10 +619,13 @@ class PaperAccountStore:
                 connection.execute(
                     """INSERT INTO open_lots(
                         symbol, side, quantity_open, entry_price, entry_commission_remaining,
-                        tick_size, tick_value_usd, point_value_usd, opened_at, opening_fill_id, currency_code
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        tick_size, tick_value_usd, point_value_usd, lot_size, quantity_step,
+                        quantity_freeze, opened_at, opening_fill_id, currency_code
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (symbol, side, remaining, _number(price), _number(commission),
-                     _number(tick_size), _number(tick_value), _number(point_value), timestamp, normalized_id, self.currency_code),
+                     _number(tick_size), _number(tick_value), _number(point_value),
+                     instrument.lot_size, instrument.quantity_step, instrument.quantity_freeze,
+                     timestamp, normalized_id, self.currency_code),
                 )
                 remaining = 0
             else:
@@ -551,13 +653,16 @@ class PaperAccountStore:
                         """INSERT INTO closed_trades(
                             symbol, side, quantity, entry_price, exit_price, gross_pnl_usd,
                             entry_commission_usd, exit_commission_usd, net_pnl_usd,
-                            entry_time, exit_time, opening_fill_id, closing_fill_id, currency_code
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            entry_time, exit_time, opening_fill_id, closing_fill_id,
+                            lot_size, quantity_step, quantity_freeze, currency_code
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             symbol, lot["side"], quantity, lot["entry_price"], _number(price),
                             _number(gross), _number(entry_commission), _number(exit_commission),
                             _number(net), lot["opened_at"], timestamp,
-                            lot["opening_fill_id"], normalized_id, self.currency_code,
+                            lot["opening_fill_id"], normalized_id,
+                            int(lot["lot_size"]), int(lot["quantity_step"]), int(lot["quantity_freeze"]),
+                            self.currency_code,
                         ),
                     )
                     new_quantity = lot_quantity - quantity
@@ -593,11 +698,14 @@ class PaperAccountStore:
                     connection.execute(
                         """INSERT INTO open_lots(
                             symbol, side, quantity_open, entry_price, entry_commission_remaining,
-                            tick_size, tick_value_usd, point_value_usd, opened_at, opening_fill_id, currency_code
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            tick_size, tick_value_usd, point_value_usd, lot_size, quantity_step,
+                            quantity_freeze, opened_at, opening_fill_id, currency_code
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             symbol, side, remaining, _number(price), _number(remaining_commission),
-                            _number(tick_size), _number(tick_value), _number(point_value), timestamp, normalized_id, self.currency_code,
+                            _number(tick_size), _number(tick_value), _number(point_value),
+                            instrument.lot_size, instrument.quantity_step, instrument.quantity_freeze,
+                            timestamp, normalized_id, self.currency_code,
                         ),
                     )
                     remaining = 0
@@ -734,6 +842,15 @@ class PaperAccountStore:
         self, connection: sqlite3.Connection, timestamp: str, source: str, reference_id: str | None
     ) -> None:
         summary = self._summary(connection)
+        # Equity snapshots are event-time observations. Once later account activity
+        # exists, reject late historical fills/marks rather than appending a new
+        # snapshot behind the latest persisted state. The logical opening baseline
+        # is separately rebased before the first activity for historical replay.
+        latest = connection.execute(
+            "SELECT timestamp FROM equity_snapshots ORDER BY timestamp DESC, id DESC LIMIT 1"
+        ).fetchone()
+        if latest is not None and timestamp < latest["timestamp"]:
+            raise ValueError("equity_snapshot_timestamp_cannot_move_backwards")
         connection.execute(
             """INSERT INTO equity_snapshots(
                 timestamp, source, balance_usd, realized_gross_pnl_usd,
@@ -935,6 +1052,9 @@ class PaperAccountStore:
                     "unrealized_pnl_usd": unrealized_value,
                     "opened_at": min(item["opened_at"] for item in items),
                     "mark_timestamp": mark_timestamp,
+                    "lot_size": int(items[0]["lot_size"]),
+                    "quantity_step": int(items[0]["quantity_step"]),
+                    "quantity_freeze": int(items[0]["quantity_freeze"]),
                 })
             return result
 

@@ -10,7 +10,7 @@ from typing import Callable
 from uuid import uuid4
 
 from tradingbot.models import Instrument, Side
-from tradingbot.money import FeeSchedule
+from tradingbot.money import FeeSchedule, Money
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +25,11 @@ class PaperFill:
     timestamp: datetime
     currency_code: str = "USD"
 
+    @property
+    def commission(self) -> Money:
+        """Currency-neutral commission; commission_usd remains a compatibility alias."""
+        return Money.of(str(self.commission_usd), self.currency_code)
+
 
 class PaperBroker:
     """A deliberately small simulated market-order adapter for local experiments."""
@@ -32,13 +37,13 @@ class PaperBroker:
     def __init__(
         self,
         instrument: Instrument,
-        commission_per_contract_per_side_usd: float = 0.0,
+        commission_per_contract_per_side_usd: Decimal | float = 0.0,
         slippage_ticks_per_side: int = 1,
         on_fill: Callable[[PaperFill], None] | None = None,
         fee_schedule: FeeSchedule | None = None,
     ) -> None:
         if (
-            not isinstance(commission_per_contract_per_side_usd, (int, float))
+            not isinstance(commission_per_contract_per_side_usd, (int, float, Decimal))
             or isinstance(commission_per_contract_per_side_usd, bool)
             or not isfinite(commission_per_contract_per_side_usd)
             or commission_per_contract_per_side_usd < 0
@@ -66,8 +71,14 @@ class PaperBroker:
     ) -> PaperFill:
         if not isinstance(side, Side) or side not in (Side.LONG, Side.SHORT):
             raise ValueError("A market order side must be Side.LONG or Side.SHORT")
-        if type(quantity) is not int or quantity < 1 or quantity > 100:
-            raise ValueError("Quantity must be an integer between 1 and 100 contracts")
+        if type(quantity) is not int:
+            raise ValueError("Quantity must be an integer raw-unit quantity")
+        if quantity < self.instrument.lot_size:
+            raise ValueError("Quantity must be at least one lot")
+        if quantity > self.instrument.quantity_freeze:
+            raise ValueError("Quantity exceeds the instrument quantity freeze")
+        if quantity % self.instrument.quantity_step:
+            raise ValueError("Quantity must be a multiple of instrument.quantity_step")
         if (
             not isinstance(reference_price, (int, float))
             or isinstance(reference_price, bool)

@@ -160,6 +160,7 @@ class BacktestEngine:
                         timestamp=bar.timestamp,
                         symbol=self.instrument.symbol,
                         quantity=decision.quantity,
+                        lot_size=self.instrument.lot_size,
                     )
                     if not compliance.allowed:
                         decision = type(decision)(False, 0, compliance.reason)

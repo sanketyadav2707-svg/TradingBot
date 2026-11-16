@@ -18,9 +18,15 @@ export interface HealthResponse {
   timestamp: string;
 }
 
+export type CurrencyCode =
+  | "BHD" | "KWD" | "OMR"
+  | "JPY" | "KRW"
+  | "INR" | "USD" | "EUR" | "GBP" | "AED" | "SGD"
+  | "AUD" | "CAD" | "CHF" | "CNY" | "HKD" | "NZD";
+
 export interface Money {
   amount: string;
-  currency: "USD";
+  currency: CurrencyCode;
 }
 
 export interface DashboardSummaryResponse {
@@ -49,6 +55,7 @@ export interface Position {
   symbol: string;
   side: "LONG" | "SHORT";
   quantity: number;
+  currency_code: CurrencyCode;
   average_price: string;
   mark_price: string | null;
   mark_timestamp: string | null;

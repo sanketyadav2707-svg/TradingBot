@@ -1,5 +1,7 @@
 # Illustrative research settings only. These are NOT the rules of any prop firm.
 # Replace only after selecting a specific account model and verifying its current official rules.
+# max_contracts is the maximum number of exchange lots; the risk gate converts it
+# to raw order quantity units using each instrument's lot_size and freeze limit.
 [risk]
 currency_code = "USD" # Denomination for every monetary risk value below.
 starting_balance_usd = 50000.0
@@ -8,5 +10,6 @@ max_total_drawdown_usd = 1000.0
 max_risk_per_trade_usd = 50.0
 max_contracts = 1
 max_trades_per_day = 4
+commission_per_contract_per_side = "0.00"
 commission_per_contract_per_side_usd = 0.0
 slippage_ticks_per_side = 1

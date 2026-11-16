@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
-from tradingbot.money import FeeSchedule, currency_minor_units
+from tradingbot.money import FeeSchedule, Money, currency_minor_units
 from tradingbot.models import Instrument
 
 
@@ -55,6 +55,22 @@ class RiskLimits:
         ):
             raise ValueError("Contract and trade limits must be positive integers")
 
+    @property
+    def starting_balance(self) -> Money:
+        return Money.of(self.starting_balance_usd, self.currency_code)
+
+    @property
+    def daily_loss_limit(self) -> Money:
+        return Money.of(self.max_daily_loss_usd, self.currency_code)
+
+    @property
+    def total_drawdown_limit(self) -> Money:
+        return Money.of(self.max_total_drawdown_usd, self.currency_code)
+
+    @property
+    def risk_per_trade_limit(self) -> Money:
+        return Money.of(self.max_risk_per_trade_usd, self.currency_code)
+
 
 @dataclass(frozen=True, slots=True)
 class RiskDecision:
@@ -64,7 +80,7 @@ class RiskDecision:
 
 
 class RiskGuard:
-    """Size one entry using Decimal stop, slippage and round-trip fee estimates."""
+    """Size exchange orders in raw units after budgeting whole tradable lots.\n\n    Instrument tick/point values and fees are per raw quantity unit. ``max_contracts``\n    is retained as a compatibility name but caps whole lots; returned quantity is\n    the raw-unit amount to submit to the broker.\n    """
 
     def __init__(
         self,
@@ -132,15 +148,19 @@ class RiskGuard:
         if remaining_daily <= 0:
             return RiskDecision(False, 0, "maximum_daily_loss_reached")
 
-        slippage_risk = Decimal(2 * self.slippage_ticks) * tick_value
-        stop_risk = Decimal(stop_ticks) * tick_value
-        round_trip_fees = (
+        # tick_value and fees are per raw exchange quantity unit. Convert to
+        # one tradable lot before applying max_contracts (which is lots).
+        slippage_risk_per_unit = Decimal(2 * self.slippage_ticks) * tick_value
+        stop_risk_per_unit = Decimal(stop_ticks) * tick_value
+        round_trip_fees_per_unit = (
             self.fee_schedule.round_trip(1).amount
             if self.fee_schedule is not None
             else Decimal(2) * self.commission
         )
-        estimated_risk_per_contract = stop_risk + slippage_risk + round_trip_fees
-        if estimated_risk_per_contract <= 0:
+        estimated_risk_per_lot = (
+            stop_risk_per_unit + slippage_risk_per_unit + round_trip_fees_per_unit
+        ) * Decimal(instrument.lot_size)
+        if estimated_risk_per_lot <= 0:
             return RiskDecision(False, 0, "invalid_risk_calculation")
 
         budget = min(
@@ -148,10 +168,17 @@ class RiskGuard:
             remaining_daily,
             remaining_drawdown,
         )
-        quantity = min(
+        max_lots_by_risk = int(budget // estimated_risk_per_lot)
+        max_lots_by_freeze = instrument.quantity_freeze // instrument.lot_size
+        lot_increment = instrument.quantity_step // instrument.lot_size
+        lots = min(
             self.limits.max_contracts,
-            int(budget // estimated_risk_per_contract),
+            max_lots_by_risk,
+            max_lots_by_freeze,
         )
-        if quantity < 1:
-            return RiskDecision(False, 0, "risk_budget_too_small_for_one_contract")
-        return RiskDecision(True, quantity, "approved")
+        lots -= lots % lot_increment
+        if lots < 1:
+            if max_lots_by_freeze < 1:
+                return RiskDecision(False, 0, "quantity_freeze_below_one_lot")
+            return RiskDecision(False, 0, "risk_budget_too_small_for_one_lot")
+        return RiskDecision(True, lots * instrument.lot_size, "approved")

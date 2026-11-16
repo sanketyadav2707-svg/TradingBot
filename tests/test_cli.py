@@ -195,3 +195,34 @@ def test_backtest_orb15_raw_cli_generates_manifest_and_trade_report(tmp_path, mo
     assert payload["metrics"]["trades"] == 1
     assert len(payload["trades"]) == 1
     assert output.exists()
+
+
+
+def test_validate_nse_master_cli_writes_manifest_and_excludes_bse_only_rows(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "normalized-nse-bse.csv"
+    source.write_text(
+        "exchange_token,trading_symbol,underlying,segment,instrument_type,expiry,lot_size,quantity_freeze,tick_size,currency_code,source_as_of,admission_type\n"
+        "12345,NIFTY26DEC_FUT,NIFTY,NSE_FO,FUTIDX,2026-12-29,65,1800,0.05,INR,2026-11-16,1\n"
+        "67890,BSEONLY26DEC_FUT,BSEONLY,NSE_FO,FUTSTK,2026-12-29,50,1000,0.05,INR,2026-11-16,2\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "nse-manifest.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "tradingbot", "validate-nse-master",
+            "--csv", str(source),
+            "--manifest", str(manifest),
+            "--source-variant", "NSE_AND_BSE_EXCLUSIVE",
+        ],
+    )
+    main()
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "validated"
+    assert payload["record_count"] == 2
+    assert payload["nse_tradable_count"] == 1
+    assert payload["excluded_bse_only_count"] == 1
+    assert payload["trading_enabled"] is False
+    assert len(payload["manifest_sha256"]) == 64
+    assert manifest.exists()

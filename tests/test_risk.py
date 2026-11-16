@@ -90,3 +90,75 @@ def test_risk_guard_rejects_non_finite_commission_and_fractional_slippage() -> N
         RiskGuard(RiskLimits(), commission_per_contract_per_side_usd=float("nan"))
     with pytest.raises(ValueError, match="non-negative integer"):
         RiskGuard(RiskLimits(), slippage_ticks_per_side=0.5)  # type: ignore[arg-type]
+
+
+
+def test_risk_guard_sizes_nse_orders_in_whole_lots_and_respects_freeze() -> None:
+    instrument = Instrument(
+        "NIFTY_TEST",
+        tick_size=0.05,
+        tick_value_usd=0.05,
+        point_value_usd=1.0,
+        currency_code="INR",
+        lot_size=65,
+        quantity_step=65,
+        quantity_freeze=130,
+    )
+    limits = RiskLimits(
+        starting_balance_usd="100000",
+        max_daily_loss_usd="1000",
+        max_total_drawdown_usd="2000",
+        max_risk_per_trade_usd="100",
+        max_contracts=5,
+        currency_code="INR",
+    )
+    decision = RiskGuard(
+        limits,
+        commission_per_contract_per_side_usd="0",
+        slippage_ticks_per_side=0,
+    ).evaluate_entry(
+        instrument=instrument,
+        stop_ticks=8,
+        equity_usd="100000",
+        peak_equity_usd="100000",
+        daily_pnl_usd="0",
+        trades_today=0,
+    )
+    # Risk is INR 0.40 per raw unit, INR 26 per 65-unit lot.
+    # The risk budget would permit 3 lots, but the exchange freeze caps this at 2.
+    assert decision.approved
+    assert decision.quantity == 130
+    assert decision.quantity % instrument.lot_size == 0
+    assert decision.quantity <= instrument.quantity_freeze
+
+
+def test_risk_guard_rejects_budget_smaller_than_one_nse_lot() -> None:
+    instrument = Instrument(
+        "NIFTY_TEST",
+        tick_size=0.05,
+        tick_value_usd=0.05,
+        point_value_usd=1.0,
+        currency_code="INR",
+        lot_size=65,
+        quantity_step=65,
+        quantity_freeze=1800,
+    )
+    limits = RiskLimits(
+        starting_balance_usd="100000",
+        max_daily_loss_usd="1000",
+        max_total_drawdown_usd="2000",
+        max_risk_per_trade_usd="20",
+        max_contracts=5,
+        currency_code="INR",
+    )
+    decision = RiskGuard(limits, slippage_ticks_per_side=0).evaluate_entry(
+        instrument=instrument,
+        stop_ticks=8,
+        equity_usd="100000",
+        peak_equity_usd="100000",
+        daily_pnl_usd="0",
+        trades_today=0,
+    )
+    assert not decision.approved
+    assert decision.quantity == 0
+    assert decision.reason == "risk_budget_too_small_for_one_lot"

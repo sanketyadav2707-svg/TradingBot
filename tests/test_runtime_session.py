@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+from tradingbot.markets.nse_calendar import NSEMarketCalendar, NSESessionBarGuard
 from tradingbot.runtime.session import SessionController, SessionState
 
 UTC = timezone.utc
@@ -90,3 +91,84 @@ def test_holding_time_ceiling_cannot_exceed_fifteen_minutes() -> None:
         assert "from 1 to 900" in str(exc)
     else:
         raise AssertionError("Expected >15 minute holding ceiling to be rejected")
+
+
+
+def test_nse_session_bar_guard_allows_regular_continuous_session_bar() -> None:
+    seen = []
+    guard = NSESessionBarGuard(
+        calendar=NSEMarketCalendar(),
+        segment="equity_derivatives",
+        timestamp_of=lambda bar: bar["timestamp"],
+    )
+    session = SessionController(
+        on_closed_bar=seen.append,
+        timestamp_of=lambda bar: bar["timestamp"],
+        bar_checks=(guard,),
+    )
+    now = datetime(2026, 11, 16, 4, 0, tzinfo=UTC)  # 09:30 IST
+    assert session.start(timestamp=now)
+    assert session.begin(timestamp=now)
+    bar = {"timestamp": now + timedelta(minutes=1)}
+    assert session.process_closed_bar(bar)
+    assert seen == [bar]
+
+
+def test_nse_session_bar_guard_blocks_after_close_and_latches_degraded() -> None:
+    seen = []
+    guard = NSESessionBarGuard(
+        calendar=NSEMarketCalendar(),
+        segment="equity",
+        timestamp_of=lambda bar: bar["timestamp"],
+    )
+    session = SessionController(
+        on_closed_bar=seen.append,
+        timestamp_of=lambda bar: bar["timestamp"],
+        bar_checks=(guard,),
+    )
+    start = datetime(2026, 11, 16, 4, 0, tzinfo=UTC)
+    assert session.start(timestamp=start)
+    assert session.begin(timestamp=start)
+    after_close = {"timestamp": datetime(2026, 11, 16, 10, 1, tzinfo=UTC)}  # 15:31 IST
+    assert session.process_closed_bar(after_close) is False
+    assert session.state == SessionState.DEGRADED
+    assert session.reason == "closed_bar_session_check_failed"
+    assert seen == []
+
+
+def test_nse_session_bar_guard_fails_closed_on_unverified_calendar_date() -> None:
+    guard = NSESessionBarGuard(
+        calendar=NSEMarketCalendar(),
+        segment="equity_derivatives",
+        timestamp_of=lambda bar: bar["timestamp"],
+    )
+    session = SessionController(
+        on_closed_bar=lambda bar: None,
+        timestamp_of=lambda bar: bar["timestamp"],
+        bar_checks=(guard,),
+    )
+    start = datetime(2027, 1, 4, 4, 0, tzinfo=UTC)
+    assert session.start(timestamp=start)
+    assert session.begin(timestamp=start)
+    assert session.process_closed_bar({"timestamp": start}) is False
+    assert session.state == SessionState.DEGRADED
+
+
+def test_nse_expiring_index_contract_guard_uses_shorter_early_close() -> None:
+    guard = NSESessionBarGuard(
+        calendar=NSEMarketCalendar(),
+        segment="equity_derivatives",
+        timestamp_of=lambda bar: bar["timestamp"],
+        expiring_index_derivative=True,
+    )
+    session = SessionController(
+        on_closed_bar=lambda bar: None,
+        timestamp_of=lambda bar: bar["timestamp"],
+        bar_checks=(guard,),
+    )
+    start = datetime(2026, 12, 8, 4, 0, tzinfo=UTC)
+    assert session.start(timestamp=start)
+    assert session.begin(timestamp=start)
+    after_expiry_close = {"timestamp": datetime(2026, 12, 8, 10, 5, tzinfo=UTC)}  # 15:35 IST
+    assert session.process_closed_bar(after_expiry_close) is False
+    assert session.state == SessionState.DEGRADED

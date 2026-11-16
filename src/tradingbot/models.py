@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from enum import IntEnum
 from math import isfinite
 
-from tradingbot.money import currency_minor_units
+from tradingbot.money import InstrumentEconomics, Money, currency_minor_units
 
 
 class DataValidationError(ValueError):
@@ -29,6 +30,11 @@ class Instrument:
     # Historical field names above are retained for API/database compatibility.
     # Their monetary denomination is currency_code, never implicitly USD.
     currency_code: str = "USD"
+    # lot_size is the minimum raw exchange quantity per tradable lot.
+    # quantity_step is the minimum order-quantity increment, in raw units.
+    lot_size: int = 1
+    quantity_step: int = 1
+    quantity_freeze: int = 100
 
     def __post_init__(self) -> None:
         if not self.symbol.strip():
@@ -43,6 +49,41 @@ class Instrument:
                 "tick_value_usd must equal tick_size * point_value_usd; "
                 f"expected {expected}, received {self.tick_value_usd}"
             )
+        if (
+            type(self.lot_size) is not int
+            or self.lot_size < 1
+            or type(self.quantity_step) is not int
+            or self.quantity_step < self.lot_size
+            or self.quantity_step % self.lot_size != 0
+            or type(self.quantity_freeze) is not int
+            or self.quantity_freeze < self.lot_size
+        ):
+            raise ValueError(
+                "instrument_lot_size_quantity_step_and_freeze_must_be_positive_and_consistent"
+            )
+
+    @property
+    def tick_value(self) -> Money:
+        """Currency-neutral monetary tick value; *_usd is a compatibility alias."""
+        return Money.of(str(self.tick_value_usd), self.currency_code)
+
+    @property
+    def point_value(self) -> Money:
+        """Currency-neutral monetary point value; *_usd is a compatibility alias."""
+        return Money.of(str(self.point_value_usd), self.currency_code)
+
+    @property
+    def economics(self) -> InstrumentEconomics:
+        """Exact Decimal contract economics with one-unit default lot metadata."""
+        return InstrumentEconomics(
+            symbol=self.symbol,
+            tick_size=Decimal(str(self.tick_size)),
+            tick_value=self.tick_value,
+            point_value=self.point_value,
+            lot_size=self.lot_size,
+            quantity_step=self.quantity_step,
+            quantity_freeze=self.quantity_freeze,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +133,18 @@ class Trade:
     exit_reason: str
     currency_code: str = "USD"
 
+    @property
+    def gross_pnl(self) -> Money:
+        return Money.of(str(self.gross_pnl_usd), self.currency_code)
+
+    @property
+    def commission(self) -> Money:
+        return Money.of(str(self.commission_usd), self.currency_code)
+
+    @property
+    def net_pnl(self) -> Money:
+        return Money.of(str(self.net_pnl_usd), self.currency_code)
+
 
 @dataclass(frozen=True, slots=True)
 class BacktestResult:
@@ -102,6 +155,22 @@ class BacktestResult:
     max_drawdown_usd: float
     trades: tuple[Trade, ...]
     currency_code: str = "USD"
+
+    @property
+    def starting_balance(self) -> Money:
+        return Money.of(str(self.starting_balance_usd), self.currency_code)
+
+    @property
+    def ending_balance(self) -> Money:
+        return Money.of(str(self.ending_balance_usd), self.currency_code)
+
+    @property
+    def total_net_pnl(self) -> Money:
+        return Money.of(str(self.total_net_pnl_usd), self.currency_code)
+
+    @property
+    def max_drawdown(self) -> Money:
+        return Money.of(str(self.max_drawdown_usd), self.currency_code)
 
     def metrics(self) -> dict[str, float | int | str | None]:
         count = len(self.trades)

@@ -3,19 +3,8 @@
 import { useEffect, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, CircleHelp, Wallet } from "lucide-react";
 import { tradingBotApi } from "@/lib/api/client";
-import type { DashboardSummaryResponse, Money } from "@/lib/api/types";
-
-function usd(value: Money | null): string {
-  if (!value) return "Unavailable";
-  const amount = Number(value.amount);
-  if (!Number.isFinite(amount)) return "Invalid value";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: value.currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
+import type { DashboardSummaryResponse } from "@/lib/api/types";
+import { formatMoney } from "@/lib/format-money.mjs";
 
 function Card({
   label,
@@ -99,10 +88,10 @@ export function PaperAccountSummary() {
       </div>
       {error && <div className="rounded-lg border border-amber-400/15 bg-amber-400/[.04] px-3 py-2 text-[9px] text-amber-200">{error}</div>}
       <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-        <Card label="PERSISTED CASH BALANCE" value={account ? usd(account.balance) : loading ? "Loading…" : "Unavailable"} detail="Starting capital plus realized cash flows" />
-        <Card label="LATEST PERSISTED EQUITY" value={account ? usd(account.equity) : loading ? "Loading…" : "Unavailable"} detail="Cash balance plus last explicitly recorded marks" />
-        <Card label="REALIZED NET P&L" value={account ? usd(account.realized_pnl) : loading ? "Loading…" : "Unavailable"} detail="Closed FIFO lots · fees included" tone={account?.realized_pnl && Number(account.realized_pnl.amount) > 0 ? "positive" : account?.realized_pnl && Number(account.realized_pnl.amount) < 0 ? "negative" : "neutral"} />
-        <Card label="TOTAL NET P&L" value={net ? usd(net) : loading ? "Loading…" : "Unavailable"} detail="Equity minus virtual starting balance" tone={netTone} />
+        <Card label="PERSISTED CASH BALANCE" value={account ? formatMoney(account.balance) : loading ? "Loading…" : "Unavailable"} detail="Starting capital plus realized cash flows" />
+        <Card label="LATEST PERSISTED EQUITY" value={account ? formatMoney(account.equity) : loading ? "Loading…" : "Unavailable"} detail="Cash balance plus last explicitly recorded marks" />
+        <Card label="REALIZED NET P&L" value={account ? formatMoney(account.realized_pnl) : loading ? "Loading…" : "Unavailable"} detail="Closed FIFO lots · fees included" tone={account?.realized_pnl && Number(account.realized_pnl.amount) > 0 ? "positive" : account?.realized_pnl && Number(account.realized_pnl.amount) < 0 ? "negative" : "neutral"} />
+        <Card label="TOTAL NET P&L" value={net ? formatMoney(net) : loading ? "Loading…" : "Unavailable"} detail="Equity minus virtual starting balance" tone={netTone} />
       </div>
     </div>
   );

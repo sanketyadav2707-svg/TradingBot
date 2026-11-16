@@ -87,7 +87,12 @@ class FirmComplianceGate:
         self.timezone = ZoneInfo(profile.timezone)
 
     def check_entry(
-        self, *, timestamp: datetime, symbol: str, quantity: int
+        self,
+        *,
+        timestamp: datetime,
+        symbol: str,
+        quantity: int,
+        lot_size: int = 1,
     ) -> ComplianceDecision:
         if timestamp.tzinfo is None or timestamp.utcoffset() is None:
             return ComplianceDecision(False, "timestamp_must_be_timezone_aware")
@@ -96,7 +101,12 @@ class FirmComplianceGate:
             return ComplianceDecision(False, missing)
         if symbol.upper() not in {s.upper() for s in self.profile.allowed_symbols}:
             return ComplianceDecision(False, "symbol_not_allowed")
-        if quantity < 1 or quantity > int(self.profile.max_contracts):
+        if type(lot_size) is not int or lot_size < 1:
+            return ComplianceDecision(False, "invalid_instrument_lot_size")
+        if type(quantity) is not int or quantity < lot_size or quantity % lot_size:
+            return ComplianceDecision(False, "quantity_must_be_a_valid_lot_multiple")
+        order_lots = quantity // lot_size
+        if order_lots > int(self.profile.max_contracts):
             return ComplianceDecision(False, "contract_limit_exceeded")
         local_time = timestamp.astimezone(self.timezone).time().replace(tzinfo=None)
         if local_time >= self.profile.latest_entry_time:
