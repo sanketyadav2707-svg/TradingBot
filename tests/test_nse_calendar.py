@@ -201,7 +201,7 @@ def test_combined_master_requires_admission_type_mapping_and_nse_only_rejects_bs
     )
     with pytest.raises(ValueError, match="bse_only_contract_not_allowed"):
         load_normalized_instrument_master(
-            v2_bad_variant, retrieved, source_variant="NSE_EXCLUSIVE"
+            v2, retrieved, source_variant="NSE_EXCLUSIVE"
         )
 
 
