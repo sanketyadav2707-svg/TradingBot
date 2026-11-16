@@ -252,6 +252,32 @@ class PaperAccountStore:
                     f"paper account currency mismatch: database={stored_currency}, requested={self.currency_code}; "
                     "create a separate database for another currency"
                 )
+            # Schema v2 makes denomination explicit on every monetary ledger row.
+            # Existing rows receive the already-established account currency;
+            # a legacy ledger is always classified as USD above.
+            currency_tables = ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox")
+            for table in currency_tables:
+                columns = {
+                    row["name"] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+                }
+                if "currency_code" not in columns:
+                    connection.execute(
+                        f"ALTER TABLE {table} ADD COLUMN currency_code TEXT NOT NULL DEFAULT 'USD'"
+                    )
+                connection.execute(
+                    f"UPDATE {table} SET currency_code = ? WHERE currency_code = 'USD' AND ? != 'USD'",
+                    (self.currency_code, self.currency_code),
+                )
+                mismatches = connection.execute(
+                    f"SELECT COUNT(*) AS n FROM {table} WHERE currency_code != ?",
+                    (self.currency_code,),
+                ).fetchone()["n"]
+                if mismatches:
+                    raise RuntimeError(f"ledger_currency_mismatch:{table}")
+            connection.execute(
+                "INSERT INTO account_meta(key, value) VALUES ('schema_version', '2') "
+                "ON CONFLICT(key) DO UPDATE SET value = '2'"
+            )
             stored_balance = Decimal(connection.execute(
                 "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
             ).fetchone()["value"])
@@ -453,20 +479,20 @@ class PaperAccountStore:
             connection.execute(
                 """INSERT INTO fills(
                     order_id, symbol, side, quantity, requested_price, fill_price,
-                    commission_usd, tick_size, tick_value_usd, point_value_usd, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (normalized_id, *candidate),
+                    commission_usd, tick_size, tick_value_usd, point_value_usd, timestamp, currency_code
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (normalized_id, *candidate, self.currency_code),
             )
             # This outbox row is committed in the SAME transaction as the
             # accounting fill and position/P&L updates. Lifecycle delivery can
             # therefore be retried after a process crash without losing the fill.
             connection.execute(
                 """INSERT INTO lifecycle_outbox(
-                    order_id, symbol, side, quantity, fill_price, commission_usd, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    order_id, symbol, side, quantity, fill_price, commission_usd, timestamp, currency_code
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     normalized_id, symbol, "LONG" if side > 0 else "SHORT",
-                    fill.quantity, _number(price), _number(commission), timestamp,
+                    fill.quantity, _number(price), _number(commission), timestamp, self.currency_code,
                 ),
             )
             remaining = fill.quantity
@@ -494,10 +520,10 @@ class PaperAccountStore:
                 connection.execute(
                     """INSERT INTO open_lots(
                         symbol, side, quantity_open, entry_price, entry_commission_remaining,
-                        tick_size, tick_value_usd, point_value_usd, opened_at, opening_fill_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        tick_size, tick_value_usd, point_value_usd, opened_at, opening_fill_id, currency_code
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (symbol, side, remaining, _number(price), _number(commission),
-                     _number(tick_size), _number(tick_value), _number(point_value), timestamp, normalized_id),
+                     _number(tick_size), _number(tick_value), _number(point_value), timestamp, normalized_id, self.currency_code),
                 )
                 remaining = 0
             else:
@@ -525,13 +551,13 @@ class PaperAccountStore:
                         """INSERT INTO closed_trades(
                             symbol, side, quantity, entry_price, exit_price, gross_pnl_usd,
                             entry_commission_usd, exit_commission_usd, net_pnl_usd,
-                            entry_time, exit_time, opening_fill_id, closing_fill_id
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            entry_time, exit_time, opening_fill_id, closing_fill_id, currency_code
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             symbol, lot["side"], quantity, lot["entry_price"], _number(price),
                             _number(gross), _number(entry_commission), _number(exit_commission),
                             _number(net), lot["opened_at"], timestamp,
-                            lot["opening_fill_id"], normalized_id,
+                            lot["opening_fill_id"], normalized_id, self.currency_code,
                         ),
                     )
                     new_quantity = lot_quantity - quantity
@@ -567,11 +593,11 @@ class PaperAccountStore:
                     connection.execute(
                         """INSERT INTO open_lots(
                             symbol, side, quantity_open, entry_price, entry_commission_remaining,
-                            tick_size, tick_value_usd, point_value_usd, opened_at, opening_fill_id
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            tick_size, tick_value_usd, point_value_usd, opened_at, opening_fill_id, currency_code
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             symbol, side, remaining, _number(price), _number(remaining_commission),
-                            _number(tick_size), _number(tick_value), _number(point_value), timestamp, normalized_id,
+                            _number(tick_size), _number(tick_value), _number(point_value), timestamp, normalized_id, self.currency_code,
                         ),
                     )
                     remaining = 0
@@ -711,12 +737,12 @@ class PaperAccountStore:
         connection.execute(
             """INSERT INTO equity_snapshots(
                 timestamp, source, balance_usd, realized_gross_pnl_usd,
-                commissions_usd, unrealized_pnl_usd, equity_usd, reference_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                commissions_usd, unrealized_pnl_usd, equity_usd, reference_id, currency_code
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 timestamp, source, summary["balance_usd"], summary["realized_gross_pnl_usd"],
                 summary["total_commissions_usd"], summary["unrealized_pnl_usd"],
-                summary["equity_usd"], reference_id,
+                summary["equity_usd"], reference_id, self.currency_code,
             ),
         )
 

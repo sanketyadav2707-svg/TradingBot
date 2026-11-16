@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from math import isfinite
 from typing import Callable
 from uuid import uuid4
 
 from tradingbot.models import Instrument, Side
+from tradingbot.money import FeeSchedule
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,7 +21,7 @@ class PaperFill:
     quantity: int
     requested_price: float
     fill_price: float
-    commission_usd: float
+    commission_usd: Decimal | float
     timestamp: datetime
     currency_code: str = "USD"
 
@@ -33,6 +35,7 @@ class PaperBroker:
         commission_per_contract_per_side_usd: float = 0.0,
         slippage_ticks_per_side: int = 1,
         on_fill: Callable[[PaperFill], None] | None = None,
+        fee_schedule: FeeSchedule | None = None,
     ) -> None:
         if (
             not isinstance(commission_per_contract_per_side_usd, (int, float))
@@ -43,8 +46,11 @@ class PaperBroker:
             raise ValueError("Commission must be finite and non-negative")
         if type(slippage_ticks_per_side) is not int or slippage_ticks_per_side < 0:
             raise ValueError("Slippage ticks must be a non-negative integer")
+        if fee_schedule is not None and fee_schedule.currency != instrument.currency_code:
+            raise ValueError("fee_schedule_currency_mismatch")
         self.instrument = instrument
-        self.commission = float(commission_per_contract_per_side_usd)
+        self.fee_schedule = fee_schedule
+        self.commission = Decimal(str(commission_per_contract_per_side_usd))
         self.slippage_ticks = slippage_ticks_per_side
         self.fills: list[PaperFill] = []
         self._on_fill = on_fill
@@ -85,7 +91,11 @@ class PaperBroker:
             quantity=quantity,
             requested_price=reference_price,
             fill_price=fill,
-            commission_usd=self.commission * quantity,
+            commission_usd=(
+                self.fee_schedule.total_per_unit_per_side.amount * quantity
+                if self.fee_schedule is not None
+                else self.commission * quantity
+            ),
             timestamp=timestamp,
             currency_code=self.instrument.currency_code,
         )

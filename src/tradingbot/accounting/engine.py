@@ -21,6 +21,7 @@ from tradingbot.execution.order_lifecycle import (
 )
 from tradingbot.models import Instrument
 from tradingbot.paper.broker import PaperBroker
+from tradingbot.money import FeeSchedule
 from tradingbot.risk.limits import RiskGuard, RiskLimits
 
 
@@ -68,6 +69,7 @@ class PaperAccountEngine:
         *,
         commission_per_contract_per_side_usd: float = 0.0,
         slippage_ticks_per_side: int = 1,
+        fee_schedule: FeeSchedule | None = None,
         risk_timezone: str = "UTC",
         max_mark_age_seconds: int = 60,
     ) -> None:
@@ -83,6 +85,9 @@ class PaperAccountEngine:
         self.order_lifecycle = OrderLifecycleStore(store.path)
         self._backfill_accounting_fills()
         self._drain_lifecycle_outbox()
+        if fee_schedule is not None and fee_schedule.currency != store.currency_code:
+            raise ValueError("fee_schedule_currency_mismatch")
+        self.fee_schedule = fee_schedule
         self.commission = commission_per_contract_per_side_usd
         self.slippage_ticks = slippage_ticks_per_side
         ZoneInfo(risk_timezone)
@@ -94,6 +99,7 @@ class PaperAccountEngine:
             risk_limits,
             commission_per_contract_per_side_usd=commission_per_contract_per_side_usd,
             slippage_ticks_per_side=slippage_ticks_per_side,
+            fee_schedule=fee_schedule,
         )
         self._brokers: dict[str, PaperBroker] = {}
         self._lock = threading.RLock()
@@ -309,6 +315,7 @@ class PaperAccountEngine:
                 commission_per_contract_per_side_usd=self.commission,
                 slippage_ticks_per_side=self.slippage_ticks,
                 on_fill=persist_fill,
+                fee_schedule=self.fee_schedule,
             )
             self._brokers[symbol] = broker
             return broker

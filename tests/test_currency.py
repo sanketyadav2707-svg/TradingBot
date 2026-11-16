@@ -180,3 +180,148 @@ def test_runtime_rejects_instrument_currency_mismatch(tmp_path):
     )
     assert "instrument_currency_does_not_match_account_currency" in runtime.configuration_errors
     assert runtime.instruments == {}
+
+
+def _inr_fee_schedule():
+    from tradingbot.money import FeeSchedule, Money
+
+    return FeeSchedule(
+        schedule_id="NSE-TEST-2026-11",
+        currency="INR",
+        effective_from="2026-11-16",
+        brokerage_per_unit_per_side=Money.of("0.10", "INR"),
+        exchange_charge_per_unit_per_side=Money.of("0.02", "INR"),
+        regulatory_charge_per_unit_per_side=Money.of("0.01", "INR"),
+        taxes_per_unit_per_side=Money.of("0.03", "INR"),
+    )
+
+
+def test_decimal_risk_guard_uses_fee_schedule_and_inr_budget():
+    limits = RiskLimits(
+        starting_balance_usd="100000.00",
+        max_daily_loss_usd="1000.00",
+        max_total_drawdown_usd="2000.00",
+        max_risk_per_trade_usd="100.00",
+        max_contracts=5,
+        currency_code="INR",
+    )
+    guard = RiskGuard(limits, fee_schedule=_inr_fee_schedule(), slippage_ticks_per_side=1)
+    decision = guard.evaluate_entry(
+        instrument=Instrument("NIFTY_TEST", 0.05, 1.0, 20.0, currency_code="INR"),
+        stop_ticks=8,
+        equity_usd="100000.00",
+        peak_equity_usd="100000.00",
+        daily_pnl_usd="0.00",
+        trades_today=0,
+    )
+    # Risk per unit = 8 INR stop + 2 INR slippage + 0.32 INR round-trip fees.
+    assert decision.approved
+    assert decision.quantity == 5
+
+
+def test_paper_broker_applies_fee_schedule_to_fill_as_decimal():
+    from decimal import Decimal
+    from tradingbot.paper.broker import PaperBroker
+
+    broker = PaperBroker(
+        Instrument("NIFTY_TEST", 0.05, 1.0, 20.0, currency_code="INR"),
+        fee_schedule=_inr_fee_schedule(),
+    )
+    fill = broker.submit_market(
+        side=Side.LONG,
+        quantity=3,
+        reference_price=25_000.0,
+        timestamp=T0,
+        order_id="fee-schedule-fill",
+    )
+    assert fill.currency_code == "INR"
+    assert fill.commission_usd == Decimal("0.48")
+
+
+def test_currency_schema_v2_tags_every_monetary_ledger_table(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "inr-schema-v2.sqlite3"
+    store = PaperAccountStore(path, "100000.00", currency_code="INR")
+    instrument = Instrument("NIFTY_TEST", 0.05, 1.0, 20.0, currency_code="INR")
+    fill = PaperFill(
+        order_id="schema-v2-fill",
+        symbol="NIFTY_TEST",
+        side=Side.LONG,
+        quantity=1,
+        requested_price="25000",
+        fill_price="25000",
+        commission_usd="0.16",
+        timestamp=T0,
+        currency_code="INR",
+    )
+    assert store.record_fill(fill, instrument)
+    with sqlite3.connect(path) as connection:
+        version = connection.execute(
+            "SELECT value FROM account_meta WHERE key='schema_version'"
+        ).fetchone()[0]
+        assert version == "2"
+        for table in ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox"):
+            columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+            assert "currency_code" in columns
+        assert connection.execute("SELECT currency_code FROM fills").fetchone()[0] == "INR"
+        assert connection.execute("SELECT currency_code FROM open_lots").fetchone()[0] == "INR"
+        assert connection.execute("SELECT currency_code FROM lifecycle_outbox").fetchone()[0] == "INR"
+        assert connection.execute("SELECT currency_code FROM equity_snapshots").fetchone()[0] == "INR"
+
+
+def test_legacy_usd_ledger_migration_marks_existing_rows_usd(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "legacy-ledger.sqlite3"
+    store = PaperAccountStore(path, "50000.00", currency_code="USD")
+    instrument = Instrument("MES", 0.25, 1.25, 5.0)
+    fill = PaperFill(
+        order_id="legacy-usd-fill",
+        symbol="MES",
+        side=Side.LONG,
+        quantity=1,
+        requested_price=100.0,
+        fill_price=100.25,
+        commission_usd=0.0,
+        timestamp=T0,
+        currency_code="USD",
+    )
+    store.record_fill(fill, instrument)
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT currency_code FROM fills").fetchone()[0] == "USD"
+        assert connection.execute("SELECT currency_code FROM open_lots").fetchone()[0] == "USD"
+        assert connection.execute("SELECT currency_code FROM equity_snapshots").fetchone()[0] == "USD"
+
+
+def test_existing_inr_schema_v1_rows_are_migrated_without_relabelling(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "inr-v1.sqlite3"
+    store = PaperAccountStore(path, "100000.00", currency_code="INR")
+    instrument = Instrument("NIFTY_TEST", 0.05, 1.0, 20.0, currency_code="INR")
+    fill = PaperFill(
+        order_id="v1-inr-fill",
+        symbol="NIFTY_TEST",
+        side=Side.LONG,
+        quantity=1,
+        requested_price=25000,
+        fill_price=25000,
+        commission_usd=0,
+        timestamp=T0,
+        currency_code="INR",
+    )
+    store.record_fill(fill, instrument)
+    # Simulate the previous schema version that persisted account currency only
+    # in account_meta and did not have per-row currency_code columns.
+    with sqlite3.connect(path) as connection:
+        for table in ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox"):
+            connection.execute(f"ALTER TABLE {table} DROP COLUMN currency_code")
+        connection.execute("DELETE FROM account_meta WHERE key='schema_version'")
+    migrated = PaperAccountStore(path, "100000.00", currency_code="INR")
+    assert migrated.get_summary()["starting_balance_usd"] == "100000"
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT value FROM account_meta WHERE key='schema_version'").fetchone()[0] == "2"
+        assert connection.execute("SELECT currency_code FROM fills").fetchone()[0] == "INR"
+        assert connection.execute("SELECT currency_code FROM open_lots").fetchone()[0] == "INR"
+        assert connection.execute("SELECT currency_code FROM lifecycle_outbox").fetchone()[0] == "INR"
