@@ -158,3 +158,27 @@ def test_paper_ledger_money_formatter_uses_account_currency_precision():
     assert ledger_money(Decimal("10.555"), "KWD") == "10.556"
     assert ledger_money(Decimal("10.5"), "JPY") == "10"
     assert ledger_money(Decimal("10.5"), "INR") == "10.50"
+
+
+def test_fee_schedule_normalizes_currency_and_validates_effective_date():
+    base = _fee_schedule(currency="INR")
+    lower = FeeSchedule(
+        schedule_id=base.schedule_id,
+        currency="inr",
+        effective_from=base.effective_from,
+        brokerage_per_unit_per_side=base.brokerage_per_unit_per_side,
+        exchange_charge_per_unit_per_side=base.exchange_charge_per_unit_per_side,
+        regulatory_charge_per_unit_per_side=base.regulatory_charge_per_unit_per_side,
+        taxes_per_unit_per_side=base.taxes_per_unit_per_side,
+    )
+    assert lower.currency == "INR"
+    with pytest.raises(ValueError, match="ISO date"):
+        FeeSchedule(
+            schedule_id="bad-date",
+            currency="INR",
+            effective_from="16-11-2026",
+            brokerage_per_unit_per_side=Money.of("0", "INR"),
+            exchange_charge_per_unit_per_side=Money.of("0", "INR"),
+            regulatory_charge_per_unit_per_side=Money.of("0", "INR"),
+            taxes_per_unit_per_side=Money.of("0", "INR"),
+        )
