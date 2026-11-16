@@ -38,7 +38,10 @@ class RiskLimits:
             "max_total_drawdown_usd",
             "max_risk_per_trade_usd",
         ):
-            amount = _to_decimal(getattr(self, field), field)
+            try:
+                amount = _to_decimal(getattr(self, field), field)
+            except ValueError as exc:
+                raise ValueError("All balance and risk limits must be finite and positive") from exc
             if amount <= 0:
                 raise ValueError("All balance and risk limits must be finite and positive")
             object.__setattr__(self, field, amount)
@@ -70,9 +73,12 @@ class RiskGuard:
         slippage_ticks_per_side: int = 1,
         fee_schedule: FeeSchedule | None = None,
     ) -> None:
-        commission = _to_decimal(
-            commission_per_contract_per_side_usd, "commission_per_contract_per_side"
-        )
+        try:
+            commission = _to_decimal(
+                commission_per_contract_per_side_usd, "commission_per_contract_per_side"
+            )
+        except ValueError as exc:
+            raise ValueError("Commission must be finite and non-negative") from exc
         if commission < 0:
             raise ValueError("Commission must be finite and non-negative")
         if type(slippage_ticks_per_side) is not int or slippage_ticks_per_side < 0:
