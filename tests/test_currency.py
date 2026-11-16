@@ -325,3 +325,45 @@ def test_existing_inr_schema_v1_rows_are_migrated_without_relabelling(tmp_path):
         assert connection.execute("SELECT currency_code FROM fills").fetchone()[0] == "INR"
         assert connection.execute("SELECT currency_code FROM open_lots").fetchone()[0] == "INR"
         assert connection.execute("SELECT currency_code FROM lifecycle_outbox").fetchone()[0] == "INR"
+
+
+def test_api_money_uses_currency_minor_unit_precision():
+    from tradingbot.api.app import _money
+
+    assert _money("10.5", "INR").amount == "10.50"
+    assert _money("10.5", "JPY").amount == "10"
+    assert _money("10.5555", "KWD").amount == "10.556"
+
+
+def test_currency_neutral_instrument_api_v2_uses_versioned_field_names(tmp_path):
+    from fastapi.testclient import TestClient
+    from tradingbot.api.app import create_app
+    from tradingbot.api.runtime import DashboardRuntime
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "risk.toml").write_text(
+        '[risk]\ncurrency_code = "INR"\nstarting_balance_usd = 100000\n'
+        'max_daily_loss_usd = 1000\nmax_total_drawdown_usd = 2000\n'
+        'max_risk_per_trade_usd = 100\nmax_contracts = 1\nmax_trades_per_day = 3\n',
+        encoding="utf-8",
+    )
+    (config_dir / "instruments.toml").write_text(
+        '[instruments.NIFTY_TEST]\ncurrency_code = "INR"\nname = "Nifty test"\n'
+        'exchange = "NSE"\ntick_size = 0.05\ntick_value_usd = 1.0\npoint_value_usd = 20.0\n',
+        encoding="utf-8",
+    )
+    runtime = DashboardRuntime.from_config(
+        config_dir=config_dir,
+        database_path=tmp_path / "inr-v2.sqlite3",
+    )
+    client = TestClient(create_app(runtime))
+    legacy = client.get("/api/v1/instruments").json()["items"][0]
+    current = client.get("/api/v2/instruments").json()["items"][0]
+
+    assert legacy["tick_value_usd"] == {"amount": "1.00", "currency": "INR"}
+    assert current["currency_code"] == "INR"
+    assert current["tick_value"] == {"amount": "1.00", "currency": "INR"}
+    assert current["point_value"] == {"amount": "20.00", "currency": "INR"}
+    assert "tick_value_usd" not in current
+    assert "point_value_usd" not in current
