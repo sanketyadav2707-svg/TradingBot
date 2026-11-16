@@ -65,9 +65,9 @@ class BacktestEngine:
         signals = self.strategy.generate_signals(bars)
         slip = self.risk_guard.slippage_ticks
         slip_price = slip * self.instrument.tick_size
-        commission = self.risk_guard.commission
+        commission = float(self.risk_guard.commission)
 
-        balance = self.risk_guard.limits.starting_balance_usd
+        balance = float(self.risk_guard.limits.starting_balance_usd)
         peak_equity = balance
         max_drawdown = 0.0
         daily_pnl = 0.0
