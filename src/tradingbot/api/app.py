@@ -200,6 +200,9 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
                 point_value=_money(
                     record.instrument.point_value_usd, record.instrument.currency_code
                 ),
+                lot_size=record.instrument.lot_size,
+                quantity_step=record.instrument.quantity_step,
+                quantity_freeze=record.instrument.quantity_freeze,
             )
             for symbol, record in sorted(dashboard_runtime.instruments.items())
         ]

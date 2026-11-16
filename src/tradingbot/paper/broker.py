@@ -77,7 +77,7 @@ class PaperBroker:
             or quantity > self.instrument.quantity_freeze
         ):
             raise ValueError(
-                "Quantity must be an integer between one lot and the instrument quantity freeze"
+                "Quantity must be at least one lot and no greater than the instrument quantity freeze"
             )
         if quantity % self.instrument.quantity_step:
             raise ValueError("Quantity must be a multiple of instrument.quantity_step")
