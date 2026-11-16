@@ -1,6 +1,6 @@
 # Phase 1: Currency-Neutral Financial Domain
 
-Status: domain primitives implemented and merged into the currency-foundation branch; legacy runtime adapters remain in place.
+Status: Decimal money primitives, Decimal risk sizing, currency-aware paper ledger schema v2, fee-schedule paper execution and Decimal backtest arithmetic are implemented in the merged currency-foundation branch. Public legacy API/model field names remain compatibility adapters.
 
 ## Objective
 
@@ -40,7 +40,7 @@ Make money denomination explicit and impossible to mix accidentally before addin
 - Existing `Instrument`, `RiskLimits`, paper broker, backtest and SQLite interfaces still expose legacy `*_usd` field/column names for compatibility. PR #38 already attaches `currency_code` to the existing monetary denomination; this branch does not silently rename or reinterpret those fields.
 - Existing USD paper databases remain USD. No automatic USD-to-INR conversion or relabelling.
 - New INR accounts must use a separate database file and matching INR instruments/risk configuration.
-- The new Money/Economics/FeeSchedule types are the safe target domain for subsequent adapters. The legacy float interfaces are not yet removed.
+- The new Money/Economics/FeeSchedule types are the safe target domain. Risk sizing, ledger accounting, paper-fill fee application and backtest P&L calculations use Decimal internally. Public Bar/Instrument/Trade/BacktestResult price and report interfaces still expose float-compatible fields; those are compatibility boundaries, not proof that all market prices are Decimal end-to-end.
 
 ## Validation
 
@@ -50,7 +50,7 @@ Make money denomination explicit and impossible to mix accidentally before addin
 
 ## Explicitly not complete / blocked from live use
 
-1. Runtime migration of all balance, P&L, risk, fill and backtest fields from floats to Money/Decimal.
+1. Complete migration of remaining public price/report model fields to currency-neutral Money/Decimal types, with API versioning.
 2. Versioned SQLite migration from legacy `*_usd` columns to currency-neutral columns, including rollback/recovery tests.
 3. Wiring FeeSchedule into risk sizing, backtest fills and paper accounting.
 4. Broker-specific NSE statutory fee calculations, dated STT/stamp duty/GST/exchange charge rules and effective-date tests.
