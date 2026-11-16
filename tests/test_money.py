@@ -136,3 +136,17 @@ def test_api_money_serialization_uses_currency_minor_units():
     assert _money("10.5555", "KWD").amount == "10.556"
     with pytest.raises(ValueError, match="unsupported_currency_code"):
         _money("10", "XYZ")
+
+
+def test_legacy_domain_boundaries_use_supported_currency_registry():
+    from tradingbot.models import Instrument
+    from tradingbot.risk.limits import RiskLimits
+
+    instrument = Instrument("TEST", 1.0, 1.0, 1.0, currency_code="inr")
+    assert instrument.currency_code == "INR"
+    limits = RiskLimits(currency_code="inr")
+    assert limits.currency_code == "INR"
+    with pytest.raises(ValueError, match="unsupported_currency_code"):
+        Instrument("TEST", 1.0, 1.0, 1.0, currency_code="XYZ")
+    with pytest.raises(ValueError, match="unsupported_currency_code"):
+        RiskLimits(currency_code="XYZ")
