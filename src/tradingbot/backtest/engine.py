@@ -67,7 +67,8 @@ class BacktestEngine:
         slip_price = slip * self.instrument.tick_size
         commission = float(self.risk_guard.commission)
 
-        balance = float(self.risk_guard.limits.starting_balance_usd)
+        starting_balance = float(self.risk_guard.limits.starting_balance_usd)
+        balance = starting_balance
         peak_equity = balance
         max_drawdown = 0.0
         daily_pnl = 0.0
@@ -207,9 +208,9 @@ class BacktestEngine:
 
         return BacktestResult(
             symbol=self.instrument.symbol,
-            starting_balance_usd=self.risk_guard.limits.starting_balance_usd,
+            starting_balance_usd=starting_balance,
             ending_balance_usd=balance,
-            total_net_pnl_usd=balance - self.risk_guard.limits.starting_balance_usd,
+            total_net_pnl_usd=balance - starting_balance,
             max_drawdown_usd=max_drawdown,
             trades=tuple(trades),
             currency_code=self.instrument.currency_code,
