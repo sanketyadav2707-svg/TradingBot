@@ -9,7 +9,8 @@ from __future__ import annotations
 import csv
 import hashlib
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Iterable
 from zoneinfo import ZoneInfo
@@ -176,14 +177,27 @@ class NSEInstrumentMasterRecord:
             raise ValueError("unsupported_nse_instrument_segment")
         if type(self.lot_size) is not int or self.lot_size < 1:
             raise ValueError("lot_size_must_be_positive_integer")
-        if type(self.quantity_freeze) is not int or self.quantity_freeze < self.lot_size:
-            raise ValueError("quantity_freeze_must_be_at_least_one_lot")
+        if (
+            type(self.quantity_freeze) is not int
+            or self.quantity_freeze < self.lot_size
+            or self.quantity_freeze % self.lot_size != 0
+        ):
+            raise ValueError("quantity_freeze_must_be_a_positive_lot_multiple")
         try:
-            tick = float(self.tick_size)
-        except (TypeError, ValueError) as exc:
+            tick = Decimal(self.tick_size)
+        except (InvalidOperation, TypeError, ValueError) as exc:
             raise ValueError("invalid_tick_size") from exc
-        if not (tick > 0 and tick < float("inf")):
+        if not tick.is_finite() or tick <= 0:
             raise ValueError("invalid_tick_size")
+        if self.segment == "NSE_FO" and self.expiry is None:
+            raise ValueError("derivative_expiry_required")
+        if self.segment == "NSE_CM" and self.expiry is not None:
+            raise ValueError("cash_equity_must_not_have_derivative_expiry")
+        if (
+            len(self.source_file_sha256) != 64
+            or any(char not in "0123456789abcdef" for char in self.source_file_sha256.lower())
+        ):
+            raise ValueError("source_file_sha256_must_be_64_hex_characters")
         if self.currency_code != "INR":
             raise ValueError("nse_equity_instruments_must_be_inr")
         if self.retrieved_at.tzinfo is None or self.retrieved_at.utcoffset() is None:
