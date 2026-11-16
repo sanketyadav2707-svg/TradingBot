@@ -124,7 +124,7 @@ class BacktestEngine:
                 # Attribute an overnight position's opening-gap exit to the new
                 # session. Resetting after close would silently erase that day's PnL
                 # from the daily-loss gate.
-                daily_pnl = 0.0
+                daily_pnl = Decimal("0")
                 trades_today = 0
                 current_day = bar_day
                 if position is not None:
