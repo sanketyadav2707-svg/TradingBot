@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
-from tradingbot.money import currency_minor_units
+from tradingbot.money import FeeSchedule, currency_minor_units
 from tradingbot.models import Instrument
 
 
@@ -68,7 +68,7 @@ class RiskGuard:
         limits: RiskLimits,
         commission_per_contract_per_side_usd: Decimal | float = Decimal("0"),
         slippage_ticks_per_side: int = 1,
-        fee_schedule=None,
+        fee_schedule: FeeSchedule | None = None,
     ) -> None:
         commission = _to_decimal(
             commission_per_contract_per_side_usd, "commission_per_contract_per_side"
@@ -77,6 +77,8 @@ class RiskGuard:
             raise ValueError("Commission must be finite and non-negative")
         if type(slippage_ticks_per_side) is not int or slippage_ticks_per_side < 0:
             raise ValueError("Slippage ticks must be a non-negative integer")
+        if fee_schedule is not None and not isinstance(fee_schedule, FeeSchedule):
+            raise TypeError("fee_schedule must be a FeeSchedule")
         if fee_schedule is not None and fee_schedule.currency != limits.currency_code:
             raise ValueError("fee_schedule_currency_mismatch")
         self.limits = limits
