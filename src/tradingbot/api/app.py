@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from tradingbot.api.runtime import DashboardRuntime
+from tradingbot.money import quantum_for
 from tradingbot.api.schemas import (
     ApiMeta,
     AvailabilityPage,
@@ -39,7 +40,7 @@ def _money(value: str | float | int | Decimal | None, currency: str = "USD") -> 
         raise ValueError("Money values must be valid finite decimals") from exc
     if not amount.is_finite():
         raise ValueError("Money values must be finite")
-    return Money(amount=format(amount.quantize(Decimal("0.01")), "f"), currency=currency)
+    return Money(amount=format(amount.quantize(quantum_for(currency)), "f"), currency=currency)
 
 
 def _cursor_offset(cursor: str | None) -> int:
