@@ -292,3 +292,36 @@ def test_legacy_usd_ledger_migration_marks_existing_rows_usd(tmp_path):
         assert connection.execute("SELECT currency_code FROM fills").fetchone()[0] == "USD"
         assert connection.execute("SELECT currency_code FROM open_lots").fetchone()[0] == "USD"
         assert connection.execute("SELECT currency_code FROM equity_snapshots").fetchone()[0] == "USD"
+
+
+def test_existing_inr_schema_v1_rows_are_migrated_without_relabelling(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "inr-v1.sqlite3"
+    store = PaperAccountStore(path, "100000.00", currency_code="INR")
+    instrument = Instrument("NIFTY_TEST", 0.05, 1.0, 20.0, currency_code="INR")
+    fill = PaperFill(
+        order_id="v1-inr-fill",
+        symbol="NIFTY_TEST",
+        side=Side.LONG,
+        quantity=1,
+        requested_price=25000,
+        fill_price=25000,
+        commission_usd=0,
+        timestamp=T0,
+        currency_code="INR",
+    )
+    store.record_fill(fill, instrument)
+    # Simulate the previous schema version that persisted account currency only
+    # in account_meta and did not have per-row currency_code columns.
+    with sqlite3.connect(path) as connection:
+        for table in ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox"):
+            connection.execute(f"ALTER TABLE {table} DROP COLUMN currency_code")
+        connection.execute("DELETE FROM account_meta WHERE key='schema_version'")
+    migrated = PaperAccountStore(path, "100000.00", currency_code="INR")
+    assert migrated.get_summary()["starting_balance_usd"] == "100000"
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT value FROM account_meta WHERE key='schema_version'").fetchone()[0] == "2"
+        assert connection.execute("SELECT currency_code FROM fills").fetchone()[0] == "INR"
+        assert connection.execute("SELECT currency_code FROM open_lots").fetchone()[0] == "INR"
+        assert connection.execute("SELECT currency_code FROM lifecycle_outbox").fetchone()[0] == "INR"
