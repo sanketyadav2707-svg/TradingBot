@@ -97,3 +97,40 @@ class RiskSnapshotResponse(StrictResponse):
     open_positions: int | None
     max_contracts: int | None
     execution_halted: bool | None
+
+
+class InstrumentMetadataV2(StrictResponse):
+    """Currency-neutral instrument fields; legacy v1 names remain unchanged."""
+    symbol: str
+    name: str
+    exchange: str
+    tick_size: str
+    currency_code: str = Field(pattern=r"^[A-Z]{3}$")
+    tick_value: Money
+    point_value: Money
+
+
+class InstrumentsV2Response(StrictResponse):
+    availability: AvailabilityState
+    source: str
+    items: list[InstrumentMetadataV2]
+    reason: str | None = None
+
+
+class NSESessionResponse(StrictResponse):
+    status: Literal["OPEN", "CLOSED", "UNKNOWN", "NOT_CONFIGURED"]
+    day: str
+    segment: str
+    timezone: str = "Asia/Kolkata"
+    session_name: str | None = None
+    opens_at: str | None = None
+    closes_at: str | None = None
+    reason: str | None = None
+
+
+class NSEInstrumentMasterResponse(StrictResponse):
+    status: Literal["VALIDATED", "INVALID", "NOT_CONFIGURED"]
+    record_count: int
+    latest_source_as_of: str | None = None
+    source_file_sha256s: list[str] = Field(default_factory=list)
+    reason: str | None = None
