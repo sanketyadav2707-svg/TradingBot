@@ -734,6 +734,15 @@ class PaperAccountStore:
         self, connection: sqlite3.Connection, timestamp: str, source: str, reference_id: str | None
     ) -> None:
         summary = self._summary(connection)
+        # Equity snapshots are event-time observations. Once later account activity
+        # exists, reject late historical fills/marks rather than appending a new
+        # snapshot behind the latest persisted state. The logical opening baseline
+        # is separately rebased before the first activity for historical replay.
+        latest = connection.execute(
+            "SELECT timestamp FROM equity_snapshots ORDER BY timestamp DESC, id DESC LIMIT 1"
+        ).fetchone()
+        if latest is not None and timestamp < latest["timestamp"]:
+            raise ValueError("equity_snapshot_timestamp_cannot_move_backwards")
         connection.execute(
             """INSERT INTO equity_snapshots(
                 timestamp, source, balance_usd, realized_gross_pnl_usd,

@@ -729,3 +729,27 @@ def test_emergency_halt_from_another_engine_instance_blocks_entries(tmp_path) ->
     with pytest.raises(OrderRejected, match="emergency_halt_active"):
         router.submit_entry(intent)
     assert second.store.get_summary()["fills_count"] == 0
+
+
+
+def test_equity_snapshot_rejects_out_of_order_fill_after_later_mark(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "chronological-equity.sqlite3", 50_000)
+    first = datetime.now(timezone.utc) + timedelta(seconds=1)
+    store.mark_to_market({"MES": 100}, first)
+    later = first + timedelta(seconds=2)
+    store.mark_to_market({"MES": 101}, later)
+
+    historical_fill = make_fill(
+        "late-historical-fill",
+        Side.LONG,
+        1,
+        100,
+        timestamp=first + timedelta(seconds=1),
+    )
+    with pytest.raises(ValueError, match="equity_snapshot_timestamp_cannot_move_backwards"):
+        store.record_fill(historical_fill, MES)
+
+    assert store.get_summary()["fills_count"] == 0
+    history = store.list_equity()
+    assert [item["timestamp"] for item in history] == sorted(item["timestamp"] for item in history)
+    assert history[-1]["equity_usd"] == store.get_summary()["equity_usd"]

@@ -66,6 +66,8 @@ Make money denomination explicit and impossible to mix accidentally before addin
 
 FeeSchedule is already used by Decimal risk sizing and paper-fill commission calculations, and Decimal backtest arithmetic is implemented. Those items are not outstanding tasks.
 
+Equity history also enforces monotonic event-time snapshots. After any persisted market/account activity, a late historical fill or mark is rejected rather than being inserted behind the latest account state. The opening baseline can only be rebased before the first activity.
+
 The remaining items affect compatibility, statutory fee accuracy, or live readiness. They must not be bypassed by declaring the phase complete based only on unit tests.
 
 
