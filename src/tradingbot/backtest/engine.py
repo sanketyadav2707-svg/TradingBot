@@ -9,10 +9,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from tradingbot.compliance.rules import FirmComplianceGate
 from tradingbot.models import BacktestResult, Bar, Instrument, Side, Trade
+from tradingbot.money import Money
 from tradingbot.risk.limits import RiskGuard
 from tradingbot.strategy.ema_cross import EmaCrossStrategy
 
@@ -37,9 +39,9 @@ class _Position:
     quantity: int
     entry_time: datetime
     entry_index: int
-    entry_price: float
-    stop_price: float
-    target_price: float
+    entry_price: Decimal
+    stop_price: Decimal
+    target_price: Decimal
 
 
 class BacktestEngine:
@@ -64,14 +66,16 @@ class BacktestEngine:
             raise ValueError("All bar symbols must match the configured instrument")
         signals = self.strategy.generate_signals(bars)
         slip = self.risk_guard.slippage_ticks
-        slip_price = slip * self.instrument.tick_size
-        commission = float(self.risk_guard.commission)
+        tick_size = Decimal(str(self.instrument.tick_size))
+        point_value = Decimal(str(self.instrument.point_value_usd))
+        slip_price = Decimal(slip) * tick_size
+        commission = self.risk_guard.commission
 
-        starting_balance = float(self.risk_guard.limits.starting_balance_usd)
+        starting_balance = self.risk_guard.limits.starting_balance_usd
         balance = starting_balance
         peak_equity = balance
-        max_drawdown = 0.0
-        daily_pnl = 0.0
+        max_drawdown = Decimal("0")
+        daily_pnl = Decimal("0")
         trades_today = 0
         current_day: date | None = None
         position: _Position | None = None
@@ -82,14 +86,15 @@ class BacktestEngine:
             pos: _Position, bar: Bar, base_price: float, reason: str, index: int
         ) -> Trade:
             nonlocal balance, peak_equity, max_drawdown, daily_pnl
-            exit_price = base_price - int(pos.side) * slip_price
-            gross = (
+            exit_price = Decimal(str(base_price)) - Decimal(int(pos.side)) * slip_price
+            gross_raw = (
                 (exit_price - pos.entry_price)
-                * int(pos.side)
-                * self.instrument.point_value_usd
-                * pos.quantity
+                * Decimal(int(pos.side))
+                * point_value
+                * Decimal(pos.quantity)
             )
-            fees = 2.0 * commission * pos.quantity
+            gross = Money(gross_raw, self.instrument.currency_code).amount
+            fees = Money(Decimal("2") * commission * Decimal(pos.quantity), self.instrument.currency_code).amount
             net = gross - fees
             balance += net
             daily_pnl += net
@@ -101,11 +106,11 @@ class BacktestEngine:
                 quantity=pos.quantity,
                 entry_time=pos.entry_time,
                 exit_time=bar.timestamp,
-                entry_price=pos.entry_price,
-                exit_price=exit_price,
-                gross_pnl_usd=gross,
-                commission_usd=fees,
-                net_pnl_usd=net,
+                entry_price=float(pos.entry_price),
+                exit_price=float(exit_price),
+                gross_pnl_usd=float(gross),
+                commission_usd=float(fees),
+                net_pnl_usd=float(net),
                 bars_held=max(1, index - pos.entry_index + 1),
                 exit_reason=reason,
                 currency_code=self.instrument.currency_code,
@@ -119,7 +124,7 @@ class BacktestEngine:
                 # Attribute an overnight position's opening-gap exit to the new
                 # session. Resetting after close would silently erase that day's PnL
                 # from the daily-loss gate.
-                daily_pnl = 0.0
+                daily_pnl = Decimal("0")
                 trades_today = 0
                 current_day = bar_day
                 if position is not None:
@@ -160,12 +165,13 @@ class BacktestEngine:
                         decision = type(decision)(False, 0, compliance.reason)
                 if decision.approved:
                     direction = int(signal.side)
-                    entry_price = bar.open + direction * slip_price
+                    bar_open = Decimal(str(bar.open))
+                    entry_price = bar_open + Decimal(direction) * slip_price
                     stop_price = (
-                        entry_price - direction * self.config.stop_ticks * self.instrument.tick_size
+                        entry_price - Decimal(direction * self.config.stop_ticks) * tick_size
                     )
                     target_price = (
-                        entry_price + direction * self.config.target_ticks * self.instrument.tick_size
+                        entry_price + Decimal(direction * self.config.target_ticks) * tick_size
                     )
                     position = _Position(
                         side=signal.side,
@@ -180,11 +186,11 @@ class BacktestEngine:
 
             if position is not None:
                 if position.side == Side.LONG:
-                    stop_hit = bar.low <= position.stop_price
-                    target_hit = bar.high >= position.target_price
+                    stop_hit = Decimal(str(bar.low)) <= position.stop_price
+                    target_hit = Decimal(str(bar.high)) >= position.target_price
                 else:
-                    stop_hit = bar.high >= position.stop_price
-                    target_hit = bar.low <= position.target_price
+                    stop_hit = Decimal(str(bar.high)) >= position.stop_price
+                    target_hit = Decimal(str(bar.low)) <= position.target_price
 
                 if stop_hit:
                     trades.append(
@@ -197,21 +203,21 @@ class BacktestEngine:
                     )
                     position = None
                 elif index - position.entry_index + 1 >= self.config.max_holding_bars:
-                    trades.append(close_position(position, bar, bar.close, "time_exit", index))
+                    trades.append(close_position(position, bar, Decimal(str(bar.close)), "time_exit", index))
                     position = None
 
         if position is not None:
             final_bar = bars[-1]
             trades.append(
-                close_position(position, final_bar, final_bar.close, "end_of_data", len(bars) - 1)
+                close_position(position, final_bar, Decimal(str(final_bar.close)), "end_of_data", len(bars) - 1)
             )
 
         return BacktestResult(
             symbol=self.instrument.symbol,
-            starting_balance_usd=starting_balance,
-            ending_balance_usd=balance,
-            total_net_pnl_usd=balance - starting_balance,
-            max_drawdown_usd=max_drawdown,
+            starting_balance_usd=float(starting_balance),
+            ending_balance_usd=float(balance),
+            total_net_pnl_usd=float(balance - starting_balance),
+            max_drawdown_usd=float(max_drawdown),
             trades=tuple(trades),
             currency_code=self.instrument.currency_code,
         )
