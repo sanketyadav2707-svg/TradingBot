@@ -26,6 +26,12 @@ The 2026 equity and equity-derivatives holiday lists are separately represented 
 
 Records reject missing fields, non-INR instruments, invalid tick/lot/freeze values and stale source dates. The CSV loader only accepts `normalized_schema_v1` with an exact header. Raw NSE contract files must be mapped by a separately versioned adapter after their official daily format is inspected. No lot size, expiry or tick value is guessed.
 
+### Verified raw MII publication details
+
+- NSE circular NSE/MSD/60315 (19 January 2024) specifies daily FO MII contract master publication as `NSE_FO_contract_ddmmyyyy.csv.gz` on the derivatives reports page. It separately names the spread-contract file; the two must not be treated as interchangeable.
+- NSE circular NSE/FAOP/73629 (6 April 2026) distinguishes the NSE-exclusive and NSE+BSE contract-file publication variants. It identifies field number 30, `Admission type`, with value `2` for BSE-listed contracts in the MII FO file. The circular also states these BSE-exclusive contracts are not normally tradable on NSE unless the alternative trading venue is invoked.
+- These circulars verify filenames, delivery locations and some field semantics, but they do not provide the full current row/header layout needed to map every field into `NSEInstrumentMasterRecord`. A parser must therefore wait for an actual official sample and a pinned variant/schema fixture. In particular, it must not quietly admit BSE-only contracts as ordinary NSE instruments.
+
 ## Runtime diagnostics integration
 
 The local read-only API now exposes:
@@ -51,6 +57,8 @@ The generic `SessionController` now supports optional `bar_checks` callbacks, an
 - NSE Market Timings & Holidays: https://www.nseindia.com/resources/exchange-communication-holidays
 - NSE Equity Derivatives Contract Information (permitted lot size and quantity freeze resources): https://www.nseindia.com/static/products-services/equity-derivatives-contract-information
 - NSE Equity Derivatives Contract Specifications (tick sizes and contract cycles): https://www.nseindia.com/static/products-services/equity-derivatives-contract-specifications
+- NSE circular NSE/MSD/60315 (daily MII contract-master publication): https://nsearchives.nseindia.com/content/circulars/MSD60315.pdf
+- NSE circular NSE/FAOP/73629 (NSE-exclusive versus NSE+BSE FO contract files and admission type): https://nsearchives.nseindia.com/content/circulars/FAOP73629.pdf
 - NSE circular NSE/FAOP/77356, 6 November 2026, effective 7 December 2026: https://nsearchives.nseindia.com/content/circulars/FAOP77356.zip
 - NSE CAS 2.0 FAQs, updated 6 November 2026: https://nsearchives.nseindia.com/web/mediaattachment/2026-11/FAQs_for_CM_and_FO_FOR_CAS_2.0_20261109152618.pdf
 
