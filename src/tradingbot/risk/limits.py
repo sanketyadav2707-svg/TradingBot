@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import isfinite
-import re
+
+from tradingbot.money import currency_minor_units
 
 from tradingbot.models import Instrument
 
@@ -29,8 +30,8 @@ class RiskLimits:
                    self.max_total_drawdown_usd, self.max_risk_per_trade_usd)
         if any(not _finite_number(value) or value <= 0 for value in numeric):
             raise ValueError("All balance and risk limits must be finite and positive")
-        if not isinstance(self.currency_code, str) or not re.fullmatch(r"[A-Z]{3}", self.currency_code):
-            raise ValueError("currency_code must be a three-letter uppercase ISO 4217 code")
+        currency_minor_units(self.currency_code)
+        object.__setattr__(self, "currency_code", self.currency_code.upper())
         if (type(self.max_contracts) is not int or type(self.max_trades_per_day) is not int
                 or self.max_contracts < 1 or self.max_trades_per_day < 1):
             raise ValueError("Contract and trade limits must be positive integers")

@@ -16,7 +16,7 @@ def test_instrument_requires_explicit_iso_currency_and_preserves_usd_default():
     inr = Instrument("NIFTY_TEST", 0.05, 1.0, 20.0, currency_code="INR")
     assert usd.currency_code == "USD"
     assert inr.currency_code == "INR"
-    with pytest.raises(ValueError, match="ISO 4217"):
+    with pytest.raises(ValueError, match="unsupported_currency_code"):
         Instrument("BAD", 1.0, 1.0, 1.0, currency_code="rupee")
 
 
