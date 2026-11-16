@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
-from tradingbot.money import FeeSchedule, currency_minor_units
+from tradingbot.money import FeeSchedule, Money, currency_minor_units
 from tradingbot.models import Instrument
 
 
@@ -54,6 +54,22 @@ class RiskLimits:
             or self.max_trades_per_day < 1
         ):
             raise ValueError("Contract and trade limits must be positive integers")
+
+    @property
+    def starting_balance(self) -> Money:
+        return Money.of(self.starting_balance_usd, self.currency_code)
+
+    @property
+    def daily_loss_limit(self) -> Money:
+        return Money.of(self.max_daily_loss_usd, self.currency_code)
+
+    @property
+    def total_drawdown_limit(self) -> Money:
+        return Money.of(self.max_total_drawdown_usd, self.currency_code)
+
+    @property
+    def risk_per_trade_limit(self) -> Money:
+        return Money.of(self.max_risk_per_trade_usd, self.currency_code)
 
 
 @dataclass(frozen=True, slots=True)

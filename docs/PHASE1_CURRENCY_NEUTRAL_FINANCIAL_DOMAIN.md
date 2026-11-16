@@ -24,6 +24,9 @@ Make money denomination explicit and impossible to mix accidentally before addin
 
 ### Instrument economics
 - Added `InstrumentEconomics` with tick size, tick value, point value, lot size and quantity step.
+- Existing `Instrument` exposes currency-neutral `tick_value`, `point_value` and `economics` properties as Money/Decimal values while retaining legacy numeric aliases.
+- RiskLimits exposes currency-neutral balance/loss/drawdown/risk-limit Money properties.
+- PaperFill, Trade and BacktestResult expose currency-neutral monetary properties without breaking legacy serialized fields.
 - Monetary tick/point values carry currency.
 - Enforces tick value = tick size × point value and validates lot/quantity-step consistency.
 - Instrument economics are separated from fees.
@@ -46,6 +49,7 @@ Make money denomination explicit and impossible to mix accidentally before addin
 
 - Existing `Instrument`, `RiskLimits`, paper broker, backtest and SQLite interfaces still expose legacy `*_usd` field/column names for compatibility. PR #38 already attaches `currency_code` to the existing monetary denomination; this branch does not silently rename or reinterpret those fields.
 - Existing USD paper databases remain USD. No automatic USD-to-INR conversion or relabelling.
+- Config loading prefers currency-neutral string fields such as `starting_balance`, `daily_loss_limit`, `tick_value` and `point_value`, while retaining old `*_usd` TOML aliases for existing CLI/config consumers.
 - New INR accounts must use a separate database file and matching INR instruments/risk configuration.
 - The new Money/Economics/FeeSchedule types are the safe target domain. Risk sizing, ledger accounting, paper-fill fee application and backtest P&L calculations use Decimal internally. Public Bar/Instrument/Trade/BacktestResult price and report interfaces still expose float-compatible fields; those are compatibility boundaries, not proof that all market prices are Decimal end-to-end.
 

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from enum import IntEnum
 from math import isfinite
 
-from tradingbot.money import currency_minor_units
+from tradingbot.money import InstrumentEconomics, Money, currency_minor_units
 
 
 class DataValidationError(ValueError):
@@ -43,6 +44,26 @@ class Instrument:
                 "tick_value_usd must equal tick_size * point_value_usd; "
                 f"expected {expected}, received {self.tick_value_usd}"
             )
+
+    @property
+    def tick_value(self) -> Money:
+        """Currency-neutral monetary tick value; *_usd is a compatibility alias."""
+        return Money.of(str(self.tick_value_usd), self.currency_code)
+
+    @property
+    def point_value(self) -> Money:
+        """Currency-neutral monetary point value; *_usd is a compatibility alias."""
+        return Money.of(str(self.point_value_usd), self.currency_code)
+
+    @property
+    def economics(self) -> InstrumentEconomics:
+        """Exact Decimal contract economics with one-unit default lot metadata."""
+        return InstrumentEconomics(
+            symbol=self.symbol,
+            tick_size=Decimal(str(self.tick_size)),
+            tick_value=self.tick_value,
+            point_value=self.point_value,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +113,18 @@ class Trade:
     exit_reason: str
     currency_code: str = "USD"
 
+    @property
+    def gross_pnl(self) -> Money:
+        return Money.of(str(self.gross_pnl_usd), self.currency_code)
+
+    @property
+    def commission(self) -> Money:
+        return Money.of(str(self.commission_usd), self.currency_code)
+
+    @property
+    def net_pnl(self) -> Money:
+        return Money.of(str(self.net_pnl_usd), self.currency_code)
+
 
 @dataclass(frozen=True, slots=True)
 class BacktestResult:
@@ -102,6 +135,22 @@ class BacktestResult:
     max_drawdown_usd: float
     trades: tuple[Trade, ...]
     currency_code: str = "USD"
+
+    @property
+    def starting_balance(self) -> Money:
+        return Money.of(str(self.starting_balance_usd), self.currency_code)
+
+    @property
+    def ending_balance(self) -> Money:
+        return Money.of(str(self.ending_balance_usd), self.currency_code)
+
+    @property
+    def total_net_pnl(self) -> Money:
+        return Money.of(str(self.total_net_pnl_usd), self.currency_code)
+
+    @property
+    def max_drawdown(self) -> Money:
+        return Money.of(str(self.max_drawdown_usd), self.currency_code)
 
     def metrics(self) -> dict[str, float | int | str | None]:
         count = len(self.trades)

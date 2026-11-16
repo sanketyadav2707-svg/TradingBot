@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import datetime, timezone
 
 import pytest
 
@@ -182,3 +183,74 @@ def test_fee_schedule_normalizes_currency_and_validates_effective_date():
             regulatory_charge_per_unit_per_side=Money.of("0", "INR"),
             taxes_per_unit_per_side=Money.of("0", "INR"),
         )
+
+
+
+def test_legacy_models_expose_currency_neutral_money_accessors() -> None:
+    from tradingbot.models import BacktestResult, Instrument, Side, Trade
+    from tradingbot.paper.broker import PaperFill
+    from tradingbot.risk.limits import RiskLimits
+
+    instrument = Instrument("NIFTY_TEST", 0.05, 1.0, 20.0, currency_code="INR")
+    assert instrument.tick_value == Money.of("1.00", "INR")
+    assert instrument.point_value == Money.of("20.00", "INR")
+    assert instrument.economics.tick_size == Decimal("0.05")
+    assert instrument.economics.lot_size == 1
+
+    limits = RiskLimits(
+        starting_balance_usd=Decimal("100000"),
+        max_daily_loss_usd=Decimal("1000"),
+        max_total_drawdown_usd=Decimal("5000"),
+        max_risk_per_trade_usd=Decimal("100"),
+        currency_code="INR",
+    )
+    assert limits.starting_balance == Money.of("100000.00", "INR")
+    assert limits.daily_loss_limit == Money.of("1000.00", "INR")
+    assert limits.total_drawdown_limit == Money.of("5000.00", "INR")
+    assert limits.risk_per_trade_limit == Money.of("100.00", "INR")
+
+    fill = PaperFill(
+        order_id="neutral-fill",
+        symbol="NIFTY_TEST",
+        side=Side.LONG,
+        quantity=1,
+        requested_price=100,
+        fill_price=100,
+        commission_usd=Decimal("1.25"),
+        timestamp=datetime(2026, 11, 16, 4, 0, tzinfo=timezone.utc),
+        currency_code="INR",
+    )
+    assert fill.commission == Money.of("1.25", "INR")
+
+    trade = Trade(
+        symbol="NIFTY_TEST",
+        side=Side.LONG,
+        quantity=1,
+        entry_time=fill.timestamp,
+        exit_time=fill.timestamp,
+        entry_price=100,
+        exit_price=101,
+        gross_pnl_usd=20,
+        commission_usd=1.25,
+        net_pnl_usd=18.75,
+        bars_held=1,
+        exit_reason="test",
+        currency_code="INR",
+    )
+    assert trade.gross_pnl == Money.of("20.00", "INR")
+    assert trade.commission == Money.of("1.25", "INR")
+    assert trade.net_pnl == Money.of("18.75", "INR")
+
+    result = BacktestResult(
+        symbol="NIFTY_TEST",
+        starting_balance_usd=100000,
+        ending_balance_usd=100018.75,
+        total_net_pnl_usd=18.75,
+        max_drawdown_usd=1.25,
+        trades=(trade,),
+        currency_code="INR",
+    )
+    assert result.starting_balance == Money.of("100000.00", "INR")
+    assert result.ending_balance == Money.of("100018.75", "INR")
+    assert result.total_net_pnl == Money.of("18.75", "INR")
+    assert result.max_drawdown == Money.of("1.25", "INR")

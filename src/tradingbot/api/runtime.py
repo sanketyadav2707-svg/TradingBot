@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import tomllib
+from decimal import Decimal
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -70,10 +71,22 @@ class DashboardRuntime:
             with risk_path.open("rb") as handle:
                 raw_risk = tomllib.load(handle)["risk"]
             runtime.risk_limits = RiskLimits(
-                starting_balance_usd=float(raw_risk["starting_balance_usd"]),
-                max_daily_loss_usd=float(raw_risk["max_daily_loss_usd"]),
-                max_total_drawdown_usd=float(raw_risk["max_total_drawdown_usd"]),
-                max_risk_per_trade_usd=float(raw_risk["max_risk_per_trade_usd"]),
+                starting_balance_usd=(
+                    raw_risk["starting_balance"] if "starting_balance" in raw_risk
+                    else raw_risk["starting_balance_usd"]
+                ),
+                max_daily_loss_usd=(
+                    raw_risk["daily_loss_limit"] if "daily_loss_limit" in raw_risk
+                    else raw_risk["max_daily_loss_usd"]
+                ),
+                max_total_drawdown_usd=(
+                    raw_risk["total_drawdown_limit"] if "total_drawdown_limit" in raw_risk
+                    else raw_risk["max_total_drawdown_usd"]
+                ),
+                max_risk_per_trade_usd=(
+                    raw_risk["risk_per_trade_limit"] if "risk_per_trade_limit" in raw_risk
+                    else raw_risk["max_risk_per_trade_usd"]
+                ),
                 max_contracts=int(raw_risk["max_contracts"]),
                 max_trades_per_day=int(raw_risk["max_trades_per_day"]),
                 currency_code=str(raw_risk.get("currency_code", "USD")),
@@ -90,8 +103,12 @@ class DashboardRuntime:
                 instrument = Instrument(
                     symbol=normalized,
                     tick_size=float(raw["tick_size"]),
-                    tick_value_usd=float(raw["tick_value_usd"]),
-                    point_value_usd=float(raw["point_value_usd"]),
+                    tick_value_usd=float(
+                        raw["tick_value"] if "tick_value" in raw else raw["tick_value_usd"]
+                    ),
+                    point_value_usd=float(
+                        raw["point_value"] if "point_value" in raw else raw["point_value_usd"]
+                    ),
                     currency_code=str(raw.get("currency_code", "USD")),
                 )
                 runtime.instruments[normalized] = InstrumentConfig(
@@ -129,9 +146,11 @@ class DashboardRuntime:
                 runtime.paper_engine = PaperAccountEngine(
                     runtime.account_store,
                     runtime.risk_limits,
-                    commission_per_contract_per_side_usd=float(
-                        raw_risk.get("commission_per_contract_per_side_usd", 0.0)
-                    ),
+                    commission_per_contract_per_side_usd=Decimal(str(
+                        raw_risk["commission_per_contract_per_side"]
+                        if "commission_per_contract_per_side" in raw_risk
+                        else raw_risk.get("commission_per_contract_per_side_usd", "0")
+                    )),
                     slippage_ticks_per_side=int(raw_risk.get("slippage_ticks_per_side", 1)),
                 )
             except (OSError, sqlite3.Error, TypeError, ValueError, RuntimeError):

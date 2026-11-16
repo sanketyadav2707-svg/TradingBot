@@ -32,13 +32,13 @@ class PaperBroker:
     def __init__(
         self,
         instrument: Instrument,
-        commission_per_contract_per_side_usd: float = 0.0,
+        commission_per_contract_per_side_usd: Decimal | float = 0.0,
         slippage_ticks_per_side: int = 1,
         on_fill: Callable[[PaperFill], None] | None = None,
         fee_schedule: FeeSchedule | None = None,
     ) -> None:
         if (
-            not isinstance(commission_per_contract_per_side_usd, (int, float))
+            not isinstance(commission_per_contract_per_side_usd, (int, float, Decimal))
             or isinstance(commission_per_contract_per_side_usd, bool)
             or not isfinite(commission_per_contract_per_side_usd)
             or commission_per_contract_per_side_usd < 0

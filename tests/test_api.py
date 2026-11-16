@@ -409,3 +409,48 @@ def test_positions_api_includes_explicit_account_currency(tmp_path) -> None:
     payload = response.json()
     assert payload["availability"] == "AVAILABLE"
     assert payload["items"][0]["currency_code"] == "USD"
+
+
+
+def test_dashboard_runtime_prefers_currency_neutral_string_config(tmp_path) -> None:
+    config = tmp_path / "config"
+    config.mkdir()
+    (config / "risk.toml").write_text(
+        '[risk]\n'
+        'currency_code = "INR"\n'
+        'starting_balance = "100000.00"\n'
+        'daily_loss_limit = "1000.00"\n'
+        'total_drawdown_limit = "5000.00"\n'
+        'risk_per_trade_limit = "100.00"\n'
+        'commission_per_contract_per_side = "0.00"\n'
+        'max_contracts = 1\n'
+        'max_trades_per_day = 4\n'
+        'slippage_ticks_per_side = 1\n'
+        'starting_balance_usd = 50000.0\n'
+        'max_daily_loss_usd = 300.0\n'
+        'max_total_drawdown_usd = 1000.0\n'
+        'max_risk_per_trade_usd = 50.0\n',
+        encoding="utf-8",
+    )
+    (config / "instruments.toml").write_text(
+        '[instruments.NIFTY_TEST]\n'
+        'currency_code = "INR"\n'
+        'name = "Nifty Test"\n'
+        'exchange = "NSE"\n'
+        'tick_size = 0.05\n'
+        'tick_value = "1.00"\n'
+        'point_value = "20.00"\n',
+        encoding="utf-8",
+    )
+    runtime = DashboardRuntime.from_config(
+        config_dir=config,
+        database_path=tmp_path / "neutral-config.sqlite3",
+    )
+    assert runtime.risk_limits is not None
+    assert runtime.account_store is not None
+    assert runtime.account_store.currency_code == "INR"
+    assert runtime.account_store.get_summary()["starting_balance_usd"] == "100000"
+    assert runtime.instruments["NIFTY_TEST"].instrument.tick_value.as_dict() == {
+        "amount": "1.00",
+        "currency": "INR",
+    }
