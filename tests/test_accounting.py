@@ -792,7 +792,13 @@ def test_paper_account_currency_is_pinned_and_mixed_currency_fills_fail_closed(t
     # before any fill, lot, event or outbox row is committed.
     with pytest.raises(ValueError, match="instrument/fill currency"):
         inr_store.record_fill(
-            make_fill("wrong-currency-fill", Side.LONG, 1, 25000),
+            make_fill(
+                "wrong-currency-fill",
+                Side.LONG,
+                1,
+                25000,
+                symbol="NIFTY_TEST",
+            ),
             inr_instrument,
         )
     assert inr_store.get_summary()["fills_count"] == 0
