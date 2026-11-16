@@ -820,3 +820,58 @@ def test_paper_account_currency_is_pinned_and_mixed_currency_fills_fail_closed(t
     with pytest.raises(ValueError, match="instrument/fill currency"):
         inr_store.record_fill(usd_fill, MES)
     assert inr_store.get_summary()["fills_count"] == 0
+
+
+
+def test_account_money_v3_view_exposes_neutral_amounts_with_currency(tmp_path) -> None:
+    import sqlite3
+
+    store = PaperAccountStore(tmp_path / "money-view.sqlite3", Decimal("50000.00"), "USD")
+    store.mark_to_market({"MES": 100}, T0)
+    store.record_fill(make_fill("money-view-fill", Side.LONG, 1, 100, 0.5), MES)
+
+    with sqlite3.connect(store.path) as connection:
+        schema_version = connection.execute(
+            "SELECT value FROM account_meta WHERE key = 'schema_version'"
+        ).fetchone()[0]
+        columns = [row[1] for row in connection.execute("PRAGMA table_info(account_money_v3)")]
+        values = connection.execute(
+            "SELECT field_name, amount, currency_code FROM account_money_v3 "
+            "WHERE entity_type = 'fill' AND entity_id = 'money-view-fill' ORDER BY field_name"
+        ).fetchall()
+
+    assert schema_version == "3"
+    assert columns == ["entity_type", "entity_id", "field_name", "amount", "currency_code"]
+    assert {row[0]: (row[1], row[2]) for row in values} == {
+        "commission": ("0.5", "USD"),
+        "point_value": ("5", "USD"),
+        "tick_value": ("1.25", "USD"),
+    }
+
+
+def test_account_bootstrap_rolls_back_all_migration_writes_on_failure(tmp_path, monkeypatch) -> None:
+    import sqlite3
+
+    database = tmp_path / "failed-bootstrap.sqlite3"
+
+    def fail_snapshot(*_args, **_kwargs):
+        raise RuntimeError("injected_snapshot_failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(PaperAccountStore, "_write_snapshot", fail_snapshot)
+        with pytest.raises(RuntimeError, match="injected_snapshot_failure"):
+            PaperAccountStore(database, Decimal("50000.00"), "USD")
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM account_meta"
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM equity_snapshots"
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'view' AND name = 'account_money_v3'"
+        ).fetchone()[0] == 0
+
+    recovered = PaperAccountStore(database, Decimal("50000.00"), "USD")
+    assert recovered.get_summary()["equity_usd"] == "50000"

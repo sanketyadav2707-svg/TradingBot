@@ -195,113 +195,165 @@ class PaperAccountStore:
                     ON account_events(timestamp, id);
                 """
             )
-            # Upgrade pre-specification databases only when no open lots need
-            # contract metadata that the older schema never stored.
-            for table in ("fills", "open_lots"):
-                columns = {
-                    row["name"] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
-                }
-                missing = [name for name in ("tick_size", "tick_value_usd", "point_value_usd") if name not in columns]
-                if missing:
-                    open_lots_count = connection.execute(
-                        "SELECT COUNT(*) AS n FROM open_lots"
-                    ).fetchone()["n"]
-                    if open_lots_count:
-                        raise RuntimeError(
-                            "paper account database lacks full contract specifications for open lots; "
-                            "reconcile/close positions before upgrading the ledger"
-                        )
-                    for name in missing:
-                        connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} TEXT")
-
-            # Upgrade existing accounting fills into the durable delivery outbox.
-            # Existing lifecycle records are safe to replay because fill IDs are idempotent.
-            connection.execute(
-                """INSERT OR IGNORE INTO lifecycle_outbox(
-                    order_id, symbol, side, quantity, fill_price, commission_usd, timestamp
-                )
-                SELECT order_id, symbol, CASE WHEN side > 0 THEN 'LONG' ELSE 'SHORT' END,
-                       quantity, fill_price, commission_usd, timestamp
-                FROM fills"""
-            )
-            # Detect whether this is a genuinely new ledger before inserting
-            # its opening balance. Pre-currency ledgers are legacy USD accounts.
-            prior_balance = connection.execute(
-                "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
-            ).fetchone()
-            legacy_existing_account = prior_balance is not None
-            connection.execute(
-                "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('starting_balance_usd', ?)",
-                (_number(starting_balance),),
-            )
-            connection.execute(
-                "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('emergency_halt_active', '0')"
-            )
-            # Existing pre-currency databases are explicitly USD. New ledgers
-            # take the requested ISO currency. Never infer/relabel old balances.
-            initial_currency = "USD" if legacy_existing_account else self.currency_code
-            connection.execute(
-                "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('currency_code', ?)",
-                (initial_currency,),
-            )
-            stored_currency = connection.execute(
-                "SELECT value FROM account_meta WHERE key = 'currency_code'"
-            ).fetchone()["value"]
-            if stored_currency != self.currency_code:
-                raise ValueError(
-                    f"paper account currency mismatch: database={stored_currency}, requested={self.currency_code}; "
-                    "create a separate database for another currency"
-                )
-            # Schema v2 makes denomination explicit on every monetary ledger row.
-            # Existing rows receive the already-established account currency;
-            # a legacy ledger is always classified as USD above.
-            currency_tables = ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox")
-            for table in currency_tables:
-                columns = {
-                    row["name"] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
-                }
-                if "currency_code" not in columns:
-                    connection.execute(
-                        f"ALTER TABLE {table} ADD COLUMN currency_code TEXT NOT NULL DEFAULT 'USD'"
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                # Upgrade pre-specification databases only when no open lots need
+                # contract metadata that the older schema never stored.
+                for table in ("fills", "open_lots"):
+                    columns = {
+                        row["name"] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+                    }
+                    missing = [name for name in ("tick_size", "tick_value_usd", "point_value_usd") if name not in columns]
+                    if missing:
+                        open_lots_count = connection.execute(
+                            "SELECT COUNT(*) AS n FROM open_lots"
+                        ).fetchone()["n"]
+                        if open_lots_count:
+                            raise RuntimeError(
+                                "paper account database lacks full contract specifications for open lots; "
+                                "reconcile/close positions before upgrading the ledger"
+                            )
+                        for name in missing:
+                            connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} TEXT")
+    
+                # Upgrade existing accounting fills into the durable delivery outbox.
+                # Existing lifecycle records are safe to replay because fill IDs are idempotent.
+                connection.execute(
+                    """INSERT OR IGNORE INTO lifecycle_outbox(
+                        order_id, symbol, side, quantity, fill_price, commission_usd, timestamp
                     )
-                connection.execute(
-                    f"UPDATE {table} SET currency_code = ? WHERE currency_code = 'USD' AND ? != 'USD'",
-                    (self.currency_code, self.currency_code),
+                    SELECT order_id, symbol, CASE WHEN side > 0 THEN 'LONG' ELSE 'SHORT' END,
+                           quantity, fill_price, commission_usd, timestamp
+                    FROM fills"""
                 )
-                mismatches = connection.execute(
-                    f"SELECT COUNT(*) AS n FROM {table} WHERE currency_code != ?",
-                    (self.currency_code,),
+                # Detect whether this is a genuinely new ledger before inserting
+                # its opening balance. Pre-currency ledgers are legacy USD accounts.
+                prior_balance = connection.execute(
+                    "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
+                ).fetchone()
+                legacy_existing_account = prior_balance is not None
+                connection.execute(
+                    "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('starting_balance_usd', ?)",
+                    (_number(starting_balance),),
+                )
+                connection.execute(
+                    "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('emergency_halt_active', '0')"
+                )
+                # Existing pre-currency databases are explicitly USD. New ledgers
+                # take the requested ISO currency. Never infer/relabel old balances.
+                initial_currency = "USD" if legacy_existing_account else self.currency_code
+                connection.execute(
+                    "INSERT OR IGNORE INTO account_meta(key, value) VALUES ('currency_code', ?)",
+                    (initial_currency,),
+                )
+                stored_currency = connection.execute(
+                    "SELECT value FROM account_meta WHERE key = 'currency_code'"
+                ).fetchone()["value"]
+                if stored_currency != self.currency_code:
+                    raise ValueError(
+                        f"paper account currency mismatch: database={stored_currency}, requested={self.currency_code}; "
+                        "create a separate database for another currency"
+                    )
+                # Schema v2 makes denomination explicit on every monetary ledger row.
+                # Existing rows receive the already-established account currency;
+                # a legacy ledger is always classified as USD above.
+                currency_tables = ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox")
+                for table in currency_tables:
+                    columns = {
+                        row["name"] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+                    }
+                    if "currency_code" not in columns:
+                        connection.execute(
+                            f"ALTER TABLE {table} ADD COLUMN currency_code TEXT NOT NULL DEFAULT 'USD'"
+                        )
+                    connection.execute(
+                        f"UPDATE {table} SET currency_code = ? WHERE currency_code = 'USD' AND ? != 'USD'",
+                        (self.currency_code, self.currency_code),
+                    )
+                    mismatches = connection.execute(
+                        f"SELECT COUNT(*) AS n FROM {table} WHERE currency_code != ?",
+                        (self.currency_code,),
+                    ).fetchone()["n"]
+                    if mismatches:
+                        raise RuntimeError(f"ledger_currency_mismatch:{table}")
+                # Version 3 exposes a currency-neutral read model while retaining
+                # the legacy *_usd storage columns as compatibility aliases.
+                connection.execute(
+                    """CREATE VIEW IF NOT EXISTS account_money_v3 AS
+                       SELECT 'account' AS entity_type, 'account' AS entity_id,
+                              'starting_balance' AS field_name, value AS amount,
+                              (SELECT value FROM account_meta WHERE key='currency_code') AS currency_code
+                       FROM account_meta WHERE key='starting_balance_usd'
+                       UNION ALL
+                       SELECT 'fill', order_id, 'commission', commission_usd, currency_code FROM fills
+                       UNION ALL
+                       SELECT 'fill', order_id, 'tick_value', tick_value_usd, currency_code FROM fills
+                       UNION ALL
+                       SELECT 'fill', order_id, 'point_value', point_value_usd, currency_code FROM fills
+                       UNION ALL
+                       SELECT 'open_lot', CAST(id AS TEXT), 'entry_commission_remaining',
+                              entry_commission_remaining, currency_code FROM open_lots
+                       UNION ALL
+                       SELECT 'open_lot', CAST(id AS TEXT), 'tick_value', tick_value_usd, currency_code FROM open_lots
+                       UNION ALL
+                       SELECT 'open_lot', CAST(id AS TEXT), 'point_value', point_value_usd, currency_code FROM open_lots
+                       UNION ALL
+                       SELECT 'closed_trade', CAST(id AS TEXT), 'gross_pnl', gross_pnl_usd, currency_code FROM closed_trades
+                       UNION ALL
+                       SELECT 'closed_trade', CAST(id AS TEXT), 'entry_commission', entry_commission_usd, currency_code FROM closed_trades
+                       UNION ALL
+                       SELECT 'closed_trade', CAST(id AS TEXT), 'exit_commission', exit_commission_usd, currency_code FROM closed_trades
+                       UNION ALL
+                       SELECT 'closed_trade', CAST(id AS TEXT), 'net_pnl', net_pnl_usd, currency_code FROM closed_trades
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'balance', balance_usd, currency_code FROM equity_snapshots
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'realized_gross_pnl', realized_gross_pnl_usd, currency_code FROM equity_snapshots
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'commissions', commissions_usd, currency_code FROM equity_snapshots
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'unrealized_pnl', unrealized_pnl_usd, currency_code
+                       FROM equity_snapshots WHERE unrealized_pnl_usd IS NOT NULL
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'equity', equity_usd, currency_code
+                       FROM equity_snapshots WHERE equity_usd IS NOT NULL
+                       UNION ALL
+                       SELECT 'lifecycle_outbox', order_id, 'commission', commission_usd, currency_code
+                       FROM lifecycle_outbox"""
+                )
+                connection.execute(
+                    "INSERT INTO account_meta(key, value) VALUES ('schema_version', '3') "
+                    "ON CONFLICT(key) DO UPDATE SET value = '3'"
+                )
+                stored_balance = Decimal(connection.execute(
+                    "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
+                ).fetchone()["value"])
+                if stored_balance != starting_balance:
+                    raise ValueError(
+                        "starting_balance_usd does not match the existing persistent paper account; "
+                        "refusing to silently reset or reinterpret account history"
+                    )
+                snapshots = connection.execute(
+                    "SELECT COUNT(*) AS n FROM equity_snapshots"
                 ).fetchone()["n"]
-                if mismatches:
-                    raise RuntimeError(f"ledger_currency_mismatch:{table}")
-            connection.execute(
-                "INSERT INTO account_meta(key, value) VALUES ('schema_version', '2') "
-                "ON CONFLICT(key) DO UPDATE SET value = '2'"
-            )
-            stored_balance = Decimal(connection.execute(
-                "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
-            ).fetchone()["value"])
-            if stored_balance != starting_balance:
-                raise ValueError(
-                    "starting_balance_usd does not match the existing persistent paper account; "
-                    "refusing to silently reset or reinterpret account history"
-                )
-            snapshots = connection.execute(
-                "SELECT COUNT(*) AS n FROM equity_snapshots"
-            ).fetchone()["n"]
-            if snapshots == 0:
-                created_at = _timestamp(datetime.now(timezone.utc))
-                connection.execute(
-                    """INSERT INTO account_events(
-                        timestamp, event_type, symbol, reference_id, payload_json
-                    ) VALUES (?, 'ACCOUNT_INITIALIZED', NULL, NULL, ?)""",
-                    (
-                        created_at,
-                        json.dumps({"starting_balance_usd": _number(starting_balance)}, sort_keys=True),
-                    ),
-                )
-                self._write_snapshot(connection, created_at, "ACCOUNT_INITIALIZED", None)
-
+                if snapshots == 0:
+                    created_at = _timestamp(datetime.now(timezone.utc))
+                    connection.execute(
+                        """INSERT INTO account_events(
+                            timestamp, event_type, symbol, reference_id, payload_json
+                        ) VALUES (?, 'ACCOUNT_INITIALIZED', NULL, NULL, ?)""",
+                        (
+                            created_at,
+                            json.dumps({"starting_balance_usd": _number(starting_balance)}, sort_keys=True),
+                        ),
+                    )
+                    self._write_snapshot(connection, created_at, "ACCOUNT_INITIALIZED", None)
+    
+                connection.execute("COMMIT")
+            except Exception:
+                if connection.in_transaction:
+                    connection.execute("ROLLBACK")
+                raise
     @property
     def starting_balance_usd(self) -> Decimal:
         with self._connection() as connection:
