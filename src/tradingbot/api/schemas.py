@@ -31,7 +31,7 @@ class ReadinessResponse(StrictResponse):
 
 class Money(StrictResponse):
     amount: str
-    currency: Literal["USD"] = "USD"
+    currency: str = Field(pattern=r"^[A-Z]{3}$")
 
 
 class ApiMeta(StrictResponse):

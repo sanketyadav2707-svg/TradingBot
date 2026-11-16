@@ -107,6 +107,7 @@ class BacktestEngine:
                 net_pnl_usd=net,
                 bars_held=max(1, index - pos.entry_index + 1),
                 exit_reason=reason,
+                currency_code=self.instrument.currency_code,
             )
 
         for index in range(1, len(bars)):
@@ -211,4 +212,5 @@ class BacktestEngine:
             total_net_pnl_usd=balance - self.risk_guard.limits.starting_balance_usd,
             max_drawdown_usd=max_drawdown,
             trades=tuple(trades),
+            currency_code=self.instrument.currency_code,
         )

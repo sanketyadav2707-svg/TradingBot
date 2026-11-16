@@ -65,6 +65,7 @@ class DashboardRuntime:
                 max_risk_per_trade_usd=float(raw_risk["max_risk_per_trade_usd"]),
                 max_contracts=int(raw_risk["max_contracts"]),
                 max_trades_per_day=int(raw_risk["max_trades_per_day"]),
+                currency_code=str(raw_risk.get("currency_code", "USD")),
             )
         except (OSError, KeyError, TypeError, ValueError, tomllib.TOMLDecodeError):
             errors.append("risk_configuration_unavailable_or_invalid")
@@ -80,6 +81,7 @@ class DashboardRuntime:
                     tick_size=float(raw["tick_size"]),
                     tick_value_usd=float(raw["tick_value_usd"]),
                     point_value_usd=float(raw["point_value_usd"]),
+                    currency_code=str(raw.get("currency_code", "USD")),
                 )
                 runtime.instruments[normalized] = InstrumentConfig(
                     instrument=instrument,
@@ -88,6 +90,15 @@ class DashboardRuntime:
                 )
         except (OSError, KeyError, TypeError, ValueError, tomllib.TOMLDecodeError):
             errors.append("instrument_configuration_unavailable_or_invalid")
+
+        if runtime.risk_limits is not None and runtime.instruments:
+            mismatched = [
+                symbol for symbol, record in runtime.instruments.items()
+                if record.instrument.currency_code != runtime.risk_limits.currency_code
+            ]
+            if mismatched:
+                errors.append("instrument_currency_does_not_match_account_currency")
+                runtime.instruments.clear()
 
         if runtime.risk_limits is not None:
             try:
@@ -102,6 +113,7 @@ class DashboardRuntime:
                 runtime.account_store = PaperAccountStore(
                     selected_db,
                     starting_balance_usd=runtime.risk_limits.starting_balance_usd,
+                    currency_code=runtime.risk_limits.currency_code,
                 )
                 runtime.paper_engine = PaperAccountEngine(
                     runtime.account_store,

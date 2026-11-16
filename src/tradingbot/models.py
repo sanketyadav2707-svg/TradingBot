@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
 from math import isfinite
+import re
 
 
 class DataValidationError(ValueError):
@@ -24,10 +25,15 @@ class Instrument:
     tick_size: float
     tick_value_usd: float
     point_value_usd: float
+    # Historical field names above are retained for API/database compatibility.
+    # Their monetary denomination is currency_code, never implicitly USD.
+    currency_code: str = "USD"
 
     def __post_init__(self) -> None:
         if not self.symbol.strip():
             raise ValueError("Instrument symbol cannot be empty")
+        if not isinstance(self.currency_code, str) or not re.fullmatch(r"[A-Z]{3}", self.currency_code):
+            raise ValueError("currency_code must be a three-letter uppercase ISO 4217 code")
         if not all(isfinite(value) and value > 0 for value in (self.tick_size, self.tick_value_usd, self.point_value_usd)):
             raise ValueError("Instrument tick and point values must be finite and positive")
         expected = self.tick_size * self.point_value_usd
@@ -83,6 +89,7 @@ class Trade:
     net_pnl_usd: float
     bars_held: int
     exit_reason: str
+    currency_code: str = "USD"
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +100,7 @@ class BacktestResult:
     total_net_pnl_usd: float
     max_drawdown_usd: float
     trades: tuple[Trade, ...]
+    currency_code: str = "USD"
 
     def metrics(self) -> dict[str, float | int | str | None]:
         count = len(self.trades)
@@ -107,18 +115,15 @@ class BacktestResult:
             longest_losing_streak = max(longest_losing_streak, streak)
         return {
             "symbol": self.symbol,
+            "currency_code": self.currency_code,
             "starting_balance_usd": round(self.starting_balance_usd, 2),
             "ending_balance_usd": round(self.ending_balance_usd, 2),
             "total_net_pnl_usd": round(self.total_net_pnl_usd, 2),
-            "return_pct": round(
-                100 * self.total_net_pnl_usd / self.starting_balance_usd, 4
-            ),
+            "return_pct": round(100 * self.total_net_pnl_usd / self.starting_balance_usd, 4),
             "trades": count,
             "win_rate_pct": round(100 * len(winners) / count, 2) if count else 0.0,
             "profit_factor": round(gross_profit / gross_loss, 4) if gross_loss else None,
-            "expectancy_per_trade_usd": round(self.total_net_pnl_usd / count, 2)
-            if count
-            else 0.0,
+            "expectancy_per_trade_usd": round(self.total_net_pnl_usd / count, 2) if count else 0.0,
             "max_drawdown_usd": round(self.max_drawdown_usd, 2),
             "longest_losing_streak": longest_losing_streak,
         }
