@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
 from math import isfinite
-import re
+
+from tradingbot.money import currency_minor_units
 
 
 class DataValidationError(ValueError):
@@ -32,8 +33,7 @@ class Instrument:
     def __post_init__(self) -> None:
         if not self.symbol.strip():
             raise ValueError("Instrument symbol cannot be empty")
-        if not isinstance(self.currency_code, str) or not re.fullmatch(r"[A-Z]{3}", self.currency_code):
-            raise ValueError("currency_code must be a three-letter uppercase ISO 4217 code")
+        currency_minor_units(self.currency_code)
         if not all(isfinite(value) and value > 0 for value in (self.tick_size, self.tick_value_usd, self.point_value_usd)):
             raise ValueError("Instrument tick and point values must be finite and positive")
         expected = self.tick_size * self.point_value_usd
