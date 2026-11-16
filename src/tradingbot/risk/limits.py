@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
-from tradingbot.money import currency_minor_units, as_decimal
+from tradingbot.money import currency_minor_units
 from tradingbot.models import Instrument
 
 
