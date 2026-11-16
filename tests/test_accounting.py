@@ -753,3 +753,64 @@ def test_equity_snapshot_rejects_out_of_order_fill_after_later_mark(tmp_path) ->
     history = store.list_equity()
     assert [item["timestamp"] for item in history] == sorted(item["timestamp"] for item in history)
     assert history[-1]["equity_usd"] == store.get_summary()["equity_usd"]
+
+
+
+def test_paper_account_currency_is_pinned_and_mixed_currency_fills_fail_closed(tmp_path) -> None:
+    database = tmp_path / "currency-pinned.sqlite3"
+    usd_store = PaperAccountStore(database, 50_000, currency_code="USD")
+    usd_store.record_fill(
+        make_fill("usd-entry-001", Side.LONG, 1, 100, 0.5),
+        MES,
+    )
+    original_summary = usd_store.get_summary()
+
+    # A legacy USD ledger must not be re-opened or relabelled as INR.
+    with pytest.raises(ValueError, match="paper account currency mismatch"):
+        PaperAccountStore(database, 50_000, currency_code="INR")
+
+    # Reopening with its original denomination must preserve its full ledger.
+    reopened_usd = PaperAccountStore(database, 50_000, currency_code="USD")
+    assert reopened_usd.get_summary() == original_summary
+    assert reopened_usd.get_summary()["fills_count"] == 1
+    assert reopened_usd.list_positions()[0]["symbol"] == "MES"
+
+    inr_store = PaperAccountStore(
+        tmp_path / "inr-mixed-fill.sqlite3",
+        Decimal("100000"),
+        currency_code="INR",
+    )
+    inr_instrument = Instrument(
+        "NIFTY_TEST",
+        tick_size=0.05,
+        tick_value_usd=1.0,
+        point_value_usd=20.0,
+        currency_code="INR",
+    )
+
+    # PaperFill defaults to USD. Passing one into an INR ledger is rejected
+    # before any fill, lot, event or outbox row is committed.
+    with pytest.raises(ValueError, match="instrument/fill currency"):
+        inr_store.record_fill(
+            make_fill("wrong-currency-fill", Side.LONG, 1, 25000),
+            inr_instrument,
+        )
+    assert inr_store.get_summary()["fills_count"] == 0
+    assert inr_store.list_positions() == []
+    assert inr_store.list_pending_lifecycle_outbox() == []
+
+    # An INR fill paired with a USD instrument is rejected for the same reason.
+    usd_fill = PaperFill(
+        order_id="inr-fill-usd-instrument",
+        symbol="MES",
+        side=Side.LONG,
+        quantity=1,
+        requested_price=100,
+        fill_price=100,
+        commission_usd=Decimal("0.50"),
+        timestamp=T0,
+        currency_code="INR",
+    )
+    with pytest.raises(ValueError, match="instrument/fill currency"):
+        inr_store.record_fill(usd_fill, MES)
+    assert inr_store.get_summary()["fills_count"] == 0
