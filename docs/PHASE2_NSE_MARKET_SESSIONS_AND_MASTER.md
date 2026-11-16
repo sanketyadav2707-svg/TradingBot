@@ -1,6 +1,6 @@
 # Phase 2: NSE Market Sessions and Instrument-Master Foundation
 
-Status: initial implementation on a dedicated branch. The calendar is verified for 2026 only. The master loader accepts a normalized schema and does not pretend to parse an unverified raw NSE file format.
+Status: 2026 calendar and strict normalized instrument-master validation are implemented. The integration exposes read-only NSE session and master-validation diagnostics through the local API. The master loader still requires an explicitly normalized file; no unverified raw NSE download format is guessed.
 
 ## Source-backed market session rules
 
@@ -26,9 +26,19 @@ The 2026 equity and equity-derivatives holiday lists are separately represented 
 
 Records reject missing fields, non-INR instruments, invalid tick/lot/freeze values and stale source dates. The CSV loader only accepts `normalized_schema_v1` with an exact header. Raw NSE contract files must be mapped by a separately versioned adapter after their official daily format is inspected. No lot size, expiry or tick value is guessed.
 
+## Runtime diagnostics integration
+
+The local read-only API now exposes:
+
+- `GET /api/v1/markets/nse/session?day=YYYY-MM-DD&segment=equity|equity_derivatives` returns `OPEN`, `CLOSED`, `UNKNOWN`, or `NOT_CONFIGURED`. Dates beyond verified coverage remain `UNKNOWN`; the endpoint does not infer weekdays outside the 2026 calendar.
+- `GET /api/v1/markets/nse/instrument-master` returns validation status, record count, source effective date and source-file SHA-256 values without exposing a local filesystem path.
+- Set `TRADINGBOT_NSE_INSTRUMENT_MASTER` to a locally stored normalized-schema CSV to load and freshness-check the master at API startup. Missing files, malformed headers, invalid economics or stale records are surfaced as `INVALID`, not silently accepted.
+
+These endpoints are observational only. The NSE calendar and master are not yet consumed by the strategy scheduler, execution router or broker adapter, and a validated record is not an exchange/broker trading authorization.
+
 ## Important limits
 
-- This calendar and normalized master loader are not yet wired into the execution router, dashboard or a broker adapter.
+- The calendar/master are exposed as read-only API diagnostics but are not yet consumed by the execution router, strategy scheduler or broker adapter.
 - 2027 holiday dates are not included. Trading decisions outside verified coverage fail closed.
 - No actual current NSE contract file has been ingested into this PR. The code validates a normalized contract file; it does not claim that a sample record is a live listed instrument.
 - No broker or live market-data connection is implemented.
