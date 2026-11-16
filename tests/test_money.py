@@ -155,7 +155,7 @@ def test_legacy_domain_boundaries_use_supported_currency_registry():
 def test_paper_ledger_money_formatter_uses_account_currency_precision():
     from tradingbot.accounting.sqlite_store import _money as ledger_money
 
-    assert ledger_money(Decimal("10.555"), "KWD") == "10.556"
+    assert ledger_money(Decimal("10.5555"), "KWD") == "10.556"
     assert ledger_money(Decimal("10.5"), "JPY") == "10"
     assert ledger_money(Decimal("10.5"), "INR") == "10.50"
 
