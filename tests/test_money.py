@@ -126,3 +126,13 @@ def test_fee_schedule_rejects_currency_mismatch_and_negative_fee():
             regulatory_charge_per_unit_per_side=Money.of("0", "INR"),
             taxes_per_unit_per_side=Money.of("0", "INR"),
         )
+
+
+def test_api_money_serialization_uses_currency_minor_units():
+    from tradingbot.api.app import _money
+
+    assert _money("10.5", "INR").amount == "10.50"
+    assert _money("10.5", "JPY").amount == "10"
+    assert _money("10.5555", "KWD").amount == "10.556"
+    with pytest.raises(ValueError, match="unsupported_currency_code"):
+        _money("10", "XYZ")
