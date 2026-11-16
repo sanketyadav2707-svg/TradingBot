@@ -30,6 +30,8 @@ class Instrument:
     # Historical field names above are retained for API/database compatibility.
     # Their monetary denomination is currency_code, never implicitly USD.
     currency_code: str = "USD"
+    lot_size: int = 1
+    quantity_step: int = 1
 
     def __post_init__(self) -> None:
         if not self.symbol.strip():
@@ -44,6 +46,14 @@ class Instrument:
                 "tick_value_usd must equal tick_size * point_value_usd; "
                 f"expected {expected}, received {self.tick_value_usd}"
             )
+        if (
+            type(self.lot_size) is not int
+            or self.lot_size < 1
+            or type(self.quantity_step) is not int
+            or self.quantity_step < 1
+            or self.lot_size % self.quantity_step != 0
+        ):
+            raise ValueError("instrument_lot_size_and_quantity_step_must_be_positive_and_consistent")
 
     @property
     def tick_value(self) -> Money:
@@ -63,6 +73,8 @@ class Instrument:
             tick_size=Decimal(str(self.tick_size)),
             tick_value=self.tick_value,
             point_value=self.point_value,
+            lot_size=self.lot_size,
+            quantity_step=self.quantity_step,
         )
 
 

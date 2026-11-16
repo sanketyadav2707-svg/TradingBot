@@ -24,7 +24,7 @@ Make money denomination explicit and impossible to mix accidentally before addin
 
 ### Instrument economics
 - Added `InstrumentEconomics` with tick size, tick value, point value, lot size and quantity step.
-- Existing `Instrument` exposes currency-neutral `tick_value`, `point_value` and `economics` properties as Money/Decimal values while retaining legacy numeric aliases.
+- Existing `Instrument` exposes currency-neutral `tick_value`, `point_value` and `economics` properties as Money/Decimal values while retaining legacy numeric aliases. Lot size and quantity step are explicit fields, validated, and are never inferred from a default when supplied by exchange metadata.
 - RiskLimits exposes currency-neutral balance/loss/drawdown/risk-limit Money properties.
 - PaperFill, Trade and BacktestResult expose currency-neutral monetary properties without breaking legacy serialized fields.
 - Monetary tick/point values carry currency.

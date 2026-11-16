@@ -114,6 +114,8 @@ class DashboardRuntime:
                         raw["point_value"] if "point_value" in raw else raw["point_value_usd"]
                     ),
                     currency_code=str(raw.get("currency_code", "USD")),
+                    lot_size=int(raw.get("lot_size", 1)),
+                    quantity_step=int(raw.get("quantity_step", 1)),
                 )
                 runtime.instruments[normalized] = InstrumentConfig(
                     instrument=instrument,

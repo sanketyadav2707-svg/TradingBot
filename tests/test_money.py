@@ -191,11 +191,21 @@ def test_legacy_models_expose_currency_neutral_money_accessors() -> None:
     from tradingbot.paper.broker import PaperFill
     from tradingbot.risk.limits import RiskLimits
 
-    instrument = Instrument("NIFTY_TEST", 0.05, 1.0, 20.0, currency_code="INR")
+    instrument = Instrument(
+        "NIFTY_TEST", 0.05, 1.0, 20.0,
+        currency_code="INR", lot_size=65, quantity_step=1,
+    )
     assert instrument.tick_value == Money.of("1.00", "INR")
     assert instrument.point_value == Money.of("20.00", "INR")
     assert instrument.economics.tick_size == Decimal("0.05")
-    assert instrument.economics.lot_size == 1
+    assert instrument.economics.lot_size == 65
+    assert instrument.economics.quantity_step == 1
+
+    with pytest.raises(ValueError, match="instrument_lot_size_and_quantity_step"):
+        Instrument(
+            "BAD_LOT", 0.05, 1.0, 20.0,
+            currency_code="INR", lot_size=65, quantity_step=4,
+        )
 
     limits = RiskLimits(
         starting_balance_usd=Decimal("100000"),
