@@ -10,7 +10,7 @@ from typing import Callable
 from uuid import uuid4
 
 from tradingbot.models import Instrument, Side
-from tradingbot.money import FeeSchedule, as_decimal
+from tradingbot.money import FeeSchedule
 
 
 @dataclass(frozen=True, slots=True)
