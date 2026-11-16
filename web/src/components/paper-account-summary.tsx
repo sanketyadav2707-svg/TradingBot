@@ -3,17 +3,8 @@
 import { useEffect, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, CircleHelp, Wallet } from "lucide-react";
 import { tradingBotApi } from "@/lib/api/client";
-import type { DashboardSummaryResponse, Money } from "@/lib/api/types";
-
-function formatMoney(value: Money | null): string {
-  if (!value) return "Unavailable";
-  const amount = Number(value.amount);
-  if (!Number.isFinite(amount)) return "Invalid value";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: value.currency,
-  }).format(amount);
-}
+import type { DashboardSummaryResponse } from "@/lib/api/types";
+import { formatMoney } from "@/lib/format-money.mjs";
 
 function Card({
   label,

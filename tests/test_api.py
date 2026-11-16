@@ -396,3 +396,16 @@ def test_inr_paper_account_lifecycle_round_trips_through_api(tmp_path) -> None:
     assert nifty["currency_code"] == "INR"
     assert nifty["tick_value"] == {"amount": "1.00", "currency": "INR"}
     assert nifty["point_value"] == {"amount": "20.00", "currency": "INR"}
+
+
+
+def test_positions_api_includes_explicit_account_currency(tmp_path) -> None:
+    runtime = DashboardRuntime.from_config(
+        database_path=tmp_path / "positions-currency.sqlite3"
+    )
+    _submit_research_paper_fill(runtime, Side.LONG, 100.0, T0)
+    response = TestClient(create_app(runtime)).get("/api/v1/positions")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["availability"] == "AVAILABLE"
+    assert payload["items"][0]["currency_code"] == "USD"

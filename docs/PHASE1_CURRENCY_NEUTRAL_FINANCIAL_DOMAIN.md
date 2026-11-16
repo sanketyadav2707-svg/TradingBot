@@ -1,6 +1,6 @@
 # Phase 1: Currency-Neutral Financial Domain
 
-Status: Core Decimal money primitives, Decimal risk sizing, currency-aware paper ledger schema v2, fee-schedule paper execution and Decimal backtest arithmetic are implemented. This integration adds a currency-neutral v2 instrument API while retaining v1 compatibility, and updates dashboard formatting for the supported currency precision set. Phase 1 remains a research/paper foundation, not an INR live-trading release.
+Status: Core Decimal money primitives, Decimal risk sizing, currency-aware paper ledger schema v3 (neutral read view over compatibility columns), fee-schedule paper execution and Decimal backtest arithmetic are implemented. This integration adds a currency-neutral v2 instrument API while retaining v1 compatibility, and updates dashboard formatting for the supported currency precision set. Phase 1 remains a research/paper foundation, not an INR live-trading release.
 
 ## Objective
 
@@ -53,15 +53,16 @@ Make money denomination explicit and impossible to mix accidentally before addin
 
 - New unit tests cover supported precision, half-even rounding, float/NaN rejection, currency-safe arithmetic, instrument tick/lot invariants and fee aggregation.
 - Python CI is configured to run for this branch and PRs targeting the currency-foundation branch.
+- Web CI runs currency-formatting unit tests, lint, type-check and production build.
 - A green CI run is required before this phase is accepted.
 
 ## Explicitly not complete / blocked from live use
 
 1. Public price/report models still have float-compatible boundaries; migrating every market price and report metric to Decimal requires a separately versioned domain/API change.
-2. SQLite monetary columns retain legacy `*_usd` names for compatibility. Currency identity is stored per row and schema v2 prevents silent denomination changes, but a neutral-column migration with rollback/failure-injection coverage remains open.
+2. SQLite monetary columns retain legacy `*_usd` names for compatibility. Schema v3 adds a read-only `account_money_v3` view exposing entity, field, amount and currency without renaming compatibility columns. Migration writes run atomically and rollback on failure; physical neutral-column replacement remains a later versioned API/database migration.
 3. NSE statutory charges (brokerage, exchange charges, SEBI charges, STT, stamp duty and GST) must be derived from a dated broker-specific schedule and official tax bases. No rates are fabricated or assumed.
 4. The supported currency precision map is an explicit subset, not a self-updating complete ISO 4217 registry.
-5. Browser-level integration tests for multiple currencies and zero-/three-decimal currency display are not yet present.
+5. Shared frontend currency formatting has Node-based unit tests for INR/USD, zero-decimal JPY, three-decimal KWD, signed P&L and invalid/unavailable values. Full browser-driven multi-currency integration tests remain open.
 6. No broker-specific live execution, NSE live market-data stream or INR live-trading permission is implemented.
 
 FeeSchedule is already used by Decimal risk sizing and paper-fill commission calculations, and Decimal backtest arithmetic is implemented. Those items are not outstanding tasks.

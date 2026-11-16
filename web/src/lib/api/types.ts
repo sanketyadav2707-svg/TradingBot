@@ -55,6 +55,7 @@ export interface Position {
   symbol: string;
   side: "LONG" | "SHORT";
   quantity: number;
+  currency_code: CurrencyCode;
   average_price: string;
   mark_price: string | null;
   mark_timestamp: string | null;

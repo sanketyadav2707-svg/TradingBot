@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, Shield, ShieldAlert } from "lucide-react";
 import { tradingBotApi } from "@/lib/api/client";
 import type { RiskSnapshotResponse } from "@/lib/api/types";
+import { formatMoney } from "@/lib/format-money.mjs";
 
 export function PaperRiskPanel() {
   const [risk, setRisk] = useState<RiskSnapshotResponse | null>(null);
@@ -70,11 +71,11 @@ export function PaperRiskPanel() {
         </div>
         <div className="flex items-center justify-between border-b border-[#202b38]/70 pb-2 text-[9px]">
           <span className="text-slate-500">Daily loss used</span>
-          <span className="font-mono text-slate-300">{risk?.daily_loss_used ? `$${risk.daily_loss_used.amount}` : "Unavailable"}</span>
+          <span className="font-mono text-slate-300">{formatMoney(risk?.daily_loss_used)}</span>
         </div>
         <div className="flex items-center justify-between border-b border-[#202b38]/70 pb-2 text-[9px]">
           <span className="text-slate-500">Configured daily cap</span>
-          <span className="font-mono text-slate-300">{risk?.daily_loss_limit ? `$${risk.daily_loss_limit.amount}` : "Unavailable"}</span>
+          <span className="font-mono text-slate-300">{formatMoney(risk?.daily_loss_limit)}</span>
         </div>
         <div className="flex items-center justify-between border-b border-[#202b38]/70 pb-2 text-[9px]">
           <span className="text-slate-500">Open positions</span>

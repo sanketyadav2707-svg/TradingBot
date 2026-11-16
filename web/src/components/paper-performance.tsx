@@ -3,17 +3,8 @@
 import { useEffect, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { tradingBotApi } from "@/lib/api/client";
-import type { DashboardSummaryResponse, EquityPoint, Money } from "@/lib/api/types";
-
-function formatMoney(value: Money | null | undefined): string {
-  if (!value) return "Unavailable";
-  const amount = Number(value.amount);
-  if (!Number.isFinite(amount)) return "Unavailable";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: value.currency,
-  }).format(amount);
-}
+import type { DashboardSummaryResponse, EquityPoint } from "@/lib/api/types";
+import { formatMoney } from "@/lib/format-money.mjs";
 
 export function PaperPerformance() {
   const [points,setPoints] = useState<EquityPoint[]>([]);
@@ -77,7 +68,7 @@ export function PaperPerformance() {
             <defs><linearGradient id="paperEquityFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={.2}/><stop offset="100%" stopColor="#34d399" stopOpacity={0}/></linearGradient></defs>
             <CartesianGrid stroke="#202b38" strokeDasharray="3 4" vertical={false}/>
             <XAxis dataKey="time" tick={{fill:"#64748b",fontSize:8}} axisLine={false} tickLine={false} minTickGap={24}/>
-            <YAxis tick={{fill:"#64748b",fontSize:8}} axisLine={false} tickLine={false} tickFormatter={v=>new Intl.NumberFormat("en-US",{style:"currency",currency:chartCurrency,maximumFractionDigits:0}).format(Number(v))}/>
+            <YAxis tick={{fill:"#64748b",fontSize:8}} axisLine={false} tickLine={false} tickFormatter={v=>formatMoney({amount:String(v),currency:chartCurrency})}/>
             <Tooltip contentStyle={{background:"#0b131c",border:"1px solid #334155",fontSize:10}} formatter={v=>[formatMoney({amount:String(v),currency:chartCurrency}),"Equity"]}/>
             <Area type="monotone" dataKey="equity" stroke="#34d399" strokeWidth={2} fill="url(#paperEquityFill)" activeDot={{r:4}}/>
           </AreaChart>

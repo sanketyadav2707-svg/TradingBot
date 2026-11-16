@@ -299,6 +299,7 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
                 "symbol": item["symbol"],
                 "side": item["side"],
                 "quantity": item["quantity"],
+                "currency_code": store.currency_code,
                 "average_price": item["average_entry_price"],
                 "unrealized_pnl": _money(item["unrealized_pnl_usd"], store.currency_code),
                 "mark_price": item["mark_price"],
