@@ -34,7 +34,9 @@ The local read-only API now exposes:
 - `GET /api/v1/markets/nse/instrument-master` returns validation status, record count, source effective date and source-file SHA-256 values without exposing a local filesystem path.
 - Set `TRADINGBOT_NSE_INSTRUMENT_MASTER` to a locally stored normalized-schema CSV to load and freshness-check the master at API startup. Missing files, malformed headers, invalid economics or stale records are surfaced as `INVALID`, not silently accepted.
 
-These endpoints are observational only. The NSE calendar and master are not yet consumed by the strategy scheduler, execution router or broker adapter, and a validated record is not an exchange/broker trading authorization.
+These endpoints are observational only. The NSE calendar and master are not yet consumed automatically by a production strategy scheduler, execution router or broker adapter, and a validated record is not an exchange/broker trading authorization.
+
+The generic `SessionController` now supports optional `bar_checks` callbacks, and `NSESessionBarGuard` can be supplied to reject bars outside verified regular continuous sessions. It fails closed for holidays, unknown calendar dates, pre-open/auction/post-close timestamps and the shorter expiring-index cutoff. This is an integration primitive: the application must explicitly attach it to each controller; the dashboard does not silently start a strategy.
 
 ## Important limits
 

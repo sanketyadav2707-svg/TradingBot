@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 from zoneinfo import ZoneInfo
 
 NSE_TZ = ZoneInfo("Asia/Kolkata")
@@ -257,3 +257,40 @@ def load_normalized_instrument_master(path: str | Path, retrieved_at: datetime) 
     if len(identities) != len(set(identities)):
         raise ValueError("duplicate_instrument_master_identity")
     return tuple(records)
+
+
+
+@dataclass(frozen=True, slots=True)
+class NSESessionBarGuard:
+    """Callable fail-closed check for interval-start bar timestamps.
+
+    Pass this into SessionController(bar_checks=...). It accepts only bars whose
+    start timestamp falls inside the verified regular continuous session. Unknown
+    calendar dates and holidays return False. It never enables auctions, pre-open,
+    special sessions unless explicitly listed, or post-close bars.
+    """
+
+    calendar: NSEMarketCalendar
+    segment: str
+    timestamp_of: Callable[[object], datetime]
+    expiring_index_derivative: bool = False
+
+    def __post_init__(self) -> None:
+        if self.segment not in {"equity", "equity_derivatives"}:
+            raise ValueError(f"unsupported_nse_segment:{self.segment}")
+        if not callable(self.timestamp_of):
+            raise TypeError("timestamp_of_must_be_callable")
+        if self.expiring_index_derivative and self.segment != "equity_derivatives":
+            raise ValueError("expiry_early_close_only_applies_to_equity_derivatives")
+
+    def __call__(self, bar: object) -> bool:
+        timestamp = self.timestamp_of(bar)
+        try:
+            self.calendar.require_continuous_session(
+                timestamp,
+                self.segment,
+                expiring_index_derivative=self.expiring_index_derivative,
+            )
+        except (MarketClosed, UnknownCalendarDate):
+            return False
+        return True

@@ -45,13 +45,17 @@ class SessionController(Generic[T]):
         on_closed_bar: Callable[[T], None],
         timestamp_of: Callable[[T], datetime],
         startup_checks: tuple[Callable[[], bool], ...] = (),
+        bar_checks: tuple[Callable[[T], bool], ...] = (),
         max_hold_seconds: int = 900,
     ) -> None:
         if type(max_hold_seconds) is not int or not 1 <= max_hold_seconds <= 900:
             raise ValueError("max_hold_seconds must be an integer from 1 to 900")
+        if any(not callable(check) for check in bar_checks):
+            raise TypeError("bar_checks_must_be_callable")
         self._on_closed_bar = on_closed_bar
         self._timestamp_of = timestamp_of
         self._startup_checks = startup_checks
+        self._bar_checks = tuple(bar_checks)
         self.max_hold_seconds = max_hold_seconds
         self._lock = RLock()
         self._state = SessionState.STOPPED
@@ -118,6 +122,14 @@ class SessionController(Generic[T]):
                     raise ValueError("closed_bar_timestamp_must_be_timezone_aware")
                 if self._last_bar_timestamp is not None and stamp <= self._last_bar_timestamp:
                     self._transition(SessionState.DEGRADED, "duplicate_or_out_of_order_bar", stamp)
+                    return False
+                try:
+                    checks_passed = all(check(bar) is True for check in self._bar_checks)
+                except Exception:
+                    self._transition(SessionState.DEGRADED, "closed_bar_session_check_exception", stamp)
+                    return False
+                if not checks_passed:
+                    self._transition(SessionState.DEGRADED, "closed_bar_session_check_failed", stamp)
                     return False
                 self._on_closed_bar(bar)
                 self._last_bar_timestamp = stamp
