@@ -28,3 +28,11 @@ test("signed P&L and unavailable values are explicit", () => {
   assert.equal(formatMoney({ amount: "NaN", currency: "INR" }), "Unavailable");
   assert.equal(formatMoney({ amount: "1.00", currency: "XYZ" }), "Unavailable");
 });
+test("does not lose cents on balances above JavaScript safe integer range", () => {
+  const text = formatMoney({ amount: "9007199254740993.01", currency: "INR" });
+  assert.match(text, /9,00,71,99,25,47,40,993\.01/);
+});
+test("preserves instrument price precision finer than a currency minor unit", () => {
+  const text = formatMoney({ amount: "123.0025", currency: "INR" });
+  assert.match(text, /123\.0025/);
+});
