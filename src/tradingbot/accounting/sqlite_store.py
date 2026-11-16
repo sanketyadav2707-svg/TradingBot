@@ -118,6 +118,9 @@ class PaperAccountStore:
                     tick_size TEXT NOT NULL,
                     tick_value_usd TEXT NOT NULL,
                     point_value_usd TEXT NOT NULL,
+                    lot_size INTEGER NOT NULL DEFAULT 1,
+                    quantity_step INTEGER NOT NULL DEFAULT 1,
+                    quantity_freeze INTEGER NOT NULL DEFAULT 100,
                     timestamp TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS open_lots (
@@ -130,6 +133,9 @@ class PaperAccountStore:
                     tick_size TEXT NOT NULL,
                     tick_value_usd TEXT NOT NULL,
                     point_value_usd TEXT NOT NULL,
+                    lot_size INTEGER NOT NULL DEFAULT 1,
+                    quantity_step INTEGER NOT NULL DEFAULT 1,
+                    quantity_freeze INTEGER NOT NULL DEFAULT 100,
                     opened_at TEXT NOT NULL,
                     opening_fill_id TEXT NOT NULL REFERENCES fills(order_id)
                 );
@@ -149,7 +155,10 @@ class PaperAccountStore:
                     entry_time TEXT NOT NULL,
                     exit_time TEXT NOT NULL,
                     opening_fill_id TEXT NOT NULL REFERENCES fills(order_id),
-                    closing_fill_id TEXT NOT NULL REFERENCES fills(order_id)
+                    closing_fill_id TEXT NOT NULL REFERENCES fills(order_id),
+                    lot_size INTEGER NOT NULL DEFAULT 1,
+                    quantity_step INTEGER NOT NULL DEFAULT 1,
+                    quantity_freeze INTEGER NOT NULL DEFAULT 100
                 );
                 CREATE INDEX IF NOT EXISTS idx_closed_trades_exit_time
                     ON closed_trades(exit_time, id);
@@ -216,6 +225,25 @@ class PaperAccountStore:
                         for name in missing:
                             connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} TEXT")
     
+                # Preserve exchange quantity rules for every fill, open lot and closed trade.
+                # Legacy databases predate this metadata and are safely interpreted as
+                # unit-lot instruments until their positions are reconciled.
+                for table in ("fills", "open_lots", "closed_trades"):
+                    columns = {
+                        row["name"] for row in connection.execute(
+                            f"PRAGMA table_info({table})"
+                        ).fetchall()
+                    }
+                    quantity_columns = (
+                        ("lot_size", "INTEGER NOT NULL DEFAULT 1"),
+                        ("quantity_step", "INTEGER NOT NULL DEFAULT 1"),
+                        ("quantity_freeze", "INTEGER NOT NULL DEFAULT 100"),
+                    )
+                    for name, definition in quantity_columns:
+                        if name not in columns:
+                            connection.execute(
+                                f"ALTER TABLE {table} ADD COLUMN {name} {definition}"
+                            )
                 # Upgrade existing accounting fills into the durable delivery outbox.
                 # Existing lifecycle records are safe to replay because fill IDs are idempotent.
                 connection.execute(
@@ -325,8 +353,8 @@ class PaperAccountStore:
                        FROM lifecycle_outbox"""
                 )
                 connection.execute(
-                    "INSERT INTO account_meta(key, value) VALUES ('schema_version', '3') "
-                    "ON CONFLICT(key) DO UPDATE SET value = '3'"
+                    "INSERT INTO account_meta(key, value) VALUES ('schema_version', '4') "
+                    "ON CONFLICT(key) DO UPDATE SET value = '4'"
                 )
                 stored_balance = Decimal(connection.execute(
                     "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"
@@ -413,13 +441,16 @@ class PaperAccountStore:
         symbol = instrument.symbol.strip().upper()
         with self._lock, self._connection() as connection:
             rows = connection.execute(
-                "SELECT tick_size, tick_value_usd, point_value_usd FROM open_lots WHERE symbol = ?",
+                "SELECT tick_size, tick_value_usd, point_value_usd, lot_size, quantity_step, quantity_freeze FROM open_lots WHERE symbol = ?",
                 (symbol,),
             ).fetchall()
         expected = (
             Decimal(str(instrument.tick_size)),
             Decimal(str(instrument.tick_value_usd)),
             Decimal(str(instrument.point_value_usd)),
+            instrument.lot_size,
+            instrument.quantity_step,
+            instrument.quantity_freeze,
         )
         if any(
             row["tick_size"] is None
@@ -429,6 +460,9 @@ class PaperAccountStore:
                 Decimal(row["tick_size"]),
                 Decimal(row["tick_value_usd"]),
                 Decimal(row["point_value_usd"]),
+                int(row["lot_size"]),
+                int(row["quantity_step"]),
+                int(row["quantity_freeze"]),
             ) != expected
             for row in rows
         ):
@@ -490,8 +524,12 @@ class PaperAccountStore:
             raise ValueError("Fill symbol must match the supplied instrument")
         if not isinstance(fill.side, Side) or fill.side not in (Side.LONG, Side.SHORT):
             raise ValueError("Fill side must be LONG or SHORT")
-        if type(fill.quantity) is not int or fill.quantity < 1:
-            raise ValueError("Fill quantity must be a positive integer")
+        if type(fill.quantity) is not int or fill.quantity < instrument.lot_size:
+            raise ValueError("Fill quantity must be at least one tradable lot")
+        if fill.quantity > instrument.quantity_freeze:
+            raise ValueError("Fill quantity exceeds the instrument quantity freeze")
+        if fill.quantity % instrument.quantity_step:
+            raise ValueError("Fill quantity must be a multiple of instrument.quantity_step")
         if not isinstance(fill.order_id, str) or not fill.order_id.strip():
             raise ValueError("Fill order_id cannot be empty")
         if instrument.currency_code != self.currency_code or getattr(fill, "currency_code", "USD") != self.currency_code:
@@ -517,7 +555,8 @@ class PaperAccountStore:
             candidate = (
                 symbol, side, fill.quantity, _number(requested), _number(price),
                 _number(commission), _number(tick_size), _number(tick_value),
-                _number(point_value), timestamp,
+                _number(point_value), instrument.lot_size, instrument.quantity_step,
+                instrument.quantity_freeze, timestamp,
             )
             if existing is not None:
                 actual = (
@@ -525,6 +564,7 @@ class PaperAccountStore:
                     existing["requested_price"], existing["fill_price"],
                     existing["commission_usd"], existing["tick_size"],
                     existing["tick_value_usd"], existing["point_value_usd"],
+                    existing["lot_size"], existing["quantity_step"], existing["quantity_freeze"],
                     existing["timestamp"],
                 )
                 if actual != candidate:
@@ -534,8 +574,9 @@ class PaperAccountStore:
             connection.execute(
                 """INSERT INTO fills(
                     order_id, symbol, side, quantity, requested_price, fill_price,
-                    commission_usd, tick_size, tick_value_usd, point_value_usd, timestamp, currency_code
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    commission_usd, tick_size, tick_value_usd, point_value_usd,
+                    lot_size, quantity_step, quantity_freeze, timestamp, currency_code
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (normalized_id, *candidate, self.currency_code),
             )
             # This outbox row is committed in the SAME transaction as the
@@ -559,6 +600,9 @@ class PaperAccountStore:
                 Decimal(row["tick_size"]) != tick_size
                 or Decimal(row["tick_value_usd"]) != tick_value
                 or Decimal(row["point_value_usd"]) != point_value
+                or int(row["lot_size"]) != instrument.lot_size
+                or int(row["quantity_step"]) != instrument.quantity_step
+                or int(row["quantity_freeze"]) != instrument.quantity_freeze
                 for row in open_lots
             ):
                 raise ValueError(
@@ -575,10 +619,13 @@ class PaperAccountStore:
                 connection.execute(
                     """INSERT INTO open_lots(
                         symbol, side, quantity_open, entry_price, entry_commission_remaining,
-                        tick_size, tick_value_usd, point_value_usd, opened_at, opening_fill_id, currency_code
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        tick_size, tick_value_usd, point_value_usd, lot_size, quantity_step,
+                        quantity_freeze, opened_at, opening_fill_id, currency_code
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (symbol, side, remaining, _number(price), _number(commission),
-                     _number(tick_size), _number(tick_value), _number(point_value), timestamp, normalized_id, self.currency_code),
+                     _number(tick_size), _number(tick_value), _number(point_value),
+                     instrument.lot_size, instrument.quantity_step, instrument.quantity_freeze,
+                     timestamp, normalized_id, self.currency_code),
                 )
                 remaining = 0
             else:
@@ -606,13 +653,16 @@ class PaperAccountStore:
                         """INSERT INTO closed_trades(
                             symbol, side, quantity, entry_price, exit_price, gross_pnl_usd,
                             entry_commission_usd, exit_commission_usd, net_pnl_usd,
-                            entry_time, exit_time, opening_fill_id, closing_fill_id, currency_code
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            entry_time, exit_time, opening_fill_id, closing_fill_id,
+                            lot_size, quantity_step, quantity_freeze, currency_code
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             symbol, lot["side"], quantity, lot["entry_price"], _number(price),
                             _number(gross), _number(entry_commission), _number(exit_commission),
                             _number(net), lot["opened_at"], timestamp,
-                            lot["opening_fill_id"], normalized_id, self.currency_code,
+                            lot["opening_fill_id"], normalized_id,
+                            int(lot["lot_size"]), int(lot["quantity_step"]), int(lot["quantity_freeze"]),
+                            self.currency_code,
                         ),
                     )
                     new_quantity = lot_quantity - quantity
@@ -648,11 +698,14 @@ class PaperAccountStore:
                     connection.execute(
                         """INSERT INTO open_lots(
                             symbol, side, quantity_open, entry_price, entry_commission_remaining,
-                            tick_size, tick_value_usd, point_value_usd, opened_at, opening_fill_id, currency_code
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            tick_size, tick_value_usd, point_value_usd, lot_size, quantity_step,
+                            quantity_freeze, opened_at, opening_fill_id, currency_code
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             symbol, side, remaining, _number(price), _number(remaining_commission),
-                            _number(tick_size), _number(tick_value), _number(point_value), timestamp, normalized_id, self.currency_code,
+                            _number(tick_size), _number(tick_value), _number(point_value),
+                            instrument.lot_size, instrument.quantity_step, instrument.quantity_freeze,
+                            timestamp, normalized_id, self.currency_code,
                         ),
                     )
                     remaining = 0
@@ -999,6 +1052,9 @@ class PaperAccountStore:
                     "unrealized_pnl_usd": unrealized_value,
                     "opened_at": min(item["opened_at"] for item in items),
                     "mark_timestamp": mark_timestamp,
+                    "lot_size": int(items[0]["lot_size"]),
+                    "quantity_step": int(items[0]["quantity_step"]),
+                    "quantity_freeze": int(items[0]["quantity_freeze"]),
                 })
             return result
 

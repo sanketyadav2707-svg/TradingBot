@@ -210,8 +210,12 @@ class OrderLifecycleStore:
             raise ValueError("symbol_must_contain_1_to_32_characters")
         if normalized_side not in {"LONG", "SHORT"}:
             raise ValueError("side_must_be_LONG_or_SHORT")
-        if type(quantity) is not int or not 1 <= quantity <= 100:
-            raise ValueError("quantity_must_be_integer_between_1_and_100")
+        # Exchange quantity units can exceed 100 (e.g. a 65-unit lot).
+        # Instrument lot, step and freeze constraints are validated by the
+        # execution/risk/accounting boundary; this durable journal only enforces
+        # a positive SQLite-safe integer.
+        if type(quantity) is not int or not 1 <= quantity <= 9_223_372_036_854_775_807:
+            raise ValueError("quantity_must_be_positive_sqlite_integer")
         price = _decimal(reference_price, "reference_price")
         stamp = _utc(timestamp)
         payload = _canonical_payload(normalized_symbol, normalized_side, quantity, price)

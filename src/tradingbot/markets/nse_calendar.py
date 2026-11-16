@@ -12,7 +12,7 @@ import json
 import os
 import tempfile
 from dataclasses import dataclass
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Callable, Iterable
@@ -57,6 +57,30 @@ class SessionWindow:
         return self.opens_at <= local < self.closes_at
 
 
+@dataclass(frozen=True, slots=True)
+class SpecialSessionRule:
+    day: date
+    segment: str
+    opens_at: time
+    closes_at: time
+    session_name: str
+    source_url: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.day, date) or isinstance(self.day, datetime):
+            raise TypeError("special_session_day_must_be_date")
+        if self.segment not in {"equity", "equity_derivatives"}:
+            raise ValueError(f"unsupported_nse_segment:{self.segment}")
+        if not isinstance(self.opens_at, time) or not isinstance(self.closes_at, time):
+            raise TypeError("special_session_times_must_be_time_values")
+        if self.opens_at.tzinfo is not None or self.closes_at.tzinfo is not None:
+            raise ValueError("special_session_times_must_be_local_wall_clock_times")
+        if self.closes_at <= self.opens_at:
+            raise ValueError("special_session_close_must_follow_open")
+        if not self.session_name.strip() or not self.source_url.startswith("https://"):
+            raise ValueError("special_session_name_and_source_are_required")
+
+
 # NSE 2026 holiday data, captured from the exchange's official holiday page.
 # Equity and equity-derivatives calendars are intentionally separate.
 _EQUITY_HOLIDAYS_2026 = frozenset(date.fromisoformat(x) for x in (
@@ -74,19 +98,57 @@ _EQUITY_DERIVATIVES_HOLIDAYS_2026 = frozenset(date.fromisoformat(x) for x in (
 ))
 
 
+# Official 2026 Diwali Muhurat continuous-session windows.
+# Cash is restricted to the common regular continuous window for CAS-eligible
+# securities (14:20-15:15); the non-CAS 15:15-15:30 extension and auction phases
+# need instrument-level eligibility and are intentionally not represented here.
+_MUHURAT_2026 = date(2026, 11, 8)
+_BUILTIN_SPECIAL_SESSIONS_2026 = (
+    SpecialSessionRule(
+        day=_MUHURAT_2026,
+        segment="equity",
+        opens_at=time(14, 20),
+        closes_at=time(15, 15),
+        session_name="muhurat_cash_cas_safe_continuous",
+        source_url="https://nsearchives.nseindia.com/content/circulars/CMTR76941.pdf",
+    ),
+    SpecialSessionRule(
+        day=_MUHURAT_2026,
+        segment="equity_derivatives",
+        opens_at=time(14, 20),
+        closes_at=time(15, 40),
+        session_name="muhurat_fo_continuous",
+        source_url="https://archives.nseindia.com/content/circulars/FAOP76940.pdf",
+    ),
+)
+
+
 class NSEMarketCalendar:
     """Verified 2026 NSE continuous-session calendar.
 
     Coverage is deliberately limited to 2026 until a new official holiday
     circular/calendar is ingested. Saturdays/Sundays are closed by rule.
+    Special trading dates require a segment-specific verified time window.
     """
 
     coverage_start = date(2026, 1, 1)
     coverage_end = date(2026, 12, 31)
     schedule_revision_date = date(2026, 12, 7)
 
-    def __init__(self, special_trading_days: Iterable[date] = ()) -> None:
+    def __init__(
+        self,
+        special_trading_days: Iterable[date] = (),
+        special_sessions: Iterable[SpecialSessionRule] = (),
+    ) -> None:
         self._special_trading_days = frozenset(special_trading_days)
+        self._special_sessions: dict[tuple[date, str], SpecialSessionRule] = {
+            (rule.day, rule.segment): rule for rule in _BUILTIN_SPECIAL_SESSIONS_2026
+        }
+        for rule in special_sessions:
+            if not isinstance(rule, SpecialSessionRule):
+                raise TypeError("special_sessions_must_contain_special_session_rules")
+            key = (rule.day, rule.segment)
+            self._special_sessions[key] = rule
 
     def _holiday_set(self, segment: str) -> frozenset[date]:
         if segment == "equity":
@@ -100,7 +162,9 @@ class NSEMarketCalendar:
             raise TypeError("day must be datetime.date")
         if not self.coverage_start <= day <= self.coverage_end:
             raise UnknownCalendarDate(f"unverified_nse_calendar_date:{day.isoformat()}")
-        if day in self._special_trading_days:
+        # Validate the requested segment even on weekends or special-session dates.
+        self._holiday_set(segment)
+        if (day, segment) in self._special_sessions or day in self._special_trading_days:
             return True
         if day.weekday() >= 5:
             return False
@@ -117,6 +181,22 @@ class NSEMarketCalendar:
             raise MarketClosed(f"nse_market_closed:{segment}:{day.isoformat()}")
         if expiring_index_derivative and segment != "equity_derivatives":
             raise ValueError("expiry_early_close_only_applies_to_equity_derivatives")
+        special = self._special_sessions.get((day, segment))
+        if special is not None:
+            if expiring_index_derivative:
+                raise UnknownCalendarDate(
+                    f"special_session_expiry_schedule_unverified:{segment}:{day.isoformat()}"
+                )
+            return SessionWindow(
+                segment=segment,
+                opens_at=datetime.combine(day, special.opens_at, NSE_TZ),
+                closes_at=datetime.combine(day, special.closes_at, NSE_TZ),
+                session_name=special.session_name,
+            )
+        if day in self._special_trading_days:
+            raise UnknownCalendarDate(
+                f"special_session_hours_unverified:{segment}:{day.isoformat()}"
+            )
         opening = time(9, 15)
         if segment == "equity":
             closing = time(15, 30)
@@ -222,6 +302,34 @@ class NSEInstrumentMasterRecord:
             raise StaleInstrumentMaster(
                 f"stale_nse_instrument_master:{self.trading_symbol}:{self.source_as_of}"
             )
+
+
+    def to_linear_future_instrument(self) -> Instrument:
+        """Convert a validated NSE equity-index/stock future into core unit economics.
+
+        Tick/point values are per underlying quantity unit; order quantities are
+        raw exchange quantity units and must be multiples of the market lot.
+        This deliberately excludes options and BSE-only combined-file rows.
+        """
+        if self.segment != "NSE_FO" or self.instrument_type not in {"FUTIDX", "FUTSTK"}:
+            raise ValueError("nse_master_record_is_not_a_supported_linear_future")
+        if not self.nse_tradable:
+            raise ValueError("bse_only_contract_not_nse_tradable")
+        tick = Decimal(self.tick_size)
+        # One price point on one underlying quantity unit is INR 1. The market
+        # lot multiplies total order quantity, not the per-unit tick value.
+        from tradingbot.models import Instrument
+
+        return Instrument(
+            symbol=self.trading_symbol,
+            tick_size=float(tick),
+            tick_value_usd=float(tick),
+            point_value_usd=1.0,
+            currency_code="INR",
+            lot_size=self.lot_size,
+            quantity_step=self.lot_size,
+            quantity_freeze=self.quantity_freeze,
+        )
 
 
 NSE_MASTER_VARIANTS = ("NSE_EXCLUSIVE", "NSE_AND_BSE_EXCLUSIVE")
@@ -391,6 +499,7 @@ class NSESessionBarGuard:
     segment: str
     timestamp_of: Callable[[object], datetime]
     expiring_index_derivative: bool = False
+    interval_seconds: int = 60
 
     def __post_init__(self) -> None:
         if self.segment not in {"equity", "equity_derivatives"}:
@@ -399,15 +508,18 @@ class NSESessionBarGuard:
             raise TypeError("timestamp_of_must_be_callable")
         if self.expiring_index_derivative and self.segment != "equity_derivatives":
             raise ValueError("expiry_early_close_only_applies_to_equity_derivatives")
+        if type(self.interval_seconds) is not int or self.interval_seconds < 1:
+            raise ValueError("bar_interval_seconds_must_be_positive_integer")
 
     def __call__(self, bar: object) -> bool:
         timestamp = self.timestamp_of(bar)
         try:
-            self.calendar.require_continuous_session(
+            window = self.calendar.require_continuous_session(
                 timestamp,
                 self.segment,
                 expiring_index_derivative=self.expiring_index_derivative,
             )
         except (MarketClosed, UnknownCalendarDate):
             return False
-        return True
+        bar_end = timestamp.astimezone(NSE_TZ) + timedelta(seconds=self.interval_seconds)
+        return bar_end <= window.closes_at

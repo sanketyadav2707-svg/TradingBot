@@ -181,3 +181,18 @@ def test_local_pending_submit_order_is_reported_unresolved(tmp_path):
     assert report.safe_to_trade is False
     assert report.local_only_orders == ("client-001",)
     assert report.unresolved_orders == ("client-001",)
+
+
+
+def test_order_lifecycle_accepts_exchange_quantities_above_100_units(tmp_path) -> None:
+    store = OrderLifecycleStore(tmp_path / "large-raw-quantity.sqlite3")
+    created = store.create_order(
+        client_order_id="nifty-2-lots",
+        symbol="NIFTY_TEST",
+        side="LONG",
+        quantity=130,
+        reference_price=25000,
+        timestamp=datetime(2026, 11, 16, 4, 0, tzinfo=timezone.utc),
+    )
+    assert created["quantity"] == 130
+    assert created["cumulative_filled"] == 0

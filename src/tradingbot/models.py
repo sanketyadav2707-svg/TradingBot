@@ -30,8 +30,11 @@ class Instrument:
     # Historical field names above are retained for API/database compatibility.
     # Their monetary denomination is currency_code, never implicitly USD.
     currency_code: str = "USD"
+    # lot_size is the minimum raw exchange quantity per tradable lot.
+    # quantity_step is the minimum order-quantity increment, in raw units.
     lot_size: int = 1
     quantity_step: int = 1
+    quantity_freeze: int = 100
 
     def __post_init__(self) -> None:
         if not self.symbol.strip():
@@ -50,10 +53,14 @@ class Instrument:
             type(self.lot_size) is not int
             or self.lot_size < 1
             or type(self.quantity_step) is not int
-            or self.quantity_step < 1
-            or self.lot_size % self.quantity_step != 0
+            or self.quantity_step < self.lot_size
+            or self.quantity_step % self.lot_size != 0
+            or type(self.quantity_freeze) is not int
+            or self.quantity_freeze < self.lot_size
         ):
-            raise ValueError("instrument_lot_size_and_quantity_step_must_be_positive_and_consistent")
+            raise ValueError(
+                "instrument_lot_size_quantity_step_and_freeze_must_be_positive_and_consistent"
+            )
 
     @property
     def tick_value(self) -> Money:
@@ -75,6 +82,7 @@ class Instrument:
             point_value=self.point_value,
             lot_size=self.lot_size,
             quantity_step=self.quantity_step,
+            quantity_freeze=self.quantity_freeze,
         )
 
 

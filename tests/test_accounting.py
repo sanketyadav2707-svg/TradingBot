@@ -276,6 +276,9 @@ def test_legacy_account_schema_migrates_all_contract_specification_columns(tmp_p
         for table in ("fills", "open_lots"):
             columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
             assert {"tick_size", "tick_value_usd", "point_value_usd"} <= columns
+        for table in ("fills", "open_lots", "closed_trades"):
+            columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+            assert {"lot_size", "quantity_step", "quantity_freeze"} <= columns
 
 
 def test_engine_wide_emergency_halt_blocks_existing_and_future_routers(tmp_path) -> None:
@@ -840,7 +843,7 @@ def test_account_money_v3_view_exposes_neutral_amounts_with_currency(tmp_path) -
             "WHERE entity_type = 'fill' AND entity_id = 'money-view-fill' ORDER BY field_name"
         ).fetchall()
 
-    assert schema_version == "3"
+    assert schema_version == "4"
     assert columns == ["entity_type", "entity_id", "field_name", "amount", "currency_code"]
     assert {row[0]: (row[1], row[2]) for row in values} == {
         "commission": ("0.5", "USD"),
@@ -875,3 +878,179 @@ def test_account_bootstrap_rolls_back_all_migration_writes_on_failure(tmp_path, 
 
     recovered = PaperAccountStore(database, Decimal("50000.00"), "USD")
     assert recovered.get_summary()["equity_usd"] == "50000"
+
+
+
+def test_accounting_persists_and_validates_exchange_quantity_metadata(tmp_path) -> None:
+    import sqlite3
+
+    database = tmp_path / "nse-lot-metadata.sqlite3"
+    store = PaperAccountStore(database, Decimal("100000"), currency_code="INR")
+    instrument = Instrument(
+        "NIFTY_TEST",
+        tick_size=0.05,
+        tick_value_usd=0.05,
+        point_value_usd=1.0,
+        currency_code="INR",
+        lot_size=65,
+        quantity_step=65,
+        quantity_freeze=1800,
+    )
+
+    invalid_quantities = (1, 66, 1820)
+    for index, quantity in enumerate(invalid_quantities):
+        fill = PaperFill(
+            order_id=f"invalid-nse-quantity-{index}",
+            symbol=instrument.symbol,
+            side=Side.LONG,
+            quantity=quantity,
+            requested_price=25000,
+            fill_price=25000,
+            commission_usd=0,
+            timestamp=T0,
+            currency_code="INR",
+        )
+        with pytest.raises(ValueError, match="Fill quantity"):
+            store.record_fill(fill, instrument)
+    assert store.get_summary()["fills_count"] == 0
+
+    entry = PaperFill(
+        order_id="nse-lot-entry",
+        symbol=instrument.symbol,
+        side=Side.LONG,
+        quantity=130,
+        requested_price=25000,
+        fill_price=25000,
+        commission_usd=Decimal("1.30"),
+        timestamp=T0,
+        currency_code="INR",
+    )
+    assert store.record_fill(entry, instrument)
+    position = store.list_positions()[0]
+    assert position["quantity"] == 130
+    assert position["lot_size"] == 65
+    assert position["quantity_step"] == 65
+    assert position["quantity_freeze"] == 1800
+
+    changed = Instrument(
+        "NIFTY_TEST",
+        tick_size=0.05,
+        tick_value_usd=0.05,
+        point_value_usd=1.0,
+        currency_code="INR",
+        lot_size=50,
+        quantity_step=50,
+        quantity_freeze=1800,
+    )
+    with pytest.raises(ValueError, match="contract tick/point specification changed"):
+        store.validate_instrument(changed)
+
+    exit_fill = PaperFill(
+        order_id="nse-lot-exit",
+        symbol=instrument.symbol,
+        side=Side.SHORT,
+        quantity=130,
+        requested_price=25001,
+        fill_price=25001,
+        commission_usd=Decimal("1.30"),
+        timestamp=T0 + timedelta(minutes=1),
+        currency_code="INR",
+    )
+    assert store.record_fill(exit_fill, instrument)
+    with sqlite3.connect(database) as connection:
+        row = connection.execute(
+            "SELECT quantity, lot_size, quantity_step, quantity_freeze FROM closed_trades"
+        ).fetchone()
+    assert row == (130, 65, 65, 1800)
+
+
+def test_schema_v3_account_migrates_exchange_quantity_metadata_to_v4(tmp_path) -> None:
+    import sqlite3
+
+    database = tmp_path / "schema-v3-migration.sqlite3"
+    store = PaperAccountStore(database, Decimal("50000"), currency_code="USD")
+    store.record_fill(make_fill("schema-v3-fill", Side.LONG, 1, 100, 0.5), MES)
+
+    # Simulate the schema that predates lot/step/freeze persistence.
+    with sqlite3.connect(database) as connection:
+        connection.execute("DROP VIEW IF EXISTS account_money_v3")
+        for table in ("fills", "open_lots", "closed_trades"):
+            connection.execute(f"ALTER TABLE {table} DROP COLUMN quantity_freeze")
+            connection.execute(f"ALTER TABLE {table} DROP COLUMN quantity_step")
+            connection.execute(f"ALTER TABLE {table} DROP COLUMN lot_size")
+        connection.execute(
+            "UPDATE account_meta SET value='3' WHERE key='schema_version'"
+        )
+
+    migrated = PaperAccountStore(database, Decimal("50000"), currency_code="USD")
+    assert migrated.get_summary()["fills_count"] == 1
+    assert migrated.list_positions()[0]["lot_size"] == 1
+    with sqlite3.connect(database) as connection:
+        version = connection.execute(
+            "SELECT value FROM account_meta WHERE key='schema_version'"
+        ).fetchone()[0]
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(fills)")
+        }
+    assert version == "4"
+    assert {"lot_size", "quantity_step", "quantity_freeze"} <= columns
+
+
+
+def test_nse_two_lot_order_flows_through_risk_router_broker_lifecycle_and_ledger(tmp_path) -> None:
+    database = tmp_path / "nse-two-lots.sqlite3"
+    store = PaperAccountStore(
+        database,
+        Decimal("100000"),
+        currency_code="INR",
+    )
+    instrument = Instrument(
+        "NIFTY_TEST",
+        tick_size=0.05,
+        tick_value_usd=0.05,
+        point_value_usd=1.0,
+        currency_code="INR",
+        lot_size=65,
+        quantity_step=65,
+        quantity_freeze=130,
+    )
+    limits = RiskLimits(
+        starting_balance_usd=Decimal("100000"),
+        max_daily_loss_usd=Decimal("1000"),
+        max_total_drawdown_usd=Decimal("2000"),
+        max_risk_per_trade_usd=Decimal("100"),
+        max_contracts=2,
+        currency_code="INR",
+    )
+    engine = PaperAccountEngine(
+        store,
+        limits,
+        commission_per_contract_per_side_usd=Decimal("0"),
+        slippage_ticks_per_side=0,
+        max_mark_age_seconds=60,
+    )
+    store.mark_to_market({"NIFTY_TEST": Decimal("25000")}, T0)
+    router = engine.router_for(instrument, require_firm_profile=False)
+
+    fill = router.submit_entry(
+        OrderIntent(
+            instrument=instrument,
+            side=Side.LONG,
+            stop_ticks=8,
+            reference_price=25000.0,
+            timestamp=T0,
+            idempotency_key="nifty-two-lots-001",
+        )
+    )
+
+    assert fill.quantity == 130
+    assert store.get_summary()["fills_count"] == 1
+    position = store.list_positions()[0]
+    assert position["quantity"] == 130
+    assert position["lot_size"] == 65
+    assert position["quantity_step"] == 65
+    assert position["quantity_freeze"] == 130
+    order = engine.order_lifecycle.get_order("nifty-two-lots-001")
+    assert order["quantity"] == 130
+    assert order["cumulative_filled"] == 130
+    assert order["state"] == "FILLED"

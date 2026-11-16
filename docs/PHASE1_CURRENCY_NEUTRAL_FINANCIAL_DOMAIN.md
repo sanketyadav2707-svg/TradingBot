@@ -1,6 +1,6 @@
 # Phase 1: Currency-Neutral Financial Domain
 
-Status: Core Decimal money primitives, Decimal risk sizing, currency-aware paper ledger schema v3 (neutral read view over compatibility columns), fee-schedule paper execution and Decimal backtest arithmetic are implemented. This integration adds a currency-neutral v2 instrument API while retaining v1 compatibility, and updates dashboard formatting for the supported currency precision set. Phase 1 remains a research/paper foundation, not an INR live-trading release.
+Status: Core Decimal money primitives, Decimal risk sizing, currency-aware paper ledger schema v4 (neutral read view over compatibility columns), fee-schedule paper execution and Decimal backtest arithmetic are implemented. This integration adds a currency-neutral v2 instrument API while retaining v1 compatibility, and updates dashboard formatting for the supported currency precision set. Phase 1 remains a research/paper foundation, not an INR live-trading release.
 
 ## Objective
 
@@ -29,7 +29,7 @@ Make money denomination explicit and impossible to mix accidentally before addin
 - PaperFill, Trade and BacktestResult expose currency-neutral monetary properties without breaking legacy serialized fields.
 - Monetary tick/point values carry currency.
 - Enforces tick value = tick size × point value and validates lot/quantity-step consistency.
-- Instrument economics are separated from fees.
+- Instrument economics are separated from fees. Quantities are raw exchange units; lot size and quantity step define valid order increments, quantity freeze is the maximum raw units per order, and `RiskLimits.max_contracts` counts whole lots. Order quantities are raw exchange quantity units; lot size and quantity step define valid multiples, quantity freeze is the per-order maximum, and risk `max_contracts` counts lots.
 
 ### Fee schedule
 - Added immutable, dated `FeeSchedule`.
@@ -63,7 +63,7 @@ Make money denomination explicit and impossible to mix accidentally before addin
 ## Explicitly not complete / blocked from live use
 
 1. Public price/report models still have float-compatible boundaries; migrating every market price and report metric to Decimal requires a separately versioned domain/API change.
-2. SQLite monetary columns retain legacy `*_usd` names for compatibility. Schema v3 adds a read-only `account_money_v3` view exposing entity, field, amount and currency without renaming compatibility columns. Migration writes run atomically and rollback on failure; physical neutral-column replacement remains a later versioned API/database migration.
+2. SQLite monetary columns retain legacy `*_usd` names for compatibility. Schema v3 adds a read-only `account_money_v3` view exposing entity, field, amount and currency without renaming compatibility columns. Migration writes run atomically and rollback on failure; physical neutral-column replacement remains a later versioned API/database migration. Schema v4 also persists `lot_size`, `quantity_step`, and `quantity_freeze` on fills, open lots and closed trades; schema-v3 ledgers migrate with legacy unit-lot defaults (1/1/100).
 3. NSE statutory charges (brokerage, exchange charges, SEBI charges, STT, stamp duty and GST) must be derived from a dated broker-specific schedule and official tax bases. No rates are fabricated or assumed.
 4. The supported currency precision map is an explicit subset, not a self-updating complete ISO 4217 registry.
 5. Shared frontend currency formatting has Node-based unit tests for INR/USD, zero-decimal JPY, three-decimal KWD, signed P&L and invalid/unavailable values. Full browser-driven multi-currency integration tests remain open.

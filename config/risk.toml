@@ -1,5 +1,7 @@
 # Illustrative research settings only. These are NOT the rules of any prop firm.
 # Replace only after selecting a specific account model and verifying its current official rules.
+# max_contracts is the maximum number of exchange lots; the risk gate converts it
+# to raw order quantity units using each instrument's lot_size and freeze limit.
 [risk]
 currency_code = "USD" # Denomination for every monetary risk value below.
 starting_balance_usd = 50000.0

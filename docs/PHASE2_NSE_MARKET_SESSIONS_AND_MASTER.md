@@ -32,6 +32,15 @@ Records reject missing fields, non-INR instruments, invalid tick/lot/freeze valu
 - NSE circular NSE/FAOP/73629 (6 April 2026) distinguishes the NSE-exclusive and NSE+BSE contract-file publication variants. It identifies field number 30, `Admission type`, with value `2` for BSE-listed contracts in the MII FO file. Those contracts are not valid for normal NSE trading unless an alternative trading venue is invoked. Schema v2 preserves these records for audit but marks them `nse_tradable=false`.
 - These circulars verify file variants, delivery locations and field 30 semantics, but they do not expose a complete current row/header layout in a reusable sample. Therefore the raw parser remains blocked pending a dated official sample. The new normalized v2 loader only accepts a caller-supplied explicit mapping of field 30; it does not claim to parse the raw MII file.
 
+## Special-session coverage
+
+- Sunday 8 November 2026 Muhurat trading is represented with explicit segment-specific windows from NSE circulars dated 19 October 2026.
+- Equity cash guard uses the conservative common continuous window 14:20–15:15 IST so it does not let CAS-eligible stocks run into the closing-auction transition. Non-CAS securities have a later continuous window, but this generic segment-level guard deliberately does not extend to it.
+- Equity derivatives continuous trading is 14:20–15:40 IST.
+- Pre-open, auction and trade-modification windows are not admitted as strategy bars. Unconfigured special-session dates return UNKNOWN/blocked rather than falling back to ordinary weekday hours.
+- Interval-start bars are only admitted when the entire configured bar interval ends by the verified session close.
+- For F&O MII linear futures, tick/point values are represented per raw underlying quantity unit. The master converter applies the exchange lot size as both the minimum order lot and order increment, and quantity freeze as the maximum order quantity. Risk limits count lots; broker/accounting orders and P&L use raw quantity units.
+
 ## Runtime diagnostics integration
 
 The local read-only API now exposes:
@@ -65,6 +74,9 @@ The generic `SessionController` now supports optional `bar_checks` callbacks, an
 - NSE Equity Derivatives Contract Specifications (tick sizes and contract cycles): https://www.nseindia.com/static/products-services/equity-derivatives-contract-specifications
 - NSE circular NSE/MSD/60315 (daily MII contract-master publication): https://nsearchives.nseindia.com/content/circulars/MSD60315.pdf
 - NSE circular NSE/FAOP/73629 (NSE-exclusive versus NSE+BSE FO contract files and admission type): https://nsearchives.nseindia.com/content/circulars/FAOP73629.pdf
+- NSE circular NSE/CMTR/76941 (8 November 2026 Muhurat cash-session schedule): https://archives.nseindia.com/content/circulars/CMTR76941.pdf
+- NSE circular NSE/FAOP/76940 (8 November 2026 Muhurat F&O schedule): https://archives.nseindia.com/content/circulars/FAOP76940.pdf
+- NSE circular NSE/CMTR/76941 (8 November 2026 Muhurat cash-session schedule): https://archives.nseindia.com/content/circulars/CMTR76941.pdf
 - NSE circular NSE/FAOP/77356, 6 November 2026, effective 7 December 2026: https://nsearchives.nseindia.com/content/circulars/FAOP77356.zip
 - NSE CAS 2.0 FAQs, updated 6 November 2026: https://nsearchives.nseindia.com/web/mediaattachment/2026-11/FAQs_for_CM_and_FO_FOR_CAS_2.0_20261109152618.pdf
 
@@ -74,5 +86,6 @@ The generic `SessionController` now supports optional `bar_checks` callbacks, an
 2. Add unattended scheduled download only after the official URL/report workflow and permitted usage are verified; current CLI validation, manifest persistence and fail-closed readiness are implemented.
 3. Add 2027 official holiday and special-session calendar ingestion when NSE publishes the source.
 4. Add calendar integration tests around the 7 December 2026 schedule transition and expiring-index cutoff.
-5. Compare instruments using real liquidity, spread, capital and cost evidence before choosing a trading universe.
-6. Audit lawful zero-budget historical/intraday data routes. NSE's own historical and real-time data products are subscription services; do not treat exchange website pages as a free executable data feed.
+5. Convert validated FUTIDX/FUTSTK MII records into unit-based instrument economics; order quantities remain raw units, with lot-size multiples and quantity-freeze controls enforced by the risk gate, broker, and durable ledger.
+6. Compare instruments using real liquidity, spread, capital and cost evidence before choosing a trading universe.
+7. Audit lawful zero-budget historical/intraday data routes. NSE's own historical and real-time data products are subscription services; do not treat exchange website pages as a free executable data feed.

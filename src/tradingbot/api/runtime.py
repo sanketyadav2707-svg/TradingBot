@@ -115,7 +115,8 @@ class DashboardRuntime:
                     ),
                     currency_code=str(raw.get("currency_code", "USD")),
                     lot_size=int(raw.get("lot_size", 1)),
-                    quantity_step=int(raw.get("quantity_step", 1)),
+                    quantity_step=int(raw.get("quantity_step", raw.get("lot_size", 1))),
+                    quantity_freeze=int(raw.get("quantity_freeze", 100)),
                 )
                 runtime.instruments[normalized] = InstrumentConfig(
                     instrument=instrument,

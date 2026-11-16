@@ -108,6 +108,9 @@ class InstrumentMetadataV2(StrictResponse):
     currency_code: str = Field(pattern=r"^[A-Z]{3}$")
     tick_value: Money
     point_value: Money
+    lot_size: int = Field(ge=1)
+    quantity_step: int = Field(ge=1)
+    quantity_freeze: int = Field(ge=1)
 
 
 class InstrumentsV2Response(StrictResponse):
