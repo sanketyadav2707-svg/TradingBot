@@ -177,12 +177,8 @@ class NSEInstrumentMasterRecord:
             raise ValueError("unsupported_nse_instrument_segment")
         if type(self.lot_size) is not int or self.lot_size < 1:
             raise ValueError("lot_size_must_be_positive_integer")
-        if (
-            type(self.quantity_freeze) is not int
-            or self.quantity_freeze < self.lot_size
-            or self.quantity_freeze % self.lot_size != 0
-        ):
-            raise ValueError("quantity_freeze_must_be_a_positive_lot_multiple")
+        if type(self.quantity_freeze) is not int or self.quantity_freeze < self.lot_size:
+            raise ValueError("quantity_freeze_must_be_at_least_one_lot")
         try:
             tick = Decimal(self.tick_size)
         except (InvalidOperation, TypeError, ValueError) as exc:
