@@ -4,8 +4,11 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 
 from tradingbot.api.app import create_app
-from tradingbot.api.runtime import DashboardRuntime
+from tradingbot.api.runtime import DashboardRuntime, InstrumentConfig
+from tradingbot.accounting import PaperAccountStore
 from tradingbot.models import Instrument, Side
+from tradingbot.paper.broker import PaperFill
+from tradingbot.risk.limits import RiskLimits
 from tradingbot.execution.router import OrderIntent
 
 
@@ -302,3 +305,94 @@ def test_nse_instrument_master_api_reports_unconfigured_and_validated_states(tmp
     assert payload["status"] == "VALIDATED"
     assert payload["record_count"] == 1
     assert len(payload["source_file_sha256s"][0]) == 64
+
+
+
+def test_inr_paper_account_lifecycle_round_trips_through_api(tmp_path) -> None:
+    instrument = Instrument(
+        "NIFTY_TEST",
+        tick_size=0.05,
+        tick_value_usd=1.0,
+        point_value_usd=20.0,
+        currency_code="INR",
+    )
+    starting_balance = Decimal("100000.00")
+    store = PaperAccountStore(
+        tmp_path / "inr-account.sqlite3",
+        starting_balance_usd=starting_balance,
+        currency_code="INR",
+    )
+    entry_time = datetime(2026, 11, 16, 4, 0, tzinfo=timezone.utc)
+    exit_time = entry_time + timedelta(minutes=1)
+
+    store.record_fill(
+        PaperFill(
+            order_id="inr-entry-001",
+            symbol=instrument.symbol,
+            side=Side.LONG,
+            quantity=1,
+            requested_price=25000.0,
+            fill_price=25000.0,
+            commission_usd=Decimal("1.25"),
+            timestamp=entry_time,
+            currency_code="INR",
+        ),
+        instrument,
+    )
+    store.record_fill(
+        PaperFill(
+            order_id="inr-exit-001",
+            symbol=instrument.symbol,
+            side=Side.SHORT,
+            quantity=1,
+            requested_price=25000.5,
+            fill_price=25000.5,
+            commission_usd=Decimal("1.25"),
+            timestamp=exit_time,
+            currency_code="INR",
+        ),
+        instrument,
+    )
+
+    runtime = DashboardRuntime(config_dir=tmp_path)
+    runtime.risk_limits = RiskLimits(
+        starting_balance_usd=starting_balance,
+        max_daily_loss_usd=Decimal("1000"),
+        max_total_drawdown_usd=Decimal("5000"),
+        max_risk_per_trade_usd=Decimal("100"),
+        currency_code="INR",
+    )
+    runtime.instruments = {
+        instrument.symbol: InstrumentConfig(
+            instrument=instrument,
+            name="NIFTY test contract",
+            exchange="NSE",
+        )
+    }
+    runtime.account_store = store
+    client = TestClient(create_app(runtime))
+
+    summary = client.get("/api/v1/dashboard/summary").json()
+    assert summary["account"]["balance"] == {"amount": "100007.50", "currency": "INR"}
+    assert summary["account"]["equity"] == {"amount": "100007.50", "currency": "INR"}
+    assert summary["account"]["realized_pnl"] == {"amount": "7.50", "currency": "INR"}
+
+    positions = client.get("/api/v1/positions").json()
+    assert positions["availability"] == "AVAILABLE"
+    assert positions["items"] == []
+
+    trades = client.get("/api/v1/trades").json()
+    assert trades["availability"] == "AVAILABLE"
+    assert len(trades["items"]) == 1
+    assert trades["items"][0]["net_pnl"] == {"amount": "7.50", "currency": "INR"}
+
+    equity = client.get("/api/v1/performance/equity?range=all").json()
+    assert equity["availability"] == "AVAILABLE"
+    assert equity["items"][-1]["equity"] == {"amount": "100007.50", "currency": "INR"}
+
+    instruments = client.get("/api/v2/instruments").json()
+    assert instruments["availability"] == "AVAILABLE"
+    nifty = next(item for item in instruments["items"] if item["symbol"] == "NIFTY_TEST")
+    assert nifty["currency_code"] == "INR"
+    assert nifty["tick_value"] == {"amount": "1.00", "currency": "INR"}
+    assert nifty["point_value"] == {"amount": "20.00", "currency": "INR"}
