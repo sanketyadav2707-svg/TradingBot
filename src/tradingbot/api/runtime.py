@@ -12,10 +12,17 @@ import os
 import sqlite3
 import tomllib
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from tradingbot.accounting import PaperAccountEngine, PaperAccountStore
 from tradingbot.models import Instrument
+from tradingbot.markets.nse_calendar import (
+    NSEInstrumentMasterRecord,
+    NSEMarketCalendar,
+    load_normalized_instrument_master,
+)
 from tradingbot.paper.broker import PaperBroker
 from tradingbot.risk.limits import RiskLimits
 
@@ -35,6 +42,10 @@ class DashboardRuntime:
     account_store: PaperAccountStore | None = None
     paper_engine: PaperAccountEngine | None = None
     paper_broker: PaperBroker | None = None
+    nse_calendar: NSEMarketCalendar | None = None
+    nse_master_records: tuple[NSEInstrumentMasterRecord, ...] = ()
+    nse_master_configured: bool = False
+    nse_master_error: str | None = None
     configuration_errors: tuple[str, ...] = ()
 
     @classmethod
@@ -125,6 +136,27 @@ class DashboardRuntime:
                 )
             except (OSError, sqlite3.Error, TypeError, ValueError, RuntimeError):
                 errors.append("paper_account_store_unavailable_or_invalid")
+
+        # NSE calendar and master are read-only diagnostics. They do not
+        # enable strategy execution, broker connectivity, or order routing.
+        if (selected_dir / "markets" / "india_nse.toml").is_file():
+            runtime.nse_calendar = NSEMarketCalendar()
+
+        master_path = os.environ.get("TRADINGBOT_NSE_INSTRUMENT_MASTER")
+        if master_path:
+            runtime.nse_master_configured = True
+            try:
+                retrieved_at = datetime.now(timezone.utc)
+                records = load_normalized_instrument_master(
+                    Path(master_path).expanduser(),
+                    retrieved_at,
+                )
+                as_of = retrieved_at.astimezone(ZoneInfo("Asia/Kolkata")).date()
+                for record in records:
+                    record.validate_freshness(as_of, max_age_days=1)
+                runtime.nse_master_records = records
+            except (OSError, TypeError, ValueError) as exc:
+                runtime.nse_master_error = str(exc)
 
         runtime.configuration_errors = tuple(errors)
         return runtime
