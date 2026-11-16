@@ -737,12 +737,12 @@ class PaperAccountStore:
         connection.execute(
             """INSERT INTO equity_snapshots(
                 timestamp, source, balance_usd, realized_gross_pnl_usd,
-                commissions_usd, unrealized_pnl_usd, equity_usd, reference_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                commissions_usd, unrealized_pnl_usd, equity_usd, reference_id, currency_code
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 timestamp, source, summary["balance_usd"], summary["realized_gross_pnl_usd"],
                 summary["total_commissions_usd"], summary["unrealized_pnl_usd"],
-                summary["equity_usd"], reference_id,
+                summary["equity_usd"], reference_id, self.currency_code,
             ),
         )
 
