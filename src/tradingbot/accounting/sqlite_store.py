@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 from tradingbot.models import Instrument, Side
-from tradingbot.money import currency_minor_units
+from tradingbot.money import currency_minor_units, quantum_for
 from tradingbot.paper.broker import PaperFill
 
 _CENT = Decimal("0.01")
@@ -46,8 +46,8 @@ def _timestamp(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
-def _money(value: Decimal) -> str:
-    return format(value.quantize(_CENT), "f")
+def _money(value: Decimal, currency: str = "USD") -> str:
+    return format(value.quantize(quantum_for(currency)), "f")
 
 
 def _number(value: Decimal) -> str:
@@ -895,7 +895,7 @@ class PaperAccountStore:
                     )
                     mark_value: str | None = _number(mark)
                     mark_timestamp: str | None = mark_time
-                    unrealized_value: str | None = _money(unrealized)
+                    unrealized_value: str | None = _money(unrealized, self.currency_code)
                 else:
                     mark_value = None
                     mark_timestamp = None
@@ -922,10 +922,10 @@ class PaperAccountStore:
                 "id": row["id"], "symbol": row["symbol"],
                 "side": "LONG" if row["side"] > 0 else "SHORT",
                 "quantity": row["quantity"], "entry_price": row["entry_price"],
-                "exit_price": row["exit_price"], "gross_pnl_usd": _money(Decimal(row["gross_pnl_usd"])),
-                "entry_commission_usd": _money(Decimal(row["entry_commission_usd"])),
-                "exit_commission_usd": _money(Decimal(row["exit_commission_usd"])),
-                "net_pnl_usd": _money(Decimal(row["net_pnl_usd"])),
+                "exit_price": row["exit_price"], "gross_pnl_usd": _money(Decimal(row["gross_pnl_usd"]), self.currency_code),
+                "entry_commission_usd": _money(Decimal(row["entry_commission_usd"]), self.currency_code),
+                "exit_commission_usd": _money(Decimal(row["exit_commission_usd"]), self.currency_code),
+                "net_pnl_usd": _money(Decimal(row["net_pnl_usd"]), self.currency_code),
                 "entry_time": row["entry_time"], "exit_time": row["exit_time"],
                 "opening_fill_id": row["opening_fill_id"], "closing_fill_id": row["closing_fill_id"],
             } for row in rows]
@@ -973,7 +973,7 @@ class PaperAccountStore:
                 "side": "LONG" if row["side"] > 0 else "SHORT",
                 "quantity": row["quantity"], "requested_price": row["requested_price"],
                 "fill_price": row["fill_price"],
-                "commission_usd": _money(Decimal(row["commission_usd"])),
+                "commission_usd": _money(Decimal(row["commission_usd"]), self.currency_code),
                 "timestamp": row["timestamp"],
             } for row in rows]
 
