@@ -1,6 +1,6 @@
 # Phase 1: Currency-Neutral Financial Domain
 
-Status: domain primitives implemented on a dedicated branch; legacy runtime adapters remain in place.
+Status: domain primitives implemented and merged into the currency-foundation branch; legacy runtime adapters remain in place.
 
 ## Objective
 
