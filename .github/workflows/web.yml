@@ -7,7 +7,7 @@ on:
       - "web/**"
       - ".github/workflows/web.yml"
   pull_request:
-    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/order-lifecycle-engine-integration"]
+    branches: [main, "feature/dashboard-foundation", "feature/dashboard-ci-api-contract", "feature/fastapi-readonly-service", "feature/order-lifecycle-engine-integration", "feat/currency-aware-accounting-foundation"]
     paths:
       - "web/**"
       - ".github/workflows/web.yml"
