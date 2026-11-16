@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from tradingbot.api.runtime import DashboardRuntime
+from tradingbot.markets.nse_calendar import MarketClosed, UnknownCalendarDate
 from tradingbot.money import quantum_for
 from tradingbot.api.schemas import (
     ApiMeta,
@@ -19,6 +20,10 @@ from tradingbot.api.schemas import (
     HealthResponse,
     InstrumentMetadata,
     InstrumentsResponse,
+    InstrumentMetadataV2,
+    InstrumentsV2Response,
+    NSESessionResponse,
+    NSEInstrumentMasterResponse,
     Money,
     PaperFill,
     PaperFillsResponse,
@@ -176,6 +181,109 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
             source="config/instruments.toml",
             items=items,
             reason=None if items else "instrument_configuration_unavailable_or_invalid",
+        )
+
+    @app.get("/api/v2/instruments", response_model=InstrumentsV2Response, tags=["market metadata"])
+    def instruments_v2() -> InstrumentsV2Response:
+        """Currency-neutral replacement for the legacy v1 instrument payload."""
+        items = [
+            InstrumentMetadataV2(
+                symbol=symbol,
+                name=record.name,
+                exchange=record.exchange,
+                tick_size=format(Decimal(str(record.instrument.tick_size)), "f"),
+                currency_code=record.instrument.currency_code,
+                tick_value=_money(
+                    record.instrument.tick_value_usd, record.instrument.currency_code
+                ),
+                point_value=_money(
+                    record.instrument.point_value_usd, record.instrument.currency_code
+                ),
+            )
+            for symbol, record in sorted(dashboard_runtime.instruments.items())
+        ]
+        return InstrumentsV2Response(
+            availability="AVAILABLE" if items else "NOT_CONFIGURED",
+            source="config/instruments.toml",
+            items=items,
+            reason=None if items else "instrument_configuration_unavailable_or_invalid",
+        )
+
+    @app.get(
+        "/api/v1/markets/nse/session",
+        response_model=NSESessionResponse,
+        tags=["market calendar"],
+    )
+    def nse_session(
+        day: date = Query(...),
+        segment: str = Query(..., pattern="^(equity|equity_derivatives)$"),
+        expiring_index_derivative: bool = Query(default=False),
+    ) -> NSESessionResponse:
+        """Read-only NSE continuous-session lookup; unknown coverage never opens trading."""
+        calendar = dashboard_runtime.nse_calendar
+        if calendar is None:
+            return NSESessionResponse(
+                status="NOT_CONFIGURED",
+                day=day.isoformat(),
+                segment=segment,
+                reason="nse_calendar_profile_not_configured",
+            )
+        try:
+            window = calendar.regular_session(
+                day,
+                segment,
+                expiring_index_derivative=expiring_index_derivative,
+            )
+        except MarketClosed as exc:
+            return NSESessionResponse(
+                status="CLOSED",
+                day=day.isoformat(),
+                segment=segment,
+                reason=str(exc),
+            )
+        except UnknownCalendarDate as exc:
+            return NSESessionResponse(
+                status="UNKNOWN",
+                day=day.isoformat(),
+                segment=segment,
+                reason=str(exc),
+            )
+        return NSESessionResponse(
+            status="OPEN",
+            day=day.isoformat(),
+            segment=segment,
+            session_name=window.session_name,
+            opens_at=window.opens_at.isoformat(),
+            closes_at=window.closes_at.isoformat(),
+        )
+
+    @app.get(
+        "/api/v1/markets/nse/instrument-master",
+        response_model=NSEInstrumentMasterResponse,
+        tags=["market metadata"],
+    )
+    def nse_instrument_master() -> NSEInstrumentMasterResponse:
+        """Expose validation status only; never invent or auto-select contracts."""
+        if not dashboard_runtime.nse_master_configured:
+            return NSEInstrumentMasterResponse(
+                status="NOT_CONFIGURED",
+                record_count=0,
+                reason="set_TRADINGBOT_NSE_INSTRUMENT_MASTER_to_a_normalized_v1_file",
+            )
+        if dashboard_runtime.nse_master_error:
+            return NSEInstrumentMasterResponse(
+                status="INVALID",
+                record_count=0,
+                reason=dashboard_runtime.nse_master_error,
+            )
+        records = dashboard_runtime.nse_master_records
+        return NSEInstrumentMasterResponse(
+            status="VALIDATED",
+            record_count=len(records),
+            latest_source_as_of=(
+                max(record.source_as_of for record in records).isoformat() if records else None
+            ),
+            source_file_sha256s=sorted({record.source_file_sha256 for record in records}),
         )
 
     @app.get("/api/v1/positions", response_model=AvailabilityPage, tags=["paper account"])
