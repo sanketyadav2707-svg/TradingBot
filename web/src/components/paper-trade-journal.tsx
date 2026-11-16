@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Clock3, Database, RefreshCw } from "lucide-react";
 import { tradingBotApi } from "@/lib/api/client";
-import type { Position, Trade } from "@/lib/api/types";
+import type { Money, Position, Trade } from "@/lib/api/types";
 
 function amount(value: string | null | undefined): string {
   if (value === null || value === undefined) return "Awaiting mark";
@@ -13,11 +13,11 @@ function amount(value: string | null | undefined): string {
     : "Unavailable";
 }
 
-function pnl(value: { amount: string; currency: "USD" } | null): string {
+function pnl(value: Money | null): string {
   if (!value) return "Awaiting mark";
   const n = Number(value.amount);
   if (!Number.isFinite(n)) return "Unavailable";
-  const formatted = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Math.abs(n));
+  const formatted = new Intl.NumberFormat("en-US", { style: "currency", currency: value.currency }).format(Math.abs(n));
   return `${n > 0 ? "+" : n < 0 ? "−" : ""}${formatted}`;
 }
 
