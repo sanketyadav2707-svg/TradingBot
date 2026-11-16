@@ -1,6 +1,6 @@
 # Phase 1: Currency-Neutral Financial Domain
 
-Status: Decimal money primitives, Decimal risk sizing, currency-aware paper ledger schema v2, fee-schedule paper execution and Decimal backtest arithmetic are implemented in the merged currency-foundation branch. Public legacy API/model field names remain compatibility adapters.
+Status: Core Decimal money primitives, Decimal risk sizing, currency-aware paper ledger schema v2, fee-schedule paper execution and Decimal backtest arithmetic are implemented. This integration adds a currency-neutral v2 instrument API while retaining v1 compatibility, and updates dashboard formatting for the supported currency precision set. Phase 1 remains a research/paper foundation, not an INR live-trading release.
 
 ## Objective
 
@@ -35,6 +35,13 @@ Make money denomination explicit and impossible to mix accidentally before addin
 - Mixed-currency and negative fee components are rejected.
 - Statutory tax bases/rates are not guessed. A broker/exchange-specific dated calculator must supply explicit tax amounts.
 
+## API and dashboard compatibility
+
+- `/api/v1/instruments` retains the historical `tick_value_usd` and `point_value_usd` response keys for existing clients.
+- `/api/v2/instruments` exposes `currency_code`, `tick_value`, and `point_value` without currency-specific legacy names.
+- Dashboard money types use the same explicit supported currency subset as the Python money module. Account cards, equity chart axes and tooltips format using the returned currency's minor-unit precision.
+- The API still serializes money as decimal strings. The frontend parses values only for display/charting, not for financial calculations.
+
 ## Compatibility and migration policy
 
 - Existing `Instrument`, `RiskLimits`, paper broker, backtest and SQLite interfaces still expose legacy `*_usd` field/column names for compatibility. PR #38 already attaches `currency_code` to the existing monetary denomination; this branch does not silently rename or reinterpret those fields.
@@ -50,16 +57,17 @@ Make money denomination explicit and impossible to mix accidentally before addin
 
 ## Explicitly not complete / blocked from live use
 
-1. Complete migration of remaining public price/report model fields to currency-neutral Money/Decimal types, with API versioning.
-2. Versioned SQLite migration from legacy `*_usd` columns to currency-neutral columns, including rollback/recovery tests.
-3. Wiring FeeSchedule into risk sizing, backtest fills and paper accounting.
-4. Broker-specific NSE statutory fee calculations, dated STT/stamp duty/GST/exchange charge rules and effective-date tests.
-5. API schema migration away from `tick_value_usd`/similar property names, with compatibility versioning.
-6. NSE contract master ingestion and validation of actual lot sizes/tick values.
-7. A complete ISO 4217 registry source/update mechanism.
-8. Frontend integration tests for multiple currency display and precision.
+1. Public price/report models still have float-compatible boundaries; migrating every market price and report metric to Decimal requires a separately versioned domain/API change.
+2. SQLite monetary columns retain legacy `*_usd` names for compatibility. Currency identity is stored per row and schema v2 prevents silent denomination changes, but a neutral-column migration with rollback/failure-injection coverage remains open.
+3. NSE statutory charges (brokerage, exchange charges, SEBI charges, STT, stamp duty and GST) must be derived from a dated broker-specific schedule and official tax bases. No rates are fabricated or assumed.
+4. The supported currency precision map is an explicit subset, not a self-updating complete ISO 4217 registry.
+5. Browser-level integration tests for multiple currencies and zero-/three-decimal currency display are not yet present.
+6. No broker-specific live execution, NSE live market-data stream or INR live-trading permission is implemented.
 
-These are not cosmetic tasks. They affect risk sizing, net P&L, and ledger correctness. This branch therefore adds the financial-domain primitives but does not enable INR live trading or claim Phase 1 release readiness.
+FeeSchedule is already used by Decimal risk sizing and paper-fill commission calculations, and Decimal backtest arithmetic is implemented. Those items are not outstanding tasks.
+
+The remaining items affect compatibility, statutory fee accuracy, or live readiness. They must not be bypassed by declaring the phase complete based only on unit tests.
+
 
 ## Acceptance gates before Phase 1 can be called fully complete
 
