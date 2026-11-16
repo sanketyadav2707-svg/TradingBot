@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
-from tradingbot.markets.nse_calendar import NSEMarketCalendar, NSESessionBarGuard\nfrom tradingbot.runtime.session import SessionController, SessionState
+from tradingbot.markets.nse_calendar import NSEMarketCalendar, NSESessionBarGuard
+from tradingbot.runtime.session import SessionController, SessionState
 
 UTC = timezone.utc
 T0 = datetime(2026, 11, 13, 14, 30, tzinfo=UTC)
