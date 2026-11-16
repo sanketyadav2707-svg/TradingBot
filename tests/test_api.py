@@ -288,8 +288,8 @@ def test_nse_instrument_master_api_reports_unconfigured_and_validated_states(tmp
     today = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
     master = tmp_path / "nse-master.csv"
     master.write_text(
-        "exchange_token,trading_symbol,underlying,segment,instrument_type,expiry,lot_size,quantity_freeze,tick_size,currency_code,source_as_of\\n"
-        f"12345,NIFTY_TEST_FUT,NIFTY,NSE_FO,FUTIDX,2027-01-28,65,1800,0.05,INR,{today}\\n",
+        "exchange_token,trading_symbol,underlying,segment,instrument_type,expiry,lot_size,quantity_freeze,tick_size,currency_code,source_as_of\n"
+        f"12345,NIFTY_TEST_FUT,NIFTY,NSE_FO,FUTIDX,2027-01-28,65,1800,0.05,INR,{today}\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("TRADINGBOT_NSE_INSTRUMENT_MASTER", str(master))
