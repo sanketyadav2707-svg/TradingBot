@@ -42,7 +42,7 @@ def test_paper_broker_rejects_fractional_slippage_ticks() -> None:
 def test_paper_broker_rejects_non_integer_quantity_and_invalid_side() -> None:
     broker = PaperBroker(Instrument("MES", 0.25, 1.25, 5.0))
     timestamp = datetime(2026, 1, 5, 14, 30, tzinfo=timezone.utc)
-    with pytest.raises(ValueError, match="integer between"):
+    with pytest.raises(ValueError, match="integer raw-unit quantity"):
         broker.submit_market(side=Side.LONG, quantity=1.5, reference_price=6000, timestamp=timestamp)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="side must be"):
         broker.submit_market(side=2, quantity=1, reference_price=6000, timestamp=timestamp)  # type: ignore[arg-type]

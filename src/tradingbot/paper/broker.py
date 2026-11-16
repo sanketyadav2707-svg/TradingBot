@@ -71,14 +71,12 @@ class PaperBroker:
     ) -> PaperFill:
         if not isinstance(side, Side) or side not in (Side.LONG, Side.SHORT):
             raise ValueError("A market order side must be Side.LONG or Side.SHORT")
-        if (
-            type(quantity) is not int
-            or quantity < self.instrument.lot_size
-            or quantity > self.instrument.quantity_freeze
-        ):
-            raise ValueError(
-                "Quantity must be at least one lot and no greater than the instrument quantity freeze"
-            )
+        if type(quantity) is not int:
+            raise ValueError("Quantity must be an integer raw-unit quantity")
+        if quantity < self.instrument.lot_size:
+            raise ValueError("Quantity must be at least one lot")
+        if quantity > self.instrument.quantity_freeze:
+            raise ValueError("Quantity exceeds the instrument quantity freeze")
         if quantity % self.instrument.quantity_step:
             raise ValueError("Quantity must be a multiple of instrument.quantity_step")
         if (
