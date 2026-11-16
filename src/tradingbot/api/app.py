@@ -24,6 +24,7 @@ from tradingbot.api.schemas import (
     InstrumentsV2Response,
     NSESessionResponse,
     NSEInstrumentMasterResponse,
+    NSEMarketReadinessResponse,
     Money,
     PaperFill,
     PaperFillsResponse,
@@ -263,20 +264,24 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
         tags=["market metadata"],
     )
     def nse_instrument_master() -> NSEInstrumentMasterResponse:
-        """Expose validation status only; never invent or auto-select contracts."""
+        """Expose daily-file validation without exposing local filesystem paths."""
+        source_variant = dashboard_runtime.nse_master_variant
         if not dashboard_runtime.nse_master_configured:
             return NSEInstrumentMasterResponse(
                 status="NOT_CONFIGURED",
                 record_count=0,
-                reason="set_TRADINGBOT_NSE_INSTRUMENT_MASTER_to_a_normalized_v1_file",
+                source_variant=source_variant,
+                reason="set_TRADINGBOT_NSE_INSTRUMENT_MASTER_to_a_normalized_v1_or_v2_file",
             )
         if dashboard_runtime.nse_master_error:
             return NSEInstrumentMasterResponse(
                 status="INVALID",
                 record_count=0,
+                source_variant=source_variant,
                 reason=dashboard_runtime.nse_master_error,
             )
         records = dashboard_runtime.nse_master_records
+        manifest = dashboard_runtime.nse_master_manifest or {}
         return NSEInstrumentMasterResponse(
             status="VALIDATED",
             record_count=len(records),
@@ -284,6 +289,64 @@ def create_app(runtime: DashboardRuntime | None = None) -> FastAPI:
                 max(record.source_as_of for record in records).isoformat() if records else None
             ),
             source_file_sha256s=sorted({record.source_file_sha256 for record in records}),
+            source_variant=source_variant,
+            nse_tradable_count=int(manifest.get("nse_tradable_count", 0)),
+            excluded_bse_only_count=int(manifest.get("excluded_bse_only_count", 0)),
+            manifest_sha256=(
+                str(manifest["manifest_sha256"]) if manifest.get("manifest_sha256") else None
+            ),
+        )
+
+    @app.get(
+        "/api/v1/markets/nse/readiness",
+        response_model=NSEMarketReadinessResponse,
+        tags=["market metadata"],
+    )
+    def nse_market_readiness() -> NSEMarketReadinessResponse:
+        """Fail-closed summary of why an NSE execution runtime is not yet ready."""
+        reasons: list[str] = []
+        calendar = dashboard_runtime.nse_calendar
+        if calendar is None:
+            reasons.append("nse_market_calendar_not_configured")
+            coverage_start = None
+            coverage_end = None
+        else:
+            coverage_start = calendar.coverage_start.isoformat()
+            coverage_end = calendar.coverage_end.isoformat()
+
+        records = dashboard_runtime.nse_master_records
+        manifest = dashboard_runtime.nse_master_manifest or {}
+        if not dashboard_runtime.nse_master_configured:
+            master_status = "NOT_CONFIGURED"
+            reasons.append("nse_instrument_master_not_configured")
+        elif dashboard_runtime.nse_master_error:
+            master_status = "INVALID"
+            reasons.append("nse_instrument_master_invalid")
+        else:
+            master_status = "VALIDATED"
+            if int(manifest.get("nse_tradable_count", 0)) < 1:
+                reasons.append("no_nse_tradable_contracts_in_master")
+
+        # No live execution/data components are enabled by this research build.
+        reasons.extend([
+            "broker_adapter_not_connected",
+            "live_market_data_feed_not_connected",
+            "verified_broker_fee_schedule_not_configured",
+            "nse_session_guard_requires_explicit_runtime_attachment",
+        ])
+        return NSEMarketReadinessResponse(
+            status="BLOCKED",
+            reasons=reasons,
+            calendar_coverage_start=coverage_start,
+            calendar_coverage_end=coverage_end,
+            master_status=master_status,
+            source_variant=dashboard_runtime.nse_master_variant,
+            record_count=len(records),
+            nse_tradable_count=int(manifest.get("nse_tradable_count", 0)),
+            excluded_bse_only_count=int(manifest.get("excluded_bse_only_count", 0)),
+            manifest_sha256=(
+                str(manifest["manifest_sha256"]) if manifest.get("manifest_sha256") else None
+            ),
         )
 
     @app.get("/api/v1/positions", response_model=AvailabilityPage, tags=["paper account"])

@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
+import os
+import tempfile
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Callable, Iterable
@@ -22,6 +25,7 @@ NSE_HOLIDAY_SOURCE = (
 NSE_CONTRACT_INFO_SOURCE = (
     "https://www.nseindia.com/static/products-services/equity-derivatives-contract-information"
 )
+NSE_MII_REPORTS_SOURCE = "https://www.nseindia.com/all-reports-derivatives"
 NSE_CONTRACT_SPEC_SOURCE = (
     "https://www.nseindia.com/static/products-services/equity-derivatives-contract-specifications"
 )
@@ -164,7 +168,8 @@ class NSEInstrumentMasterRecord:
     source_as_of: date
     retrieved_at: datetime
     source_file_sha256: str
-    source: str = NSE_CONTRACT_INFO_SOURCE
+    source: str = NSE_MII_REPORTS_SOURCE
+    admission_type: str = "1"
 
     def __post_init__(self) -> None:
         required = (
@@ -194,12 +199,20 @@ class NSEInstrumentMasterRecord:
             or any(char not in "0123456789abcdef" for char in self.source_file_sha256.lower())
         ):
             raise ValueError("source_file_sha256_must_be_64_hex_characters")
-        if self.currency_code != "INR":
+        if self.currency_code.upper() != "INR":
             raise ValueError("nse_equity_instruments_must_be_inr")
+        object.__setattr__(self, "currency_code", "INR")
+        if self.admission_type not in {"1", "2"}:
+            raise ValueError("unsupported_nse_admission_type")
         if self.retrieved_at.tzinfo is None or self.retrieved_at.utcoffset() is None:
             raise ValueError("retrieved_at_must_be_timezone_aware")
         if self.source_as_of > self.retrieved_at.astimezone(NSE_TZ).date():
             raise ValueError("instrument_master_source_date_cannot_be_future")
+
+    @property
+    def nse_tradable(self) -> bool:
+        """False for BSE-listed contracts in the combined MII contract file."""
+        return self.admission_type == "1"
 
     def validate_freshness(self, as_of: date, max_age_days: int = 1) -> None:
         if type(max_age_days) is not int or max_age_days < 0:
@@ -211,30 +224,54 @@ class NSEInstrumentMasterRecord:
             )
 
 
+NSE_MASTER_VARIANTS = ("NSE_EXCLUSIVE", "NSE_AND_BSE_EXCLUSIVE")
+
 NORMALIZED_MASTER_COLUMNS = (
     "exchange_token", "trading_symbol", "underlying", "segment",
     "instrument_type", "expiry", "lot_size", "quantity_freeze",
     "tick_size", "currency_code", "source_as_of",
 )
+NORMALIZED_MASTER_COLUMNS_V2 = NORMALIZED_MASTER_COLUMNS + ("admission_type",)
 
 
-def load_normalized_instrument_master(path: str | Path, retrieved_at: datetime) -> tuple[NSEInstrumentMasterRecord, ...]:
-    """Load an explicitly normalized CSV, not an assumed raw NSE download format.
+def load_normalized_instrument_master(
+    path: str | Path,
+    retrieved_at: datetime,
+    *,
+    source_variant: str = "NSE_EXCLUSIVE",
+) -> tuple[NSEInstrumentMasterRecord, ...]:
+    """Load an explicitly normalized daily file, never guess raw NSE columns.
 
-    A raw exchange file must first pass through a versioned column-mapping adapter.
-    The original file's SHA-256 is retained as source provenance.
+    Schema v1 is only valid for the NSE-exclusive file. Schema v2 adds the
+    normalized admission_type mapping required for the combined NSE+BSE file.
+    The official raw MII field 30 must be mapped by a separately pinned adapter;
+    value 2 is BSE-listed and is retained for audit but not NSE-tradable.
     """
+    if source_variant not in NSE_MASTER_VARIANTS:
+        raise ValueError(f"unsupported_nse_master_source_variant:{source_variant}")
+    if retrieved_at.tzinfo is None or retrieved_at.utcoffset() is None:
+        raise ValueError("retrieved_at_must_be_timezone_aware")
+
     file_path = Path(path)
     digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
     with file_path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
-        if tuple(reader.fieldnames or ()) != NORMALIZED_MASTER_COLUMNS:
-            raise ValueError("instrument_master_header_mismatch:expected_normalized_schema_v1")
+        header = tuple(reader.fieldnames or ())
+        if header == NORMALIZED_MASTER_COLUMNS:
+            schema_version = 1
+            if source_variant != "NSE_EXCLUSIVE":
+                raise ValueError("combined_nse_bse_master_requires_normalized_schema_v2")
+        elif header == NORMALIZED_MASTER_COLUMNS_V2:
+            schema_version = 2
+        else:
+            raise ValueError("instrument_master_header_mismatch:expected_normalized_schema_v1_or_v2")
+
         records: list[NSEInstrumentMasterRecord] = []
         for row_number, row in enumerate(reader, start=2):
             try:
                 expiry = date.fromisoformat(row["expiry"]) if row["expiry"] else None
-                records.append(NSEInstrumentMasterRecord(
+                admission_type = row["admission_type"] if schema_version == 2 else "1"
+                record = NSEInstrumentMasterRecord(
                     exchange_token=row["exchange_token"],
                     trading_symbol=row["trading_symbol"],
                     underlying=row["underlying"],
@@ -248,7 +285,11 @@ def load_normalized_instrument_master(path: str | Path, retrieved_at: datetime) 
                     source_as_of=date.fromisoformat(row["source_as_of"]),
                     retrieved_at=retrieved_at,
                     source_file_sha256=digest,
-                ))
+                    admission_type=admission_type,
+                )
+                if source_variant == "NSE_EXCLUSIVE" and not record.nse_tradable:
+                    raise ValueError("bse_only_contract_not_allowed_in_nse_exclusive_file")
+                records.append(record)
             except (KeyError, TypeError, ValueError) as exc:
                 raise ValueError(f"invalid_instrument_master_row:{row_number}:{exc}") from exc
     if not records:
@@ -257,6 +298,82 @@ def load_normalized_instrument_master(path: str | Path, retrieved_at: datetime) 
     if len(identities) != len(set(identities)):
         raise ValueError("duplicate_instrument_master_identity")
     return tuple(records)
+
+
+def build_nse_master_manifest(
+    records: tuple[NSEInstrumentMasterRecord, ...],
+    *,
+    source_variant: str,
+    validated_as_of: date | None = None,
+    max_age_days: int = 1,
+) -> dict[str, object]:
+    """Create a deterministic manifest for one explicitly identified daily file."""
+    if source_variant not in NSE_MASTER_VARIANTS:
+        raise ValueError(f"unsupported_nse_master_source_variant:{source_variant}")
+    if type(max_age_days) is not int or max_age_days < 0:
+        raise ValueError("max_age_days_must_be_non_negative_integer")
+    if not records:
+        raise ValueError("instrument_master_empty")
+    if any(not isinstance(record, NSEInstrumentMasterRecord) for record in records):
+        raise TypeError("manifest_records_must_be_nse_instrument_master_records")
+
+    source_hashes = {record.source_file_sha256 for record in records}
+    source_dates = {record.source_as_of for record in records}
+    retrieved_times = {record.retrieved_at.astimezone(timezone.utc).isoformat() for record in records}
+    if len(source_hashes) != 1 or len(source_dates) != 1 or len(retrieved_times) != 1:
+        raise ValueError("manifest_requires_one_daily_source_file_and_retrieval_timestamp")
+    if source_variant == "NSE_EXCLUSIVE" and any(not record.nse_tradable for record in records):
+        raise ValueError("bse_only_contract_not_allowed_in_nse_exclusive_file")
+
+    segment_counts: dict[str, int] = {}
+    for record in records:
+        segment_counts[record.segment] = segment_counts.get(record.segment, 0) + 1
+    body: dict[str, object] = {
+        "manifest_schema_version": 1,
+        "normalized_schema_version": 2 if any(
+            record.admission_type != "1" for record in records
+        ) or source_variant == "NSE_AND_BSE_EXCLUSIVE" else 1,
+        "source_variant": source_variant,
+        "source": NSE_MII_REPORTS_SOURCE,
+        "source_as_of": next(iter(source_dates)).isoformat(),
+        "retrieved_at": next(iter(retrieved_times)),
+        "validated_as_of": validated_as_of.isoformat() if validated_as_of else None,
+        "max_age_days": max_age_days,
+        "normalized_file_sha256": next(iter(source_hashes)),
+        "record_count": len(records),
+        "nse_tradable_count": sum(1 for record in records if record.nse_tradable),
+        "excluded_bse_only_count": sum(1 for record in records if not record.nse_tradable),
+        "segment_counts": dict(sorted(segment_counts.items())),
+    }
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    body["manifest_sha256"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return body
+
+
+def write_nse_master_manifest(path: str | Path, manifest: dict[str, object]) -> None:
+    """Atomically write a validated manifest so readers never see partial JSON."""
+    file_path = Path(path)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(manifest, indent=2, sort_keys=True, ensure_ascii=False) + chr(10)
+    temp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            newline="",
+            dir=file_path.parent,
+            prefix=f".{file_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = handle.name
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, file_path)
+    finally:
+        if temp_path is not None and os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 
 

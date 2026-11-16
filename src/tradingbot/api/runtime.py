@@ -22,7 +22,9 @@ from tradingbot.models import Instrument
 from tradingbot.markets.nse_calendar import (
     NSEInstrumentMasterRecord,
     NSEMarketCalendar,
+    build_nse_master_manifest,
     load_normalized_instrument_master,
+    write_nse_master_manifest,
 )
 from tradingbot.paper.broker import PaperBroker
 from tradingbot.risk.limits import RiskLimits
@@ -46,6 +48,8 @@ class DashboardRuntime:
     nse_calendar: NSEMarketCalendar | None = None
     nse_master_records: tuple[NSEInstrumentMasterRecord, ...] = ()
     nse_master_configured: bool = False
+    nse_master_variant: str = "NSE_EXCLUSIVE"
+    nse_master_manifest: dict[str, object] | None = None
     nse_master_error: str | None = None
     configuration_errors: tuple[str, ...] = ()
 
@@ -162,6 +166,9 @@ class DashboardRuntime:
             runtime.nse_calendar = NSEMarketCalendar()
 
         master_path = os.environ.get("TRADINGBOT_NSE_INSTRUMENT_MASTER")
+        runtime.nse_master_variant = os.environ.get(
+            "TRADINGBOT_NSE_MASTER_VARIANT", "NSE_EXCLUSIVE"
+        ).upper()
         if master_path:
             runtime.nse_master_configured = True
             try:
@@ -169,11 +176,21 @@ class DashboardRuntime:
                 records = load_normalized_instrument_master(
                     Path(master_path).expanduser(),
                     retrieved_at,
+                    source_variant=runtime.nse_master_variant,
                 )
                 as_of = retrieved_at.astimezone(ZoneInfo("Asia/Kolkata")).date()
                 for record in records:
                     record.validate_freshness(as_of, max_age_days=1)
                 runtime.nse_master_records = records
+                runtime.nse_master_manifest = build_nse_master_manifest(
+                    records,
+                    source_variant=runtime.nse_master_variant,
+                    validated_as_of=as_of,
+                    max_age_days=1,
+                )
+                manifest_path = os.environ.get("TRADINGBOT_NSE_INSTRUMENT_MASTER_MANIFEST")
+                if manifest_path:
+                    write_nse_master_manifest(Path(manifest_path).expanduser(), runtime.nse_master_manifest)
             except (OSError, TypeError, ValueError) as exc:
                 runtime.nse_master_error = str(exc)
 

@@ -9,7 +9,9 @@ from tradingbot.markets.nse_calendar import (
     NSEMarketCalendar,
     StaleInstrumentMaster,
     UnknownCalendarDate,
+    build_nse_master_manifest,
     load_normalized_instrument_master,
+    write_nse_master_manifest,
 )
 
 
@@ -137,4 +139,82 @@ def test_normalized_contract_master_loader_rejects_unknown_headers_and_duplicate
     with pytest.raises(ValueError, match="instrument_master_header_mismatch"):
         load_normalized_instrument_master(
             path, datetime(2026, 11, 16, 10, 0, tzinfo=timezone.utc)
+        )
+
+
+
+def test_combined_nse_bse_master_keeps_bse_only_rows_out_of_nse_tradable_count(tmp_path):
+    path = tmp_path / "combined_master.csv"
+    path.write_text(
+        "exchange_token,trading_symbol,underlying,segment,instrument_type,expiry,lot_size,quantity_freeze,tick_size,currency_code,source_as_of,admission_type\n"
+        "12345,NIFTY26DEC_FUT,NIFTY,NSE_FO,FUTIDX,2026-12-29,65,1800,0.05,INR,2026-11-16,1\n"
+        "67890,BSEONLY26DEC_FUT,BSEONLY,NSE_FO,FUTSTK,2026-12-29,50,1000,0.05,INR,2026-11-16,2\n",
+        encoding="utf-8",
+    )
+    retrieved_at = datetime(2026, 11, 16, 10, 0, tzinfo=timezone.utc)
+    records = load_normalized_instrument_master(
+        path,
+        retrieved_at,
+        source_variant="NSE_AND_BSE_EXCLUSIVE",
+    )
+    assert len(records) == 2
+    assert records[0].nse_tradable is True
+    assert records[1].nse_tradable is False
+
+    manifest = build_nse_master_manifest(
+        records,
+        source_variant="NSE_AND_BSE_EXCLUSIVE",
+        validated_as_of=date(2026, 11, 16),
+        max_age_days=1,
+    )
+    assert manifest["record_count"] == 2
+    assert manifest["nse_tradable_count"] == 1
+    assert manifest["excluded_bse_only_count"] == 1
+    assert manifest["normalized_schema_version"] == 2
+    assert len(manifest["manifest_sha256"]) == 64
+
+    target = tmp_path / "manifests" / "nse-fo.json"
+    write_nse_master_manifest(target, manifest)
+    saved = __import__("json").loads(target.read_text(encoding="utf-8"))
+    assert saved == manifest
+    assert not list(target.parent.glob("*.tmp"))
+
+
+def test_combined_master_requires_admission_type_mapping_and_nse_only_rejects_bse_rows(tmp_path):
+    v1 = tmp_path / "v1.csv"
+    v1.write_text(
+        "exchange_token,trading_symbol,underlying,segment,instrument_type,expiry,lot_size,quantity_freeze,tick_size,currency_code,source_as_of\n"
+        "12345,NIFTY26DEC_FUT,NIFTY,NSE_FO,FUTIDX,2026-12-29,65,1800,0.05,INR,2026-11-16\n",
+        encoding="utf-8",
+    )
+    retrieved = datetime(2026, 11, 16, 10, 0, tzinfo=timezone.utc)
+    with pytest.raises(ValueError, match="combined_nse_bse_master_requires_normalized_schema_v2"):
+        load_normalized_instrument_master(
+            v1, retrieved, source_variant="NSE_AND_BSE_EXCLUSIVE"
+        )
+
+    v2 = tmp_path / "v2-bad-variant.csv"
+    v2.write_text(
+        "exchange_token,trading_symbol,underlying,segment,instrument_type,expiry,lot_size,quantity_freeze,tick_size,currency_code,source_as_of,admission_type\n"
+        "67890,BSEONLY26DEC_FUT,BSEONLY,NSE_FO,FUTSTK,2026-12-29,50,1000,0.05,INR,2026-11-16,2\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="bse_only_contract_not_allowed"):
+        load_normalized_instrument_master(
+            v2_bad_variant, retrieved, source_variant="NSE_EXCLUSIVE"
+        )
+
+
+def test_combined_master_rejects_unknown_admission_type(tmp_path):
+    path = tmp_path / "bad-admission.csv"
+    path.write_text(
+        "exchange_token,trading_symbol,underlying,segment,instrument_type,expiry,lot_size,quantity_freeze,tick_size,currency_code,source_as_of,admission_type\n"
+        "12345,NIFTY26DEC_FUT,NIFTY,NSE_FO,FUTIDX,2026-12-29,65,1800,0.05,INR,2026-11-16,9\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="unsupported_nse_admission_type"):
+        load_normalized_instrument_master(
+            path,
+            datetime(2026, 11, 16, 10, 0, tzinfo=timezone.utc),
+            source_variant="NSE_AND_BSE_EXCLUSIVE",
         )

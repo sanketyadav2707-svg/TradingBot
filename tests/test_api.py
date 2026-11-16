@@ -295,6 +295,7 @@ def test_nse_instrument_master_api_reports_unconfigured_and_validated_states(tmp
         f"12345,NIFTY_TEST_FUT,NIFTY,NSE_FO,FUTIDX,2027-01-28,65,1800,0.05,INR,{today}\n",
         encoding="utf-8",
     )
+    monkeypatch.setenv("TRADINGBOT_NSE_MASTER_VARIANT", "NSE_EXCLUSIVE")
     monkeypatch.setenv("TRADINGBOT_NSE_INSTRUMENT_MASTER", str(master))
     runtime = DashboardRuntime.from_config(
         database_path=tmp_path / "master-valid.sqlite3"
@@ -305,6 +306,18 @@ def test_nse_instrument_master_api_reports_unconfigured_and_validated_states(tmp
     assert payload["status"] == "VALIDATED"
     assert payload["record_count"] == 1
     assert len(payload["source_file_sha256s"][0]) == 64
+    assert payload["source_variant"] == "NSE_EXCLUSIVE"
+    assert payload["nse_tradable_count"] == 1
+    assert payload["excluded_bse_only_count"] == 0
+    assert len(payload["manifest_sha256"]) == 64
+
+    readiness = TestClient(create_app(runtime)).get("/api/v1/markets/nse/readiness").json()
+    assert readiness["status"] == "BLOCKED"
+    assert readiness["trading_enabled"] is False
+    assert readiness["nse_tradable_count"] == 1
+    assert "broker_adapter_not_connected" in readiness["reasons"]
+    assert "live_market_data_feed_not_connected" in readiness["reasons"]
+    assert "verified_broker_fee_schedule_not_configured" in readiness["reasons"]
 
 
 
@@ -454,3 +467,36 @@ def test_dashboard_runtime_prefers_currency_neutral_string_config(tmp_path) -> N
         "amount": "1.00",
         "currency": "INR",
     }
+
+
+
+def test_nse_instrument_master_api_reports_bse_only_exclusions(tmp_path, monkeypatch):
+    from tradingbot.api.runtime import DashboardRuntime
+
+    master = tmp_path / "nse-bse-master-v2.csv"
+    master.write_text(
+        "exchange_token,trading_symbol,underlying,segment,instrument_type,expiry,lot_size,quantity_freeze,tick_size,currency_code,source_as_of,admission_type\n"
+        "12345,NIFTY26DEC_FUT,NIFTY,NSE_FO,FUTIDX,2026-12-29,65,1800,0.05,INR,2026-11-16,1\n"
+        "67890,BSEONLY26DEC_FUT,BSEONLY,NSE_FO,FUTSTK,2026-12-29,50,1000,0.05,INR,2026-11-16,2\n",
+        encoding="utf-8",
+    )
+    manifest_path = tmp_path / "runtime-manifest.json"
+    monkeypatch.setenv("TRADINGBOT_NSE_MASTER_VARIANT", "NSE_AND_BSE_EXCLUSIVE")
+    monkeypatch.setenv("TRADINGBOT_NSE_INSTRUMENT_MASTER", str(master))
+    monkeypatch.setenv("TRADINGBOT_NSE_INSTRUMENT_MASTER_MANIFEST", str(manifest_path))
+    runtime = DashboardRuntime.from_config(
+        database_path=tmp_path / "nse-bse-api.sqlite3"
+    )
+    assert manifest_path.exists()
+    saved_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert saved_manifest["nse_tradable_count"] == 1
+    assert saved_manifest["excluded_bse_only_count"] == 1
+    payload = TestClient(create_app(runtime)).get(
+        "/api/v1/markets/nse/instrument-master"
+    ).json()
+    assert payload["status"] == "VALIDATED"
+    assert payload["source_variant"] == "NSE_AND_BSE_EXCLUSIVE"
+    assert payload["record_count"] == 2
+    assert payload["nse_tradable_count"] == 1
+    assert payload["excluded_bse_only_count"] == 1
+    assert len(payload["manifest_sha256"]) == 64

@@ -133,4 +133,25 @@ class NSEInstrumentMasterResponse(StrictResponse):
     record_count: int
     latest_source_as_of: str | None = None
     source_file_sha256s: list[str] = Field(default_factory=list)
+    source_variant: str | None = None
+    nse_tradable_count: int = 0
+    excluded_bse_only_count: int = 0
+    manifest_sha256: str | None = None
     reason: str | None = None
+
+
+class NSEMarketReadinessResponse(StrictResponse):
+    status: Literal["BLOCKED"]
+    reasons: list[str]
+    calendar_coverage_start: str | None = None
+    calendar_coverage_end: str | None = None
+    master_status: Literal["VALIDATED", "INVALID", "NOT_CONFIGURED"]
+    source_variant: str
+    record_count: int
+    nse_tradable_count: int
+    excluded_bse_only_count: int
+    manifest_sha256: str | None = None
+    broker_connected: Literal[False] = False
+    market_data_connected: Literal[False] = False
+    broker_fee_schedule_configured: Literal[False] = False
+    trading_enabled: Literal[False] = False
