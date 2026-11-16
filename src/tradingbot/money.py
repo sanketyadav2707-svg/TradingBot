@@ -7,6 +7,7 @@ interfaces remain adapters until their separately versioned migration.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 from typing import Any
 
@@ -138,7 +139,13 @@ class FeeSchedule:
     def __post_init__(self) -> None:
         if not self.schedule_id.strip():
             raise ValueError("schedule_id must be non-empty")
-        currency_minor_units(self.currency)
+        currency = self.currency.upper()
+        currency_minor_units(currency)
+        object.__setattr__(self, "currency", currency)
+        try:
+            date.fromisoformat(self.effective_from)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("effective_from must be an ISO date (YYYY-MM-DD)") from exc
         for name in (
             "brokerage_per_unit_per_side",
             "exchange_charge_per_unit_per_side",
