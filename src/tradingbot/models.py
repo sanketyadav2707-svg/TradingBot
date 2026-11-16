@@ -34,6 +34,7 @@ class Instrument:
         if not self.symbol.strip():
             raise ValueError("Instrument symbol cannot be empty")
         currency_minor_units(self.currency_code)
+        object.__setattr__(self, "currency_code", self.currency_code.upper())
         if not all(isfinite(value) and value > 0 for value in (self.tick_size, self.tick_value_usd, self.point_value_usd)):
             raise ValueError("Instrument tick and point values must be finite and positive")
         expected = self.tick_size * self.point_value_usd
