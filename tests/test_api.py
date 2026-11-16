@@ -243,3 +243,62 @@ def test_readiness_requires_configuration_instruments_and_paper_database(tmp_pat
     assert payload["broker_connected"] is False
     assert payload["market_data_connected"] is False
     assert payload["timestamp"].endswith("Z")
+
+
+def test_nse_session_api_fails_closed_for_closed_and_unverified_dates(tmp_path, monkeypatch):
+    monkeypatch.delenv("TRADINGBOT_NSE_INSTRUMENT_MASTER", raising=False)
+    runtime = DashboardRuntime.from_config(database_path=tmp_path / "nse-session.sqlite3")
+    client = TestClient(create_app(runtime))
+
+    opened = client.get(
+        "/api/v1/markets/nse/session",
+        params={"day": "2026-11-16", "segment": "equity"},
+    ).json()
+    assert opened["status"] == "OPEN"
+    assert opened["opens_at"] == "2026-11-16T09:15:00+05:30"
+    assert opened["closes_at"] == "2026-11-16T15:30:00+05:30"
+
+    holiday = client.get(
+        "/api/v1/markets/nse/session",
+        params={"day": "2026-11-24", "segment": "equity"},
+    ).json()
+    assert holiday["status"] == "CLOSED"
+
+    unknown = client.get(
+        "/api/v1/markets/nse/session",
+        params={"day": "2027-01-04", "segment": "equity"},
+    ).json()
+    assert unknown["status"] == "UNKNOWN"
+    assert "unverified_nse_calendar_date" in unknown["reason"]
+
+
+def test_nse_instrument_master_api_reports_unconfigured_and_validated_states(tmp_path, monkeypatch):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from tradingbot.api.runtime import DashboardRuntime
+
+    monkeypatch.delenv("TRADINGBOT_NSE_INSTRUMENT_MASTER", raising=False)
+    empty_runtime = DashboardRuntime.from_config(
+        database_path=tmp_path / "master-empty.sqlite3"
+    )
+    empty_client = TestClient(create_app(empty_runtime))
+    assert empty_client.get("/api/v1/markets/nse/instrument-master").json()["status"] == "NOT_CONFIGURED"
+
+    today = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
+    master = tmp_path / "nse-master.csv"
+    master.write_text(
+        "exchange_token,trading_symbol,underlying,segment,instrument_type,expiry,lot_size,quantity_freeze,tick_size,currency_code,source_as_of\\n"
+        f"12345,NIFTY_TEST_FUT,NIFTY,NSE_FO,FUTIDX,2027-01-28,65,1800,0.05,INR,{today}\\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TRADINGBOT_NSE_INSTRUMENT_MASTER", str(master))
+    runtime = DashboardRuntime.from_config(
+        database_path=tmp_path / "master-valid.sqlite3"
+    )
+    payload = TestClient(create_app(runtime)).get(
+        "/api/v1/markets/nse/instrument-master"
+    ).json()
+    assert payload["status"] == "VALIDATED"
+    assert payload["record_count"] == 1
+    assert len(payload["source_file_sha256s"][0]) == 64
