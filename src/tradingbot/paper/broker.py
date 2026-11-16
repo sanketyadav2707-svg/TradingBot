@@ -10,7 +10,7 @@ from typing import Callable
 from uuid import uuid4
 
 from tradingbot.models import Instrument, Side
-from tradingbot.money import FeeSchedule
+from tradingbot.money import FeeSchedule, Money
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +24,11 @@ class PaperFill:
     commission_usd: Decimal | float
     timestamp: datetime
     currency_code: str = "USD"
+
+    @property
+    def commission(self) -> Money:
+        """Currency-neutral commission; commission_usd remains a compatibility alias."""
+        return Money.of(str(self.commission_usd), self.currency_code)
 
 
 class PaperBroker:
