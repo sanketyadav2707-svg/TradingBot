@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 from tradingbot.models import Instrument, Side
+from tradingbot.money import currency_minor_units
 from tradingbot.paper.broker import PaperFill
 
 _CENT = Decimal("0.01")
@@ -67,9 +68,8 @@ class PaperAccountStore:
             raise ValueError("Use a temporary SQLite file for tests; in-memory databases are unsupported")
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
-        if not isinstance(currency_code, str) or len(currency_code) != 3 or not currency_code.isalpha() or currency_code != currency_code.upper():
-            raise ValueError("currency_code must be a three-letter uppercase ISO 4217 code")
-        self.currency_code = currency_code
+        currency_minor_units(currency_code)
+        self.currency_code = currency_code.upper()
         starting_balance = _decimal(starting_balance_usd, "starting_balance_usd")
         if starting_balance <= 0:
             raise ValueError("starting_balance_usd must be positive")
