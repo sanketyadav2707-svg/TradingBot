@@ -992,7 +992,7 @@ def test_schema_v3_account_migrates_exchange_quantity_metadata_to_v4(tmp_path) -
         columns = {
             row[1] for row in connection.execute("PRAGMA table_info(fills)")
         }
-    assert version == "4"
+    assert version == "5"
     assert {"lot_size", "quantity_step", "quantity_freeze"} <= columns
 
 
