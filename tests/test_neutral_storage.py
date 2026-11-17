@@ -88,8 +88,16 @@ def test_schema_v5_persists_neutral_columns_and_legacy_aliases_inr(tmp_path):
     assert neutral_commission_rows == 2
 
     # Reopening is idempotent and does not reinterpret or reset the INR account.
-    reopened = PaperAccountStore(database, 100000, currency_code="INR")
-    assert reopened.get_summary()["currency_code"] == "INR"
+    PaperAccountStore(database, 100000, currency_code="INR")
+    with sqlite3.connect(database) as connection:
+        currency = connection.execute(
+            "SELECT value FROM account_meta WHERE key='currency_code'"
+        ).fetchone()[0]
+        version = connection.execute(
+            "SELECT value FROM account_meta WHERE key='schema_version'"
+        ).fetchone()[0]
+    assert currency == "INR"
+    assert version == "5"
 
 
 def test_schema_v5_neutral_columns_reject_cross_currency_reopen(tmp_path):
