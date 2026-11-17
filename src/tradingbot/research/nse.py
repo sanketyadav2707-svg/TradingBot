@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import random
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
@@ -735,6 +736,68 @@ def split_nse_chronological_holdout(
     )
 
 
+def daily_block_bootstrap_interval(
+    daily_net_pnl: dict[date, Decimal],
+    *,
+    replicates: int = 2000,
+    seed: int = 20261117,
+) -> dict[str, Any]:
+    """Deterministic trading-day bootstrap for mean daily net P&L.
+
+    This is an uncertainty diagnostic, not a profitability test. It resamples
+    whole trading days rather than overlapping minute outcomes or individual
+    trades. Fewer than two observed trading days is explicitly inconclusive.
+    """
+    if type(replicates) is not int or replicates < 100:
+        raise ValueError("bootstrap_replicates_must_be_at_least_100")
+    if type(seed) is not int:
+        raise TypeError("bootstrap_seed_must_be_integer")
+    values = [ _decimal(value, "daily_net_pnl") for _, value in sorted(daily_net_pnl.items()) ]
+    if len(values) < 2:
+        return {
+            "status": "insufficient_sessions",
+            "sessions": len(values),
+            "replicates": 0,
+            "mean_daily_net_pnl_inr": format(sum(values, D("0")) / len(values), "f") if values else "0",
+            "ci_95_lower_inr": None,
+            "ci_95_upper_inr": None,
+        }
+    rng = random.Random(seed)
+    count = len(values)
+    means: list[Decimal] = []
+    for _ in range(replicates):
+        sample = [values[rng.randrange(count)] for _ in range(count)]
+        means.append(sum(sample, D("0")) / D(count))
+    means.sort()
+
+    def percentile(fraction: Decimal) -> Decimal:
+        position = fraction * D(len(means) - 1)
+        lower = int(position)
+        upper = min(lower + 1, len(means) - 1)
+        weight = position - D(lower)
+        return means[lower] * (D("1") - weight) + means[upper] * weight
+
+    observed_mean = sum(values, D("0")) / D(count)
+    return {
+        "status": "estimated",
+        "unit": "trading_day_block",
+        "sessions": count,
+        "replicates": replicates,
+        "seed": seed,
+        "mean_daily_net_pnl_inr": format(observed_mean, "f"),
+        "ci_95_lower_inr": format(percentile(D("0.025")), "f"),
+        "ci_95_upper_inr": format(percentile(D("0.975")), "f"),
+        "interpretation": "Descriptive uncertainty interval; not a significance or profitability guarantee.",
+    }
+
+
+def _daily_net_pnl(trades: tuple[NSETrade, ...]) -> dict[date, Decimal]:
+    daily: dict[date, Decimal] = defaultdict(lambda: D("0"))
+    for trade in trades:
+        daily[trade.trading_date] += trade.net_pnl.amount
+    return dict(daily)
+
+
 def evaluate_nse_strategy_set(
     bars: list[NSEBar],
     instrument: NSEResearchInstrument,
@@ -810,6 +873,9 @@ def evaluate_nse_strategy_set(
                 key = f"{strategy}_spread{scenario.spread_ticks_per_side}_slip{scenario.slippage_ticks_per_side}"
                 results[key] = {
                     "metrics": result.metrics(),
+                    "daily_block_bootstrap_95pct": daily_block_bootstrap_interval(
+                        _daily_net_pnl(result.trades)
+                    ),
                     "rejection_reasons": dict(result.rejection_reasons),
                 }
         report["results"][period_name] = results
