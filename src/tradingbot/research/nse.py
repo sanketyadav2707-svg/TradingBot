@@ -464,11 +464,13 @@ def _signal(
         if index < lookback + baseline + 1:
             return None
         prior = rows[index - lookback:index]
-        ranges = []
-        for end in range(index - lookback - baseline + 1, index - lookback + 1):
-            sample = rows[end - lookback:end]
-            ranges.append(max(x.high for x in sample) - min(x.low for x in sample))
-        reference = D(str(median(ranges)))
+        baseline_rows = rows[index - lookback - baseline:index - lookback]
+        baseline_ranges = [
+            max(x.high for x in baseline_rows[j:j + lookback])
+            - min(x.low for x in baseline_rows[j:j + lookback])
+            for j in range(len(baseline_rows) - lookback + 1)
+        ]
+        reference = D(str(median(baseline_ranges)))
         width = max(x.high for x in prior) - min(x.low for x in prior)
         if reference <= 0 or width > cfg.compression_ratio * reference:
             return None
