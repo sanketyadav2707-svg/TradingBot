@@ -69,16 +69,20 @@ def make_session(day=date(2026, 11, 17)):
         close = Decimal("100.00")
         high = Decimal("100.50") if i < 15 else close + Decimal("0.05")
         low = Decimal("99.50") if i < 15 else close - Decimal("0.05")
+        open_price = Decimal("100.00")
         if i == 15:
             close = Decimal("100.55")
             high = Decimal("100.60")
         if i == 16:
+            open_price = Decimal("100.60")
             close = Decimal("100.60")
+        high = max(high, open_price, close)
+        low = min(low, open_price, close)
         rows.append(NSEBar(
             timestamp=stamp,
             symbol="NIFTY26DEC_FUT",
             contract_id="NIFTY26DEC_FUT",
-            open=Decimal("100.00") if i != 16 else Decimal("100.60"),
+            open=open_price,
             high=high,
             low=low,
             close=close,
