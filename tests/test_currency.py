@@ -268,7 +268,7 @@ def test_currency_schema_v4_tags_every_monetary_ledger_table(tmp_path):
         version = connection.execute(
             "SELECT value FROM account_meta WHERE key='schema_version'"
         ).fetchone()[0]
-        assert version == "4"
+        assert version == "5"
         for table in ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox"):
             columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
             assert "currency_code" in columns
