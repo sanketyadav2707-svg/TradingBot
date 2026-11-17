@@ -843,7 +843,7 @@ def test_account_money_v3_view_exposes_neutral_amounts_with_currency(tmp_path) -
             "WHERE entity_type = 'fill' AND entity_id = 'money-view-fill' ORDER BY field_name"
         ).fetchall()
 
-    assert schema_version == "4"
+    assert schema_version == "5"
     assert columns == ["entity_type", "entity_id", "field_name", "amount", "currency_code"]
     assert {row[0]: (row[1], row[2]) for row in values} == {
         "commission": ("0.5", "USD"),
