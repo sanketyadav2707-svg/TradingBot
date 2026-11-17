@@ -18,6 +18,7 @@ For bugs and feature proposals, use the repository issue templates.
 
 - [30-Day Master Build Plan](docs/ONE_MONTH_MASTER_PLAN.md): strategy research, risk/compliance gates and build milestones.
 - [India-First Migration Plan](docs/INDIA_MARKET_MIGRATION_PLAN.md): staged migration, preserved US components, INR support, NSE market data, compliance and release gates.
+- [NSE Phase 3 Research Engine](docs/PHASE3_NSE_RESEARCH_ENGINE.md): INR-native ORB/VWAP/compression research, strict data provenance, dated fees and protected chronological holdout.
 - [NSE Market Profile Scaffold](config/markets/india_nse.toml): source-backed session conventions only; not consumed by live runtime.
 - [US Research Master Plan](docs/ONE_MONTH_MASTER_PLAN.md): preserved MES/MNQ research plan.
 - [VPS + Short-Horizon Automation Architecture](docs/VPS_SHORT_HORIZON_AUTOMATION_ARCHITECTURE.md): 3–15 minute intraday system, unattended VPS runtime, broker adapter, safety states, UI requirements and release gates.
