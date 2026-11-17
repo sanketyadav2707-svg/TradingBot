@@ -8,7 +8,7 @@ Live trading: prohibited in this phase.
 
 ## 1. Purpose and boundary
 
-Phase 3 begins by making the research process reproducible and falsifiable for NSE instruments. It does not begin by porting a US futures strategy, selecting a broker, or enabling orders.
+Phase 3 begins by making the research process reproducible and falsifiable for NSE instruments. It does not begin by porting a US futures strategy or enabling orders. Upstox is the first broker integration target, but broker selection does not waive data, cost, account, or compliance gates.
 
 The existing MES/MNQ QuantConnect experiments remain an isolated US-futures research track. Their signals, tick economics, session windows, fees, calendars, and results are not evidence for NSE. Do not copy the ORB15 result or any US-specific parameter into the NSE strategy set.
 
@@ -161,7 +161,7 @@ Passing a research gate does not authorize paper deployment, a paid challenge, o
 
 The following remain explicit blockers and must not be represented as completed:
 - authentic raw NSE MII sample plus official current header/ISO mapping before enabling raw ingestion;
-- broker selection and dated fee schedule before realistic net-cost claims;
+- Upstox account/API eligibility and a dated, verified broker fee schedule before realistic net-cost claims;
 - official 2027 NSE calendar and special-session circulars before 2027 dates become eligible;
 - versioned migration and rollback/failure-injection coverage for legacy USD-named persistence/API fields;
 - Decimal-only public market-price and report interfaces where compatibility still permits floats;
