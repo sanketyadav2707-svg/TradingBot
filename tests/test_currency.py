@@ -324,6 +324,7 @@ def test_existing_inr_schema_v1_rows_are_migrated_without_relabelling(tmp_path):
     # in account_meta and did not have per-row currency_code columns.
     with sqlite3.connect(path) as connection:
         connection.execute("DROP VIEW IF EXISTS account_money_v3")
+        connection.execute("DROP VIEW IF EXISTS account_money_v4")
         for table in ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox"):
             connection.execute(f"ALTER TABLE {table} DROP COLUMN currency_code")
         connection.execute("DELETE FROM account_meta WHERE key='schema_version'")
