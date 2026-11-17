@@ -16,6 +16,7 @@ def _fill(order_id, side, price, timestamp):
         fill_price=price,
         commission_usd=1.30,
         timestamp=timestamp,
+        currency_code="INR",
     )
 
 
