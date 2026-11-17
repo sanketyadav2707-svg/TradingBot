@@ -289,6 +289,9 @@ class PaperAccountStore:
                 # Schema v2 makes denomination explicit on every monetary ledger row.
                 # Existing rows receive the already-established account currency;
                 # a legacy ledger is always classified as USD above.
+                # Remove the v5 view before repairing legacy tables that may drop
+                # per-row currency columns during an older-schema migration.
+                connection.execute("DROP VIEW IF EXISTS account_money_v4")
                 currency_tables = ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox")
                 for table in currency_tables:
                     columns = {
