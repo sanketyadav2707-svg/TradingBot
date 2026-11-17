@@ -109,9 +109,9 @@ UI acceptance:
 
 ## 7. Broker and market-data integration decision
 
-No broker has been selected. Do not implement a live adapter against guessed APIs.
+Upstox is selected as the first broker integration target. This is an engineering target, not confirmation that the user's account has API access or that all regulatory and deployment requirements are satisfied. Do not enable live orders or hardwire broker assumptions into the strategy engine.
 
-Broker selection gates:
+Broker onboarding and adapter gates:
 1. Written/official confirmation that an Indian resident can open and use the relevant account and product lawfully.
 2. Exact instrument and exchange permissions for the target futures.
 3. Documented API access for order placement, cancellation, positions, executions and account state.
@@ -179,7 +179,7 @@ Passing these gates reduces risk; it does not guarantee profit or eliminate loss
 5. Add API endpoints for runtime status and audited start/stop/halt controls; no raw order endpoint.
 6. Finish the dashboard's real data wiring, reconnect/resync, error states and operator audit view.
 7. Add container packaging, health checks, persistent storage and deployment/recovery runbooks.
-8. Only after broker/data/legal gates are satisfied, implement one selected broker adapter and test it in its supported simulation environment.
+8. Implement the Upstox adapter behind the broker-neutral interface only after account access, API permissions, static-IP hosting and legal/compliance gates are confirmed; test order lifecycle in Upstox sandbox and keep market-data validation separate.
 
 ## 11. Explicit non-goals
 
