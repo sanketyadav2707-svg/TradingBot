@@ -14,6 +14,7 @@ from tradingbot.research.nse import (
     NSEResearchInstrument,
     evaluate_nse_strategy_set,
     load_nse_bars_csv,
+    daily_block_bootstrap_interval,
     run_nse_strategy,
     split_nse_chronological_holdout,
 )
@@ -200,3 +201,28 @@ def test_nse_cost_scenario_rejects_negative_and_invalid_slippage():
         NSECostScenario(Decimal("-0.1"), 0)
     with pytest.raises(ValueError, match="0_1_or_2"):
         NSECostScenario(Decimal("0.1"), 3)
+
+
+
+def test_daily_block_bootstrap_is_deterministic_and_resamples_whole_sessions():
+    daily = {
+        date(2026, 11, 2): Decimal("10"),
+        date(2026, 11, 3): Decimal("-5"),
+        date(2026, 11, 4): Decimal("15"),
+        date(2026, 11, 5): Decimal("-2"),
+    }
+    first = daily_block_bootstrap_interval(daily, replicates=500, seed=7)
+    second = daily_block_bootstrap_interval(daily, replicates=500, seed=7)
+    assert first == second
+    assert first["status"] == "estimated"
+    assert first["unit"] == "trading_day_block"
+    assert first["sessions"] == 4
+    assert first["ci_95_lower_inr"] is not None
+
+
+def test_daily_block_bootstrap_marks_one_session_inconclusive():
+    result = daily_block_bootstrap_interval(
+        {date(2026, 11, 2): Decimal("10")}, replicates=500
+    )
+    assert result["status"] == "insufficient_sessions"
+    assert result["ci_95_lower_inr"] is None
