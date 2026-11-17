@@ -19,6 +19,7 @@ For bugs and feature proposals, use the repository issue templates.
 - [30-Day Master Build Plan](docs/ONE_MONTH_MASTER_PLAN.md): strategy research, risk/compliance gates and build milestones.
 - [India-First Migration Plan](docs/INDIA_MARKET_MIGRATION_PLAN.md): staged migration, preserved US components, INR support, NSE market data, compliance and release gates.
 - [NSE Phase 3 Research Engine](docs/PHASE3_NSE_RESEARCH_ENGINE.md): INR-native ORB/VWAP/compression research, strict data provenance, dated fees and protected chronological holdout.
+- [Upstox Integration Plan](docs/UPSTOX_INTEGRATION_PLAN.md): first broker target, verified API constraints, authentication, data limits, compliance and implementation gates.
 - [NSE Market Profile Scaffold](config/markets/india_nse.toml): source-backed session conventions only; not consumed by live runtime.
 - [US Research Master Plan](docs/ONE_MONTH_MASTER_PLAN.md): preserved MES/MNQ research plan.
 - [VPS + Short-Horizon Automation Architecture](docs/VPS_SHORT_HORIZON_AUTOMATION_ARCHITECTURE.md): 3–15 minute intraday system, unattended VPS runtime, broker adapter, safety states, UI requirements and release gates.
@@ -57,7 +58,7 @@ python -m tradingbot audit-data --csv data/sample/MES_5m_sample.csv --symbol MES
 python -m tradingbot backtest --csv data/sample/MES_5m_sample.csv --symbol MES
 ```
 
-**Cost caveat:** `config/risk.toml` currently sets `commission_per_contract_per_side_usd = 0.0` because no target broker/account fee schedule has been selected. Local backtest results therefore exclude commissions unless you explicitly configure the applicable fee. The default one-tick-per-side slippage assumption does not replace commission, spread, or fill modelling.
+**Cost caveat:** `config/risk.toml` currently sets `commission_per_contract_per_side_usd = 0.0` because the target broker/account fee schedule has not yet been verified and applied. Local backtest results therefore exclude commissions unless you explicitly configure the applicable fee. The default one-tick-per-side slippage assumption does not replace commission, spread, or fill modelling.
 
 Optional Databento historical import (only after you have created an account and stored the key locally in `.env`; no key is needed for the sample backtest):
 
@@ -90,7 +91,7 @@ tests/                   Automated tests
 
 ## Current market research position
 
-India/NSE is now the primary market for future capital deployment. No NSE instrument or broker has been selected yet. Candidate segments are cash equities and index futures; options are deferred for the first research cycle. Selection requires source-backed instrument specifications, executable liquidity, realistic costs, data quality, capital/margin fit and current broker/API compliance. See [India-First Migration Plan](docs/INDIA_MARKET_MIGRATION_PLAN.md).\n\nThe MES/MNQ/MGC/MCL/M2K/MYM research remains preserved as an optional US-futures integration. Its CME-specific assumptions must not leak into the NSE runtime.
+India/NSE is now the primary market for future capital deployment. Upstox is the first broker integration target. The initial research universe remains NSE linear index/stock futures; options are deferred. No specific contract is selected until current instrument metadata, liquidity, margins, data quality, realistic costs and broker permissions are verified. The broker adapter remains unimplemented and live trading remains disabled. See [Upstox Integration Plan](docs/UPSTOX_INTEGRATION_PLAN.md). See [India-First Migration Plan](docs/INDIA_MARKET_MIGRATION_PLAN.md).\n\nThe MES/MNQ/MGC/MCL/M2K/MYM research remains preserved as an optional US-futures integration. Its CME-specific assumptions must not leak into the NSE runtime.
 
 ## Prop-firm approach
 
