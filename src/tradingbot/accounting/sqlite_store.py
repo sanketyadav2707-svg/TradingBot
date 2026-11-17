@@ -285,6 +285,7 @@ class PaperAccountStore:
                 # The neutral view depends on per-row currency columns. Drop it
                 # before any legacy schema repair, then recreate it after validation.
                 connection.execute("DROP VIEW IF EXISTS account_money_v3")
+                connection.execute("DROP VIEW IF EXISTS account_money_v4")
                 # Schema v2 makes denomination explicit on every monetary ledger row.
                 # Existing rows receive the already-established account currency;
                 # a legacy ledger is always classified as USD above.
