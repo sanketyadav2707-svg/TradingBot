@@ -44,6 +44,7 @@ from tradingbot.markets.nse_calendar import (
     write_nse_master_manifest,
 )
 from tradingbot.models import Instrument
+from tradingbot.money import FeeSchedule, Money
 from tradingbot.risk.limits import RiskGuard, RiskLimits
 from tradingbot.strategy.ema_cross import EmaCrossStrategy
 
@@ -97,6 +98,24 @@ def _build_parser() -> argparse.ArgumentParser:
     raw_validate.add_argument("--dataset", default="unspecified")
     raw_validate.add_argument("--schema", default="ohlcv-1m")
     raw_validate.add_argument("--calendar", type=Path, help="Optional verified exchange calendar JSON")
+
+    nse_research = sub.add_parser(
+        "research-nse",
+        help="Run INR-native NSE ORB/VWAP/compression research on canonical licensed one-minute bars",
+    )
+    nse_research.add_argument("--bars-csv", required=True, type=Path)
+    nse_research.add_argument("--master-csv", required=True, type=Path)
+    nse_research.add_argument("--symbol", required=True)
+    nse_research.add_argument("--fees-json", required=True, type=Path)
+    nse_research.add_argument("--provider", required=True)
+    nse_research.add_argument("--dataset", required=True)
+    nse_research.add_argument("--licence-reference", required=True)
+    nse_research.add_argument("--spread-ticks-per-side", required=True, type=__import__("decimal").Decimal)
+    nse_research.add_argument("--slippage-ticks-per-side", required=True, type=int, choices=[0, 1, 2])
+    nse_research.add_argument("--lots", type=int, default=1)
+    nse_research.add_argument("--holdout-calendar-days", type=int, default=90)
+    nse_research.add_argument("--expiring-index-derivative", action="store_true")
+    nse_research.add_argument("--output", required=True, type=Path)
 
     validate_nse_master = sub.add_parser(
         "validate-nse-master",
@@ -221,6 +240,90 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = _build_parser().parse_args()
+    if args.command == "research-nse":
+        from decimal import Decimal
+        from tradingbot.research.nse import (
+            NSECostScenario,
+            NSEFeeBinding,
+            NSEResearchConfig,
+            NSEResearchInstrument,
+            evaluate_nse_strategy_set,
+            load_nse_bars_csv,
+            write_nse_research_report,
+        )
+        fee_data = json.loads(args.fees_json.read_text(encoding="utf-8"))
+        if not isinstance(fee_data, dict):
+            raise SystemExit("Fee schedule JSON must be an object")
+        fee_currency = fee_data.get("currency")
+        if fee_currency != "INR":
+            raise SystemExit("NSE fee schedule currency must be INR")
+        fee_schedule = FeeSchedule(
+            schedule_id=fee_data["schedule_id"],
+            currency=fee_currency,
+            effective_from=fee_data["effective_from"],
+            brokerage_per_unit_per_side=Money.of(fee_data["brokerage_per_unit_per_side"], "INR"),
+            exchange_charge_per_unit_per_side=Money.of(fee_data["exchange_charge_per_unit_per_side"], "INR"),
+            regulatory_charge_per_unit_per_side=Money.of(fee_data["regulatory_charge_per_unit_per_side"], "INR"),
+            taxes_per_unit_per_side=Money.of(fee_data["taxes_per_unit_per_side"], "INR"),
+        )
+        fee_binding = NSEFeeBinding(
+            schedule=fee_schedule,
+            valid_through=datetime.fromisoformat(fee_data["valid_through"]).date(),
+            verified=fee_data.get("verified") is True,
+            source_url=fee_data.get("source_url"),
+        )
+        retrieved_at = datetime.now(timezone.utc)
+        masters = load_normalized_instrument_master(
+            args.master_csv, retrieved_at, source_variant="NSE_EXCLUSIVE"
+        )
+        matches = [record for record in masters if record.trading_symbol == args.symbol.upper()]
+        if len(matches) != 1:
+            raise SystemExit("Requested symbol must match exactly one NSE-exclusive master record")
+        as_of = retrieved_at.astimezone(ZoneInfo("Asia/Kolkata")).date()
+        matches[0].validate_freshness(as_of, max_age_days=1)
+        instrument = NSEResearchInstrument(matches[0], Decimal(matches[0].tick_size))
+        bars, data_manifest = load_nse_bars_csv(
+            args.bars_csv,
+            expected_symbol=args.symbol,
+            provider=args.provider,
+            dataset=args.dataset,
+            licence_reference=args.licence_reference,
+            retrieved_at=retrieved_at,
+        )
+        config = NSEResearchConfig(
+            lots=args.lots,
+            expiring_index_derivative=args.expiring_index_derivative,
+        )
+        report = evaluate_nse_strategy_set(
+            bars,
+            instrument,
+            calendar=NSEMarketCalendar(),
+            fee_binding=fee_binding,
+            scenarios=(
+                NSECostScenario(Decimal(args.spread_ticks_per_side), 0),
+                NSECostScenario(Decimal(args.spread_ticks_per_side), 1),
+                NSECostScenario(Decimal(args.spread_ticks_per_side), 2),
+            ),
+            config=config,
+            holdout_calendar_days=args.holdout_calendar_days,
+        )
+        report["data_manifest"] = data_manifest
+        report["promotion_status"] = (
+            "RESEARCH_ONLY_UNVERIFIED_FEES" if not fee_binding.verified else "RESEARCH_ONLY"
+        )
+        output_path = write_nse_research_report(args.output, report)
+        print(json.dumps({
+            "status": "nse_research_report_written",
+            "report": str(output_path),
+            "symbol": args.symbol,
+            "currency": "INR",
+            "strategies": ["orb15", "vwap_pullback", "compression_breakout"],
+            "promotion_status": report["promotion_status"],
+            "live_trading": False,
+            "warning": "Historical one-minute OHLC research only; not live execution or profitability evidence.",
+        }, indent=2))
+        return
+
     if args.command == "validate-nse-master":
         retrieved_at = datetime.now(timezone.utc)
         records = load_normalized_instrument_master(
