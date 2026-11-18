@@ -70,7 +70,7 @@ class MarketDataGate:
         with self._lock:
             if not isinstance(bar, Bar):
                 return MarketDataDecision(False, "bar_type_invalid")
-            if received_at.tzinfo is None or received_at.utcoffset() is None:
+            if not isinstance(received_at, datetime) or received_at.tzinfo is None or received_at.utcoffset() is None:
                 return MarketDataDecision(False, "receive_timestamp_must_be_timezone_aware")
             if bar.symbol.strip().upper() != self.symbol:
                 return MarketDataDecision(False, "market_data_symbol_mismatch")
@@ -102,9 +102,11 @@ class SignalValidator:
         self._lock = RLock()
 
     def validate(self, bar: Bar, signal: Signal) -> tuple[ValidatedSignal | None, str]:
+        if not isinstance(bar, Bar):
+            return None, "signal_bar_type_invalid"
         if not isinstance(signal, Signal):
             return None, "signal_type_invalid"
-        if signal.side not in (Side.LONG, Side.SHORT):
+        if not isinstance(signal.side, Side) or signal.side not in (Side.LONG, Side.SHORT):
             return None, "signal_side_invalid"
         if not isinstance(signal.reason, str) or not signal.reason.strip():
             return None, "signal_reason_required"
@@ -143,6 +145,10 @@ class ClosedBarStrategyRuntime:
     ) -> None:
         if type(max_history_bars) is not int or max_history_bars < 2:
             raise ValueError("max_history_bars_must_be_at_least_two")
+        if not isinstance(market_data_gate, MarketDataGate):
+            raise TypeError("market_data_gate_must_be_MarketDataGate")
+        if not callable(strategy_on_bar) or not callable(on_signal):
+            raise TypeError("strategy_and_signal_handlers_must_be_callable")
         self.market_data_gate = market_data_gate
         self.strategy_on_bar = strategy_on_bar
         self.on_signal = on_signal
