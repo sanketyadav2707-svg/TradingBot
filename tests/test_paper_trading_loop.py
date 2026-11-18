@@ -150,7 +150,7 @@ def test_position_manager_recovers_persisted_stop_target_and_bar_cursor(tmp_path
     assert manager.has_position
 
     recovered = PaperPositionManager(
-        engine, NIFTY, stop_ticks=1, target_ticks=1, max_holding_bars=1
+        engine, NIFTY, stop_ticks=1, target_ticks=1, max_holding_bars=3
     )
     assert recovered.has_position
     assert recovered.stop_ticks == 4
