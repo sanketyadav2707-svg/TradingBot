@@ -14,7 +14,7 @@ dependencies = []
 dev = ["pytest>=8.0", "httpx2>=2.16.0"]
 api = ["fastapi>=0.115", "uvicorn>=0.34"]
 marketdata = ["databento>=0.50", "pandas>=2.2", "python-dotenv>=1.0"]
-parquet = ["pyarrow>=18.0"]\nupstox = ["upstox-python-sdk>=2.18.0"]
+parquet = ["pyarrow>=18.0"]\nupstox = ["upstox-python-sdk>=2.31.0"]
 
 [project.scripts]
 tradingbot = "tradingbot.cli:main"
