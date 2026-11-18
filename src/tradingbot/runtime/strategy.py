@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from threading import RLock
 from typing import Callable, Sequence
@@ -45,14 +45,18 @@ class MarketDataGate:
         *,
         symbol: str,
         max_age_seconds: int = 60,
+        bar_interval_seconds: int = 60,
         session_check: Callable[[Bar], bool] | None = None,
     ) -> None:
         if not symbol.strip():
             raise ValueError("market_data_symbol_required")
         if type(max_age_seconds) is not int or max_age_seconds < 1:
             raise ValueError("max_age_seconds_must_be_positive_integer")
+        if type(bar_interval_seconds) is not int or bar_interval_seconds < 1:
+            raise ValueError("bar_interval_seconds_must_be_positive_integer")
         self.symbol = symbol.strip().upper()
         self.max_age_seconds = max_age_seconds
+        self.bar_interval_seconds = bar_interval_seconds
         self.session_check = session_check
         self._last_timestamp: datetime | None = None
         self._lock = RLock()
@@ -72,7 +76,8 @@ class MarketDataGate:
                 return MarketDataDecision(False, "market_data_symbol_mismatch")
             observed = bar.timestamp.astimezone(timezone.utc)
             received = received_at.astimezone(timezone.utc)
-            age = (received - observed).total_seconds()
+            bar_close = observed + timedelta(seconds=self.bar_interval_seconds)
+            age = (received - bar_close).total_seconds()
             if age < 0:
                 return MarketDataDecision(False, "future_dated_market_bar")
             if age > self.max_age_seconds:
