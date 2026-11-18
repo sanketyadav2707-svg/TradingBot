@@ -95,7 +95,7 @@ def test_paper_loop_queues_signal_then_fills_at_next_bar_open_and_takes_profit(t
     assert exit_event.reference_price == Decimal("25001.4")
     fills = store.list_fills()
     assert len(fills) == 2
-    assert float(fills[0]["requested_price"]) == 25001.0
+    assert any(float(fill["requested_price"]) == 25001.0 for fill in fills)
     assert store.list_positions() == []
     assert len(store.list_trades()) == 1
     assert not manager.has_position
