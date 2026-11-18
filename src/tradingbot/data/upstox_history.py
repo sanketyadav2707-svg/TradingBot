@@ -8,7 +8,7 @@ windows so a caller never exceeds the documented one-month request limit.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Iterable
 
 
@@ -45,10 +45,10 @@ def plan_intraday_candle_windows(
     This function intentionally rejects unsupported intervals rather than
     silently applying the same limit to daily candles or future API changes.
     """
-    if not isinstance(start, date) or isinstance(start, type(None)):
-        raise TypeError("start_must_be_date")
-    if not isinstance(end, date) or isinstance(end, type(None)):
-        raise TypeError("end_must_be_date")
+    if not isinstance(start, date) or isinstance(start, datetime):
+        raise TypeError("start_must_be_date_not_datetime")
+    if not isinstance(end, date) or isinstance(end, datetime):
+        raise TypeError("end_must_be_date_not_datetime")
     if start > end:
         raise ValueError("start_must_not_follow_end")
     if type(interval_minutes) is not int or interval_minutes not in SUPPORTED_INTRADAY_MINUTES:
@@ -57,9 +57,7 @@ def plan_intraday_candle_windows(
     windows: list[CandleRequestWindow] = []
     cursor = start
     while cursor <= end:
-        month_end = _first_of_next_month(cursor).fromordinal(
-            _first_of_next_month(cursor).toordinal() - 1
-        )
+        month_end = date.fromordinal(_first_of_next_month(cursor).toordinal() - 1)
         window_end = min(end, month_end)
         windows.append(CandleRequestWindow(cursor, window_end))
         cursor = date.fromordinal(window_end.toordinal() + 1)
