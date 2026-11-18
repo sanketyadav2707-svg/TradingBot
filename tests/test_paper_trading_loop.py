@@ -191,3 +191,29 @@ def test_paper_loop_rejects_holding_period_over_fifteen_minutes(tmp_path):
             engine, NIFTY, stop_ticks=4, target_ticks=8,
             max_holding_bars=16, bar_interval_seconds=60,
         )
+
+
+
+def test_missing_position_bar_halts_and_operator_can_still_flatten(tmp_path):
+    import pytest
+
+    store, engine, runtime, manager, loop = make_runtime_and_loop(
+        tmp_path, stop_ticks=20, target_ticks=20, max_holding_bars=3
+    )
+    process(loop, make_bar(0, open_=25000, high=25001, low=24999, close=25000.5))
+    process(loop, make_bar(1, open_=25001, high=25001.2, low=25000.9, close=25001.1))
+
+    with pytest.raises(ValueError, match="position_bar_gap_detected"):
+        process(loop, make_bar(3, open_=25001, high=25001.2, low=25000.9, close=25001.1))
+
+    assert manager.halted
+    assert engine.halted
+    assert store.list_positions()
+    flattened = loop.force_flatten(
+        reference_price=25001,
+        timestamp=START + timedelta(minutes=4),
+        reason="OPERATOR_GAP_RECOVERY",
+    )
+    assert isinstance(flattened, PositionExit)
+    assert store.list_positions() == []
+    assert engine.halted
