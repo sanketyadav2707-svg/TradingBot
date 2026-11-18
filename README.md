@@ -18,7 +18,7 @@ For bugs and feature proposals, use the repository issue templates.
 
 - [30-Day Master Build Plan](docs/ONE_MONTH_MASTER_PLAN.md): strategy research, risk/compliance gates and build milestones.
 - [India-First Migration Plan](docs/INDIA_MARKET_MIGRATION_PLAN.md): staged migration, preserved US components, INR support, NSE market data, compliance and release gates.
-- [NSE Phase 3 Research Engine](docs/PHASE3_NSE_RESEARCH_ENGINE.md): INR-native ORB/VWAP/compression research, strict data provenance, dated fees and protected chronological holdout.
+- [NSE Phase 3 Research Engine](docs/PHASE3_NSE_RESEARCH_ENGINE.md): INR-native ORB/VWAP/compression research, strict data provenance, dated fees and protected chronological holdout.\n- [Phase 4 Replay and Paper Execution Engine](docs/PHASE4_EXECUTION_SIMULATION_ENGINE.md): deterministic historical replay, risk-gated paper account, order lifecycle, session controller and watchdog status.
 - [Upstox Integration Plan](docs/UPSTOX_INTEGRATION_PLAN.md): first broker target, verified API constraints, authentication, data limits, compliance and implementation gates.
 - [NSE Market Profile Scaffold](config/markets/india_nse.toml): source-backed session conventions only; not consumed by live runtime.
 - [US Research Master Plan](docs/ONE_MONTH_MASTER_PLAN.md): preserved MES/MNQ research plan.
@@ -55,7 +55,7 @@ pytest
 python -m tradingbot --help
 python -m tradingbot validate-data --csv data/sample/MES_5m_sample.csv --symbol MES
 python -m tradingbot audit-data --csv data/sample/MES_5m_sample.csv --symbol MES --expected-interval-seconds 300
-python -m tradingbot backtest --csv data/sample/MES_5m_sample.csv --symbol MES
+python -m tradingbot backtest --csv data/sample/MES_5m_sample.csv --symbol MES\npython -m tradingbot replay --csv data/sample/MES_5m_sample.csv --symbol MES --provider local_fixture --dataset MES_5m_sample_v1 --output reports/replay.json
 ```
 
 **Cost caveat:** `config/risk.toml` currently sets `commission_per_contract_per_side_usd = 0.0` because the target broker/account fee schedule has not yet been verified and applied. Local backtest results therefore exclude commissions unless you explicitly configure the applicable fee. The default one-tick-per-side slippage assumption does not replace commission, spread, or fill modelling.
