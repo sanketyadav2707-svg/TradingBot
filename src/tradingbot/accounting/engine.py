@@ -431,6 +431,22 @@ class PaperAccountEngine:
                     format(price, "f"),
                 ))
                 client_order_id = "close-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:48]
+                created = self.order_lifecycle.create_order(
+                    client_order_id=client_order_id,
+                    symbol=symbol,
+                    side="SHORT" if exit_side == Side.SHORT else "LONG",
+                    quantity=quantity,
+                    reference_price=price,
+                    timestamp=timestamp,
+                )
+                if created["state"] == OrderState.PENDING_SUBMIT.value:
+                    self.order_lifecycle.transition(
+                        client_order_id, OrderState.SUBMITTED, timestamp=timestamp
+                    )
+                else:
+                    raise RuntimeError(
+                        f"close_order_not_new_or_retryable:{client_order_id}:{created['state']}"
+                    )
                 fills.append(broker.submit_market(
                     side=exit_side,
                     quantity=quantity,
