@@ -349,9 +349,13 @@ class PaperPositionManager:
             self._state_store.delete(self.instrument.symbol)
             self._state = None
             return None
-        fills = self.engine.close_position(
-            self.instrument, reference_price=reference_price, timestamp=timestamp
-        )
+        try:
+            fills = self.engine.close_position(
+                self.instrument, reference_price=reference_price, timestamp=timestamp
+            )
+        except Exception:
+            self._halt("operator_position_flatten_failed")
+            raise
         try:
             self._state_store.delete(self.instrument.symbol)
         except Exception:
