@@ -62,3 +62,12 @@ def test_partition_validator_rejects_gaps_and_overlaps():
             expected_start=date(2026, 1, 1),
             expected_end=date(2026, 1, 31),
         )
+
+def test_datetime_inputs_rejected_for_date_only_planner():
+    from datetime import datetime, timezone
+
+    stamp = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    with pytest.raises(TypeError, match="start_must_be_date_not_datetime"):
+        plan_intraday_candle_windows(stamp, date(2026, 1, 2), interval_minutes=1)
+    with pytest.raises(TypeError, match="end_must_be_date_not_datetime"):
+        plan_intraday_candle_windows(date(2026, 1, 1), stamp, interval_minutes=1)
