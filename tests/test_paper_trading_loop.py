@@ -117,17 +117,25 @@ def test_paper_position_manager_uses_stop_first_when_stop_and_target_both_touch(
 
 def test_paper_position_manager_enforces_maximum_holding_bars(tmp_path):
     store, engine, runtime, manager, loop = make_runtime_and_loop(
-        tmp_path, stop_ticks=20, target_ticks=20, max_holding_bars=1
+        tmp_path, stop_ticks=20, target_ticks=20, max_holding_bars=3
     )
     process(loop, make_bar(0, open_=25000, high=25001, low=24999, close=25000.5))
-    result = process(
+    process(
         loop,
         make_bar(1, open_=25001, high=25001.2, low=25000.9, close=25001.1),
+    )
+    process(
+        loop,
+        make_bar(2, open_=25001.1, high=25001.2, low=25000.9, close=25001.15),
+    )
+    result = process(
+        loop,
+        make_bar(3, open_=25001.15, high=25001.2, low=25000.9, close=25001.1),
     )
     assert isinstance(result, PositionExit)
     assert result.reason == "TIME_EXIT"
     assert result.reference_price == Decimal("25001.1")
-    assert result.bars_held == 1
+    assert result.bars_held == 3
     assert store.list_positions() == []
 
 
