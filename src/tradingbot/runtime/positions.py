@@ -412,6 +412,16 @@ class PaperTradingLoop:
     def pending_signal(self):
         return self._pending_signal
 
+    def start_new_session(self) -> None:
+        """Reset bar history only when flat, unhalted and no signal is pending."""
+        if self.position_manager.has_position:
+            raise RuntimeError("cannot_start_new_session_with_open_position")
+        if self.position_manager.halted or self.position_manager.engine.halted:
+            raise RuntimeError("halted_paper_engine_requires_operator_recovery")
+        if self._pending_signal is not None:
+            raise RuntimeError("cannot_start_new_session_with_pending_signal")
+        self.strategy_runtime.reset_for_new_session()
+
     def _queue_signal(self, signal) -> None:
         if self._pending_signal is not None:
             raise RuntimeError("previous_signal_not_consumed")
