@@ -376,6 +376,8 @@ class PaperAccountEngine:
         no unresolved order states, exchange quantity-step compliance and durable
         accounting/lifecycle persistence. Oversized positions are sliced below freeze.
         """
+        if not isinstance(instrument, Instrument):
+            raise TypeError("position_close_instrument_must_be_Instrument")
         if not isinstance(timestamp, datetime) or timestamp.tzinfo is None or timestamp.utcoffset() is None:
             raise ValueError("position_close_timestamp_must_be_timezone_aware")
         try:
@@ -398,6 +400,8 @@ class PaperAccountEngine:
             if len(positions) != 1:
                 raise RuntimeError("position_ledger_not_unique_for_symbol")
             position = positions[0]
+            if position["side"] not in {"LONG", "SHORT"}:
+                raise RuntimeError("position_ledger_side_invalid")
             remaining = int(position["quantity"])
             if remaining <= 0:
                 raise RuntimeError("open_position_quantity_invalid")
