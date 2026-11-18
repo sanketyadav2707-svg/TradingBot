@@ -80,7 +80,7 @@ See [Phase 5 durable paper operations](PHASE5_DURABLE_PAPER_OPERATIONS.md). Phas
 
 - Earlier baseline after Phase 2 test-fixture repair: 341 passed, 2 warnings.
 - Deterministic replay implementation CI: 345 passed, 2 warnings.
-- Closed-bar strategy, next-bar-open paper execution, stop/target/time exits, restart recovery, risk-off flattening, Upstox sandbox adapter and fail-closed tests passed on commit `499f9e9a6025b5f2ad28e8f892edf780169873aa`: **376 passed, 2 warnings**. Phase 5 inbox and paper-runner changes are under CI validation; the latest result is recorded in the pull request and workflow run.
+- Closed-bar strategy, next-bar-open paper execution, stop/target/time exits, restart recovery, risk-off flattening, Upstox sandbox adapter and fail-closed tests passed on commit `499f9e9a6025b5f2ad28e8f892edf780169873aa`: **376 passed, 2 warnings**. Phase 5 durable inbox and paper-runner implementation passed GitHub Actions on commit `576a60e0a4155e78bb1358d22ec4c693b5700eca`: **387 passed, 2 warnings**.
 - No CI result, historical test, or simulated fill proves profitability or actual exchange execution.
 
 ## Release rule
