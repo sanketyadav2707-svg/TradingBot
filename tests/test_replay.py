@@ -57,7 +57,9 @@ def test_replay_is_content_addressed_and_repeatable():
     assert first["run_id"] == second["run_id"]
     assert first["dataset"]["sha256"] == second["dataset"]["sha256"]
     assert first["configuration_sha256"] == second["configuration_sha256"]
-    assert first["events"][0]["event_type"] == "BAR_CLOSED"
+    event_types = {event["event_type"] for event in first["events"]}
+    assert "BAR_CLOSED" in event_types
+    assert "SIGNAL_EMITTED" in event_types
     assert first["safety"]["live_orders_enabled"] is False
 
 
