@@ -266,3 +266,16 @@ def test_session_reset_requires_flat_and_clears_bar_ordering_history(tmp_path):
     result = process(loop, next_day)
     assert result is not None
     assert len(runtime.history) == 1
+
+
+
+def test_paper_position_manager_rejects_configured_holding_ceiling_under_three_minutes(tmp_path):
+    import pytest
+
+    store = PaperAccountStore(tmp_path / "min-limit.sqlite3", 100_000, currency_code="INR")
+    engine = PaperAccountEngine(store, RiskLimits(currency_code="INR"))
+    with pytest.raises(ValueError, match="must_be_at_least_3_minutes"):
+        PaperPositionManager(
+            engine, NIFTY, stop_ticks=4, target_ticks=8,
+            max_holding_bars=2, bar_interval_seconds=60,
+        )
