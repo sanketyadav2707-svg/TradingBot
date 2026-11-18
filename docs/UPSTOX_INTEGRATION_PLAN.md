@@ -35,7 +35,7 @@ API access being free does not make trading free. The cost model must include th
 
 - Use the official BOD instrument master as the source of current instrument keys and contract metadata. Do not hardcode NSE_FO keys or reuse expired contracts.
 - Map only verified NSE futures contracts. Persist instrument key, trading symbol, exchange/segment, expiry, lot size, tick size, quantity freeze, source date and source-file hash.
-- Upstox V3 historical candle documentation limits 1-, 2-, 3-, 5-, 10- and 15-minute intervals to one month per request. Any importer must paginate date ranges, respect rate limits, preserve timezone/contract identity, detect gaps and save immutable raw responses plus manifests.
+- Upstox V3 historical candle documentation limits 1-, 2-, 3-, 5-, 10- and 15-minute intervals to one month per request. `tradingbot.data.upstox_history.plan_intraday_candle_windows` now partitions inclusive ranges into calendar-month windows and validates exact gap-free partitions. This is a pure offline planner, not an HTTP downloader. Any future importer must still respect rate limits, preserve timezone/contract identity, detect gaps and save immutable raw responses plus manifests.
 - Validate whether historical endpoints provide the exact instrument/contract coverage and retention required. Do not infer availability from the API page alone.
 - Use WebSocket feed only after instrument subscription, reconnect, heartbeat, sequence/gap and stale-data behaviour are tested. A WebSocket connection is not proof of exchange-grade completeness.
 - Broker-provided data entitlement and permitted historical storage/research use must be checked against the account terms.
@@ -53,7 +53,7 @@ API access being free does not make trading free. The cost model must include th
 1. Confirm the user's Upstox account, activated segment (NSE F&O), API app eligibility and current terms in the Upstox console.
 2. Verify static-IP onboarding and the exact registered-app/retail-algo workflow with Upstox. Obtain written support confirmation where any requirement is ambiguous.
 3. Build a read-only instrument-master downloader/normalizer with immutable raw file, hash, schema validation and daily freshness gate.
-4. Build a paginated historical-data downloader only after data access, terms, interval limit and retention are confirmed. Add resumability, deterministic manifests, rate-limit handling and strict no-gap reporting.
+4. Extend the offline monthly window planner into a paginated historical-data downloader only after data access, terms, interval limit and retention are confirmed. Add resumability, deterministic manifests, rate-limit handling and strict no-gap reporting.
 5. Build a market-data adapter interface and WebSocket consumer with reconnect/resubscribe, heartbeat, timestamp and gap controls. No strategy should consume raw broker payloads.
 6. Build an Upstox sandbox order adapter behind the existing broker-neutral order interface. Cover place/modify/cancel, duplicate submission prevention, partial/unknown/rejected states and reconciliation. Keep a hard compile/runtime barrier preventing live base URLs.
 7. Validate fee schedules and realistic NSE futures costs before any strategy report can be called net-of-costs.
@@ -65,7 +65,7 @@ API access being free does not make trading free. The cost model must include th
 - No Upstox account, app, token, segment permission or static IP has been verified in this repository.
 - No authentic licensed Upstox/NSE historical dataset has been retrieved or evaluated.
 - No verified Upstox fee schedule has been applied to the NSE research engine.
-- No Upstox adapter or live order route has been implemented.
+- No Upstox adapter, authenticated downloader or live order route has been implemented. The offline date-window planner is not a broker integration.
 - NSE raw MII master parsing remains separate and must not be inferred from Upstox instrument JSON.
 - No strategy has demonstrated a positive, robust edge on real licensed NSE data.
 
