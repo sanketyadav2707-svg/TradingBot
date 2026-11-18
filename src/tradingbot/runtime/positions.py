@@ -236,7 +236,11 @@ class PaperPositionManager:
             "bar_interval_seconds": self.bar_interval_seconds,
             "last_bar_timestamp": None,
         }
-        self._state_store.save(state)
+        try:
+            self._state_store.save(state)
+        except Exception:
+            self._halt("position_manager_state_persist_failed")
+            raise
         self._state = state
         self._reason = "position_registered"
 
@@ -261,7 +265,11 @@ class PaperPositionManager:
         close_stamp = stamp + timedelta(seconds=self.bar_interval_seconds)
         if close_stamp <= entry_stamp:
             self._state["last_bar_timestamp"] = stamp.isoformat(timespec="microseconds")
-            self._state_store.save(self._state)
+            try:
+                self._state_store.save(self._state)
+            except Exception:
+                self._halt("position_manager_state_persist_failed")
+                raise
             return None
 
         bars_held = max(
@@ -292,15 +300,23 @@ class PaperPositionManager:
 
         if reason is None:
             self._state["last_bar_timestamp"] = stamp.isoformat(timespec="microseconds")
-            self._state_store.save(self._state)
+            try:
+                self._state_store.save(self._state)
+            except Exception:
+                self._halt("position_manager_state_persist_failed")
+                raise
             self._reason = "position_open"
             return None
 
-        fills = self.engine.close_position(
-            self.instrument,
-            reference_price=float(exit_price),
-            timestamp=close_stamp,
-        )
+        try:
+            fills = self.engine.close_position(
+                self.instrument,
+                reference_price=float(exit_price),
+                timestamp=close_stamp,
+            )
+        except Exception:
+            self._halt("position_exit_execution_failed")
+            raise
         self._state_store.delete(self.instrument.symbol)
         self._state = None
         self._reason = reason.lower()
@@ -406,9 +422,13 @@ class PaperTradingLoop:
             return self.position_manager.on_closed_bar(bar)
 
         if self._pending_signal is None:
-            return self.strategy_runtime.process_closed_bar(
+            result = self.strategy_runtime.process_closed_bar(
                 bar, received_at=received_at, allow_signal=True
             )
+            if self.strategy_runtime.state != RuntimeState.RUNNING:
+                self.position_manager.halt(self.strategy_runtime.reason)
+                return None
+            return result
 
         expected_open = self._pending_signal.timestamp.astimezone(timezone.utc)
         actual_open = bar.timestamp.astimezone(timezone.utc)
@@ -416,9 +436,13 @@ class PaperTradingLoop:
             # A missing candle invalidates the queued entry. Reprocess this bar
             # as a fresh decision point, without executing a stale signal.
             self._pending_signal = None
-            return self.strategy_runtime.process_closed_bar(
+            result = self.strategy_runtime.process_closed_bar(
                 bar, received_at=received_at, allow_signal=True
             )
+            if self.strategy_runtime.state != RuntimeState.RUNNING:
+                self.position_manager.halt(self.strategy_runtime.reason)
+                return None
+            return result
 
         signal = self._pending_signal
         self._pending_signal = None
