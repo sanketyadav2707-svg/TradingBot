@@ -10,9 +10,9 @@ Provide a deterministic, auditable path from validated closed market bars throug
 
 | Required subsystem | Repository implementation | Current boundary |
 |---|---|---|
-| Market-data validation | `models.Bar`, strict CSV loader, raw-data validators, NSE session-bar guard, `timestamp_is_fresh` | Historical files and injected events only; no live NSE feed |
-| Strategy runtime | Existing strategy interface and conservative `BacktestEngine`; new content-addressed replay runner | Replay invokes the selected strategy against the complete validated historical series; no unattended live scheduler |
-| Signal/event validation | `SessionController` rejects duplicate/out-of-order closed bars; stable order IDs and lifecycle payload hashes prevent duplicate submissions | A strategy-specific live signal adapter remains separate |
+| Market-data validation | `models.Bar`, strict CSV loader, raw-data validators, NSE session-bar guard, `timestamp_is_fresh` | Historical files and injected events; closed-bar freshness gate is implemented, no live NSE feed |
+| Strategy runtime | New incremental `ClosedBarStrategyRuntime` receives only the current closed bar and prior closed-bar history; conservative `BacktestEngine` and content-addressed replay runner | Replay invokes the selected strategy against the complete validated historical series; no unattended live scheduler |
+| Signal/event validation | `MarketDataGate`, `SignalValidator`, `ClosedBarStrategyRuntime`, `SessionController`, stable order IDs and lifecycle payload hashes | A strategy-specific live signal adapter remains separate |
 | Risk engine | Decimal `RiskGuard`, account snapshots, dated fee schedules, optional fail-closed compliance gate | Illustrative defaults are not a verified broker/account risk profile |
 | Order manager | Durable SQLite `OrderLifecycleStore`, explicit state transitions, idempotency, unresolved-order detection and broker-snapshot reconciliation | Broker snapshot is an injected interface; no live broker implementation |
 | Paper execution | `PaperBroker` and `PaperAccountEngine`; risk approval required before order routing | Simulated market fills with configured slippage/fees; not exchange fills |
@@ -48,7 +48,7 @@ The EMA crossover remains a pipeline/plumbing example, not an approved trading s
 
 ## Safety properties already covered by tests
 
-- closed-bar timestamps must be timezone-aware and strictly increasing;
+- closed-bar timestamps must be timezone-aware, fresh, non-future, correct-symbol and strictly increasing;\n- strategy callbacks receive no future bars;\n- duplicate signals are rejected using deterministic signal IDs;
 - duplicate/out-of-order bars degrade the session and block later bars;
 - startup and bar/session checks fail closed;
 - exceptions in the bar handler degrade the session;
@@ -79,4 +79,4 @@ GitHub Actions on commit `06270b71ac076a2a4ec29a87106b77b4de309a40` passed **345
 
 ## Phase exit decision
 
-The **offline Phase 4 engineering foundation** is implemented and CI-tested. The phase is **not approved for unattended or live deployment**. The next validation stage must use an authorized data source, complete the strategy-to-position lifecycle, perform fault-injection/restart drills, then run at least 8–12 weeks of paper operation. Any unresolved state must block new entries. Live routing remains absent and disabled.
+The **offline Phase 4 engineering foundation** is implemented and CI-tested, including an incremental closed-bar strategy runtime and signal/data validators. The phase is **not approved for unattended or live deployment**. The next validation stage must use an authorized data source, complete the strategy-to-position lifecycle, perform fault-injection/restart drills, then run at least 8–12 weeks of paper operation. Any unresolved state must block new entries. Live routing remains absent and disabled.
