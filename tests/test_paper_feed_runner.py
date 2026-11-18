@@ -21,6 +21,8 @@ INSTRUMENT = Instrument(
 
 def make_bar(minute):
     price = 25000.0 + minute
+    if minute == 1:
+        return Bar(T0 + timedelta(minutes=minute), SYMBOL, price, price + .5, price - .5, price + .25, 1000)
     return Bar(T0 + timedelta(minutes=minute), SYMBOL, price, price + 1, price - 1, price + .5, 1000)
 
 
