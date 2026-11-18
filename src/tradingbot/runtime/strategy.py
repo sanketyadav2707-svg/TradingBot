@@ -84,6 +84,11 @@ class MarketDataGate:
                 return MarketDataDecision(False, "stale_market_bar")
             if self._last_timestamp is not None and observed <= self._last_timestamp:
                 return MarketDataDecision(False, "duplicate_or_out_of_order_market_bar")
+            if (
+                self._last_timestamp is not None
+                and observed - self._last_timestamp != timedelta(seconds=self.bar_interval_seconds)
+            ):
+                return MarketDataDecision(False, "market_data_gap_detected")
             if self.session_check is not None:
                 try:
                     if self.session_check(bar) is not True:
