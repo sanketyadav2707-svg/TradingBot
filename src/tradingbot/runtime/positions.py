@@ -125,7 +125,10 @@ class PaperPositionManager:
         ):
             if type(value) is not int or value < 1:
                 raise ValueError(f"{name}_must_be_positive_integer")
-        if max_holding_bars * bar_interval_seconds > 900:
+        holding_seconds = max_holding_bars * bar_interval_seconds
+        if holding_seconds < 180:
+            raise ValueError("paper_position_holding_limit_must_be_at_least_3_minutes")
+        if holding_seconds > 900:
             raise ValueError("paper_position_holding_limit_exceeds_15_minutes")
         self.engine = engine
         self.instrument = instrument
@@ -190,7 +193,7 @@ class PaperPositionManager:
             and opened_at.astimezone(timezone.utc) == saved_opened_at.astimezone(timezone.utc)
             and int(saved["stop_ticks"]) > 0
             and int(saved["target_ticks"]) > 0
-            and int(saved["bar_interval_seconds"]) * int(saved["max_holding_bars"]) <= 900
+            and 180 <= int(saved["bar_interval_seconds"]) * int(saved["max_holding_bars"]) <= 900
         )
         if not matches:
             self._halt("position_manager_state_mismatch_after_restart")
