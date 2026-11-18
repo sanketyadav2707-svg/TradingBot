@@ -254,14 +254,20 @@ class PaperPositionManager:
             raise ValueError("position_bar_instrument_mismatch")
         stamp = bar.timestamp.astimezone(timezone.utc)
         previous = self._state["last_bar_timestamp"]
+        entry_stamp = datetime.fromisoformat(
+            str(self._state["entry_timestamp"]).replace("Z", "+00:00")
+        )
         if previous is not None:
             previous_stamp = datetime.fromisoformat(str(previous).replace("Z", "+00:00"))
             if stamp <= previous_stamp:
                 self._halt("position_bar_duplicate_or_out_of_order")
                 raise ValueError("position_bar_duplicate_or_out_of_order")
-        entry_stamp = datetime.fromisoformat(
-            str(self._state["entry_timestamp"]).replace("Z", "+00:00")
-        )
+            expected_stamp = previous_stamp + timedelta(seconds=self.bar_interval_seconds)
+        else:
+            expected_stamp = entry_stamp.astimezone(timezone.utc)
+        if stamp != expected_stamp.astimezone(timezone.utc):
+            self._halt("position_bar_gap_detected")
+            raise ValueError("position_bar_gap_detected")
         close_stamp = stamp + timedelta(seconds=self.bar_interval_seconds)
         if close_stamp <= entry_stamp:
             self._state["last_bar_timestamp"] = stamp.isoformat(timespec="microseconds")
@@ -346,7 +352,11 @@ class PaperPositionManager:
         fills = self.engine.close_position(
             self.instrument, reference_price=reference_price, timestamp=timestamp
         )
-        self._state_store.delete(self.instrument.symbol)
+        try:
+            self._state_store.delete(self.instrument.symbol)
+        except Exception:
+            self._halt("position_manager_state_cleanup_failed")
+            raise
         self._state = None
         self._reason = reason.strip().upper()
         return PositionExit(
