@@ -121,3 +121,47 @@ def test_market_order_is_sandbox_only_and_requires_protection():
 def test_missing_sandbox_token_is_rejected_before_sdk_import():
     with pytest.raises(UpstoxSandboxConfigurationError, match="sandbox_access_token_required"):
         UpstoxSandboxOrderClient.from_access_token(" ")
+
+def test_factory_always_constructs_sdk_in_sandbox_mode(monkeypatch):
+    import sys
+
+    instances = {}
+
+    class Configuration:
+        def __init__(self, *, sandbox):
+            instances["sandbox"] = sandbox
+            self.access_token = None
+
+    class ApiClient:
+        def __init__(self, configuration):
+            instances["configuration"] = configuration
+
+    class OrderApiV3:
+        def __init__(self, api_client):
+            instances["api_client"] = api_client
+
+    fake_sdk = SimpleNamespace(
+        Configuration=Configuration,
+        ApiClient=ApiClient,
+        OrderApiV3=OrderApiV3,
+        PlaceOrderV3Request=RequestModel,
+        ModifyOrderRequest=RequestModel,
+    )
+    monkeypatch.setitem(sys.modules, "upstox_client", fake_sdk)
+    client = UpstoxSandboxOrderClient.from_access_token("sandbox-token")
+    assert isinstance(client, UpstoxSandboxOrderClient)
+    assert instances["sandbox"] is True
+    assert instances["configuration"].access_token == "sandbox-token"
+
+
+def test_modify_order_rejects_invalid_limit_price_before_api_call():
+    client, api = make_client()
+    with pytest.raises(ValueError, match="limit_order_requires_positive_price"):
+        client.modify_order(
+            order_id="sbx-001",
+            quantity=10,
+            validity="DAY",
+            price=Decimal("0"),
+            order_type="LIMIT",
+        )
+    assert api.calls == []
