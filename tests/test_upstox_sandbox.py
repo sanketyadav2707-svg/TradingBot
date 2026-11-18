@@ -76,7 +76,7 @@ def test_sandbox_client_supports_modify_and_cancel():
 
 
 @pytest.mark.parametrize(
-    ("request", "message"),
+    ("order_request", "message"),
     [
         (
             SandboxOrderRequest("NSE_EQ|INE123", 1, "BUY", price=Decimal("10")),
@@ -96,10 +96,10 @@ def test_sandbox_client_supports_modify_and_cancel():
         ),
     ],
 )
-def test_place_order_rejects_invalid_payload(request, message):
+def test_place_order_rejects_invalid_payload(order_request, message):
     client, api = make_client()
     with pytest.raises(ValueError, match=message):
-        client.place_order(request)
+        client.place_order(order_request)
     assert api.calls == []
 
 
