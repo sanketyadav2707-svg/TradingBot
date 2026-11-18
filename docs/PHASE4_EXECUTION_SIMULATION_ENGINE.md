@@ -51,7 +51,11 @@ The EMA crossover remains a pipeline/plumbing example, not an approved trading s
 - closed-bar timestamps must be timezone-aware, fresh, non-future, correct-symbol and strictly increasing;
 - strategy callbacks receive no future bars;
 - duplicate signals are rejected using deterministic signal IDs;
-- duplicate/out-of-order bars and missing intervals degrade the session and block later bars;\n- signals execute at the next contiguous bar open, not at the signal bar close;\n- stop/target ambiguity resolves stop-first and the configured time exit is bounded to 3–15 minutes;\n- paper position stop/target state and last-bar cursor survive restart; missing or mismatched state durably halts;\n- risk-off flattening remains available after an emergency halt and is journaled before fill persistence;
+- duplicate/out-of-order bars and missing intervals degrade the session and block later bars;
+- signals execute at the next contiguous bar open, not at the signal bar close;
+- stop/target ambiguity resolves stop-first and the configured time exit is bounded to 3–15 minutes;
+- paper position stop/target state and last-bar cursor survive restart; missing or mismatched state durably halts;
+- risk-off flattening remains available after an emergency halt and is journaled before fill persistence;
 - startup and bar/session checks fail closed;
 - exceptions in the bar handler degrade the session;
 - emergency halt is latched until explicit operator recovery;
