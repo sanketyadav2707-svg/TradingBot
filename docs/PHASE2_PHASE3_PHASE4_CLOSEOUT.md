@@ -43,18 +43,18 @@ Budget: ₹0 unless explicitly approved
 ## Phase 4 — Deterministic replay and paper-execution engine
 
 ### Implemented
-- Closed-bar market-data gate validates symbol, candle completion, freshness from candle close, timestamp order and optional session predicate.
-- Incremental `ClosedBarStrategyRuntime` only receives the current completed bar and history up to that bar.
+- Closed-bar `MarketDataGate` validates symbol, candle completion, freshness from candle close, exact interval continuity, timestamp order and optional session predicate.
+- Incremental `ClosedBarStrategyRuntime` only receives the current completed bar and history up to that bar; `PaperTradingLoop` queues signals and executes only at the next contiguous bar open.
 - `SignalValidator` rejects invalid sides/reasons and deduplicates using deterministic signal IDs.
-- Session controller and NSE bar guard; 3–15 minute holding-time ceiling.
+- Persistent `PaperPositionManager` provides stop, target, stop-first ambiguous-bar handling, 3–15 minute time exits, restart recovery and risk-off manual flatten; session controller and NSE bar guard support flat-only session resets.
 - Decimal risk guard and compliance-gated paper order router.
 - Durable SQLite paper account, FIFO position accounting, partial close/reversal, mark-to-market, order lifecycle journal, stable idempotency keys, recovery and broker-snapshot reconciliation.
-- Durable emergency halt at paper-account level; tick-driven watchdog with heartbeat timeout, bounded restarts and recovery checks.
+- Durable emergency halt at paper-account level; risk-off `close_position` is journaled before fills and can flatten after a halt; tick-driven watchdog has heartbeat timeout, bounded restarts and recovery checks.
 - Deterministic offline historical replay CLI with dataset/configuration/run hashes and ordered market, signal and simulated-fill events.
 
 ### Still required before unattended paper operation
 - Connect a permitted real-time or delayed market-data source to the closed-bar runtime.
-- Implement and independently test the complete strategy-specific stop/target/time-exit manager against broker order semantics; current historical replay has conservative OHLC exits, while paper account order routing is a separate risk-gated component.
+- Connect a permitted live/delayed market-data feed to the completed closed-bar paper loop; current operation is driven by injected bars and simulated fills.
 - Run fault-injection and restart/reconciliation drills with the full feed-to-position path.
 - Configure alert delivery, service supervision, backup/restore and monitoring.
 - Complete 8–12 weeks of observed paper operation before considering any controlled deployment.
@@ -64,7 +64,7 @@ Budget: ₹0 unless explicitly approved
 
 - Earlier baseline after Phase 2 test-fixture repair: 341 passed, 2 warnings.
 - Deterministic replay implementation CI: 345 passed, 2 warnings.
-- Closed-bar runtime, freshness, signal de-duplication, sandbox-only Upstox V3 adapter and fail-closed tests passed on commit `d4da98be61145c864005cd2f08dfeb069451a967`: **363 passed, 2 warnings**. Subsequent changes are documentation-only.
+- Closed-bar strategy, next-bar-open paper execution, stop/target/time exits, restart recovery, risk-off flattening, Upstox sandbox adapter and fail-closed tests passed on commit `499f9e9a6025b5f2ad28e8f892edf780169873aa`: **376 passed, 2 warnings**. Subsequent changes are documentation-only.
 - No CI result, historical test, or simulated fill proves profitability or actual exchange execution.
 
 ## Release rule
