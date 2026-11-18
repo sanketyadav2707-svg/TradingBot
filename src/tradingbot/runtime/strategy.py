@@ -174,7 +174,13 @@ class ClosedBarStrategyRuntime:
         with self._lock:
             return tuple(self._history)
 
-    def process_closed_bar(self, bar: Bar, *, received_at: datetime) -> ValidatedSignal | None:
+    def process_closed_bar(
+        self,
+        bar: Bar,
+        *,
+        received_at: datetime,
+        allow_signal: bool = True,
+    ) -> ValidatedSignal | None:
         with self._lock:
             if self._state != RuntimeState.RUNNING:
                 return None
@@ -187,6 +193,9 @@ class ClosedBarStrategyRuntime:
             if len(self._history) > self.max_history_bars:
                 del self._history[: len(self._history) - self.max_history_bars]
             visible_history = tuple(self._history)
+            if not allow_signal:
+                self._reason = "signal_dispatch_suppressed_while_position_open"
+                return None
             try:
                 signal = self.strategy_on_bar(bar, visible_history)
                 if signal is None:
