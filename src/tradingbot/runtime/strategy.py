@@ -101,7 +101,13 @@ class SignalValidator:
         self._seen: set[str] = set()
         self._lock = RLock()
 
-    def validate(self, bar: Bar, signal: Signal) -> tuple[ValidatedSignal | None, str]:
+    def validate(
+        self,
+        bar: Bar,
+        signal: Signal,
+        *,
+        bar_interval_seconds: int = 60,
+    ) -> tuple[ValidatedSignal | None, str]:
         if not isinstance(bar, Bar):
             return None, "signal_bar_type_invalid"
         if not isinstance(signal, Signal):
@@ -110,7 +116,10 @@ class SignalValidator:
             return None, "signal_side_invalid"
         if not isinstance(signal.reason, str) or not signal.reason.strip():
             return None, "signal_reason_required"
-        stamp = bar.timestamp.astimezone(timezone.utc).isoformat(timespec="microseconds")
+        if type(bar_interval_seconds) is not int or bar_interval_seconds < 1:
+            return None, "signal_bar_interval_invalid"
+        signal_time = bar.timestamp + timedelta(seconds=bar_interval_seconds)
+        stamp = signal_time.astimezone(timezone.utc).isoformat(timespec="microseconds")
         material = "|".join((bar.symbol.strip().upper(), stamp, str(int(signal.side)), signal.reason.strip()))
         signal_id = hashlib.sha256(material.encode("utf-8")).hexdigest()
         with self._lock:
@@ -120,7 +129,7 @@ class SignalValidator:
         return ValidatedSignal(
             signal_id=signal_id,
             symbol=bar.symbol.strip().upper(),
-            timestamp=bar.timestamp,
+            timestamp=signal_time,
             side=signal.side,
             reason=signal.reason.strip(),
         ), "accepted"
@@ -200,7 +209,10 @@ class ClosedBarStrategyRuntime:
                 signal = self.strategy_on_bar(bar, visible_history)
                 if signal is None:
                     return None
-                validated, reason = self.signal_validator.validate(bar, signal)
+                validated, reason = self.signal_validator.validate(
+                    bar, signal,
+                    bar_interval_seconds=self.market_data_gate.bar_interval_seconds,
+                )
                 if validated is None:
                     self._reason = reason
                     return None
