@@ -64,7 +64,7 @@ Budget: ₹0 unless explicitly approved
 
 - Earlier baseline after Phase 2 test-fixture repair: 341 passed, 2 warnings.
 - Deterministic replay implementation CI: 345 passed, 2 warnings.
-- Closed-bar runtime, freshness, signal de-duplication and fail-closed tests passed on commit `6129b0d0d1dca4d50c89c7893068ba1961a0279f`: **353 passed, 2 warnings**. The latest docs-only commit is separately re-triggering CI.
+- Closed-bar runtime, freshness, signal de-duplication, sandbox-only Upstox V3 adapter and fail-closed tests passed on commit `d4da98be61145c864005cd2f08dfeb069451a967`: **363 passed, 2 warnings**. Subsequent changes are documentation-only.
 - No CI result, historical test, or simulated fill proves profitability or actual exchange execution.
 
 ## Release rule
