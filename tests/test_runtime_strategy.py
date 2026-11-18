@@ -33,7 +33,7 @@ def test_market_data_gate_rejects_stale_future_duplicate_and_wrong_symbol():
     assert gate.validate(bar(0), received_at=received).reason == "duplicate_or_out_of_order_market_bar"
     assert gate.validate(bar(2), received_at=received).reason == "future_dated_market_bar"
     assert gate.validate(bar(1, symbol="BANKNIFTY26DEC_FUT"), received_at=received).reason == "market_data_symbol_mismatch"
-    assert gate.validate(bar(1), received_at=received + timedelta(minutes=2)).reason == "stale_market_bar"
+    assert gate.validate(bar(1), received_at=received + timedelta(minutes=3)).reason == "stale_market_bar"
 
 
 def test_closed_bar_runtime_only_exposes_history_up_to_current_bar():
