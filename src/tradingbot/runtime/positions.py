@@ -8,6 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from tradingbot.accounting.engine import PaperAccountEngine
+from tradingbot.execution.router import ExecutionMode, ExecutionRouter, OrderIntent
 from tradingbot.models import Bar, Instrument, Side
 from tradingbot.paper.broker import PaperFill
 from tradingbot.runtime.strategy import ClosedBarStrategyRuntime, RuntimeState
@@ -348,22 +349,54 @@ class PaperPositionManager:
 
 
 class PaperTradingLoop:
-    """Drive strategy entries and managed exits from one ordered closed-bar stream."""
+    """Drive next-bar-open paper entries and managed exits from one closed-bar stream.
+
+    A signal produced at bar close is queued. It can only execute at the next
+    contiguous bar's open, never at the signal bar's close. While a position is
+    open, strategy history is still updated but new entries are suppressed.
+    """
 
     def __init__(
         self,
         *,
         strategy_runtime: ClosedBarStrategyRuntime,
         position_manager: PaperPositionManager,
+        router: ExecutionRouter,
     ) -> None:
+        if not isinstance(strategy_runtime, ClosedBarStrategyRuntime):
+            raise TypeError("closed_bar_strategy_runtime_required")
+        if not isinstance(position_manager, PaperPositionManager):
+            raise TypeError("paper_position_manager_required")
+        if not isinstance(router, ExecutionRouter) or router.mode != ExecutionMode.PAPER:
+            raise TypeError("paper_execution_router_required")
+        if router.risk_guard is None:
+            raise ValueError("paper_loop_requires_risk_guard")
         self.strategy_runtime = strategy_runtime
         self.position_manager = position_manager
+        self.router = router
+        self._pending_signal = None
+        # The loop owns dispatch so it can defer execution until the next bar open.
+        self.strategy_runtime.on_signal = self._queue_signal
+
+    @property
+    def pending_signal(self):
+        return self._pending_signal
+
+    def _queue_signal(self, signal) -> None:
+        if self._pending_signal is not None:
+            raise RuntimeError("previous_signal_not_consumed")
+        self._pending_signal = signal
+
+    def cancel_pending_signal(self, reason: str = "session_end") -> None:
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("pending_signal_cancel_reason_required")
+        self._pending_signal = None
 
     def process_closed_bar(self, bar: Bar, *, received_at: datetime):
-        if self.position_manager.halted:
+        if self.position_manager.halted or self.strategy_runtime.state != RuntimeState.RUNNING:
             return None
+
         if self.position_manager.has_position:
-            # Keep strategy history warm while suppressing new entries until flat.
             self.strategy_runtime.process_closed_bar(
                 bar, received_at=received_at, allow_signal=False
             )
@@ -371,4 +404,60 @@ class PaperTradingLoop:
                 self.position_manager.halt(self.strategy_runtime.reason)
                 return None
             return self.position_manager.on_closed_bar(bar)
-        return self.strategy_runtime.process_closed_bar(bar, received_at=received_at)
+
+        if self._pending_signal is None:
+            return self.strategy_runtime.process_closed_bar(
+                bar, received_at=received_at, allow_signal=True
+            )
+
+        expected_open = self._pending_signal.timestamp.astimezone(timezone.utc)
+        actual_open = bar.timestamp.astimezone(timezone.utc)
+        if actual_open != expected_open:
+            # A missing candle invalidates the queued entry. Reprocess this bar
+            # as a fresh decision point, without executing a stale signal.
+            self._pending_signal = None
+            return self.strategy_runtime.process_closed_bar(
+                bar, received_at=received_at, allow_signal=True
+            )
+
+        signal = self._pending_signal
+        self._pending_signal = None
+        self.strategy_runtime.process_closed_bar(
+            bar, received_at=received_at, allow_signal=False
+        )
+        if self.strategy_runtime.state != RuntimeState.RUNNING:
+            self.position_manager.halt(self.strategy_runtime.reason)
+            return None
+
+        try:
+            fill = self.router.submit_entry(
+                OrderIntent(
+                    instrument=self.position_manager.instrument,
+                    side=signal.side,
+                    stop_ticks=self.position_manager.stop_ticks,
+                    reference_price=bar.open,
+                    timestamp=bar.timestamp,
+                    idempotency_key=signal.signal_id,
+                )
+            )
+            self.position_manager.register_entry(fill)
+            exit_event = self.position_manager.on_closed_bar(bar)
+            return exit_event if exit_event is not None else fill
+        except Exception:
+            self.position_manager.halt("paper_entry_or_position_registration_failed")
+            self.strategy_runtime.halt("paper_entry_or_position_registration_failed")
+            raise
+
+    def force_flatten(
+        self,
+        *,
+        reference_price: float,
+        timestamp: datetime,
+        reason: str = "SESSION_END",
+    ) -> PositionExit | None:
+        self.cancel_pending_signal("forced_flatten")
+        return self.position_manager.force_flatten(
+            reference_price=reference_price,
+            timestamp=timestamp,
+            reason=reason,
+        )
