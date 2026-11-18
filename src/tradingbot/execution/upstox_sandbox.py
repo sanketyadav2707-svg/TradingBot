@@ -59,7 +59,7 @@ class UpstoxSandboxOrderClient:
     def _validate_order(request: SandboxOrderRequest) -> None:
         if not isinstance(request, SandboxOrderRequest):
             raise TypeError("sandbox_order_request_required")
-        if not request.instrument_token.startswith("NSE_FO|"):
+        if not isinstance(request.instrument_token, str) or not request.instrument_token.startswith("NSE_FO|"):
             raise ValueError("sandbox_client_only_accepts_nse_fo_instrument_tokens")
         if type(request.quantity) is not int or request.quantity <= 0:
             raise ValueError("order_quantity_must_be_positive_integer")
@@ -127,8 +127,20 @@ class UpstoxSandboxOrderClient:
             raise ValueError("unsupported_order_validity")
         if order_type not in {"LIMIT", "MARKET", "SL", "SL-M"}:
             raise ValueError("unsupported_order_type")
-        if not Decimal(str(price)).is_finite() or not Decimal(str(trigger_price)).is_finite():
+        price_value = Decimal(str(price))
+        trigger_value = Decimal(str(trigger_price))
+        if not price_value.is_finite() or not trigger_value.is_finite():
             raise ValueError("order_prices_must_be_finite")
+        if order_type == "LIMIT" and price_value <= 0:
+            raise ValueError("limit_order_requires_positive_price")
+        if order_type in {"SL", "SL-M"} and trigger_value <= 0:
+            raise ValueError("stop_order_requires_positive_trigger_price")
+        if type(disclosed_quantity) is not int or disclosed_quantity < 0:
+            raise ValueError("disclosed_quantity_must_be_non_negative_integer")
+        if type(market_protection) is not int or not -1 <= market_protection <= 25:
+            raise ValueError("market_protection_out_of_range")
+        if order_type == "MARKET" and market_protection == 0:
+            raise ValueError("market_orders_require_market_protection")
         body = self._sdk.ModifyOrderRequest(
             quantity=quantity,
             validity=validity,
