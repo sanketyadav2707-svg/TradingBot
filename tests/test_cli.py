@@ -202,8 +202,8 @@ def test_validate_nse_master_cli_writes_manifest_and_excludes_bse_only_rows(tmp_
     source = tmp_path / "normalized-nse-bse.csv"
     source.write_text(
         "exchange_token,trading_symbol,underlying,segment,instrument_type,expiry,lot_size,quantity_freeze,tick_size,currency_code,source_as_of,admission_type\n"
-        "12345,NIFTY26DEC_FUT,NIFTY,NSE_FO,FUTIDX,2026-12-29,65,1800,0.05,INR,2026-11-16,1\n"
-        "67890,BSEONLY26DEC_FUT,BSEONLY,NSE_FO,FUTSTK,2026-12-29,50,1000,0.05,INR,2026-11-16,2\n",
+        "12345,NIFTY26DEC_FUT,NIFTY,NSE_FO,FUTIDX,2026-12-29,65,1800,0.05,INR,2026-11-17,1\n"
+        "67890,BSEONLY26DEC_FUT,BSEONLY,NSE_FO,FUTSTK,2026-12-29,50,1000,0.05,INR,2026-11-17,2\n",
         encoding="utf-8",
     )
     manifest = tmp_path / "nse-manifest.json"
