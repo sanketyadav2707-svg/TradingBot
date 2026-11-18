@@ -53,7 +53,6 @@ Budget: ₹0 unless explicitly approved
 - Deterministic offline historical replay CLI with dataset/configuration/run hashes and ordered market, signal and simulated-fill events.
 
 ### Still required before unattended paper operation
-- Connect a permitted real-time or delayed market-data source to the closed-bar runtime.
 - Connect a permitted live/delayed market-data feed to the completed closed-bar paper loop; current operation is driven by injected bars and simulated fills.
 - Run fault-injection and restart/reconciliation drills with the full feed-to-position path.
 - Configure alert delivery, service supervision, backup/restore and monitoring.
