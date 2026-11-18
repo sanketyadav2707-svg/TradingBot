@@ -14,13 +14,13 @@ Budget: ₹0 unless explicitly approved
 - NSE timezone, regular sessions, verified 2026 holiday/session coverage, special-session rules and fail-closed unknown dates.
 - Normalized NSE F&O instrument-master validation, source freshness checks, NSE-exclusive versus combined NSE/BSE variants, admission-type-2 exclusion, lot/quantity-step/freeze validation and SHA-256 manifests.
 - NSE session/master read-only API diagnostics and fail-closed NSE readiness endpoint.
-- Upstox selected as first integration target; authentication, token, static-IP, sandbox, fee and API limitations documented.
+- Upstox selected as first integration target; authentication, token, static-IP, sandbox, fee and API limitations documented. Sandbox-only V3 place/modify/cancel client added using official SDK sandbox mode and fake-SDK tests; no live route.
 - Offline Upstox intraday candle date-window planner and gap-free partition validator for documented 1/2/3/5/10/15-minute intervals.
 
 ### Still externally blocked
 - Raw NSE MII parser: must be pinned to an authentic dated official raw file and a complete field/ISO mapping. The normalized loader is not a raw-file parser.
 - 2027 NSE holiday/special-session calendar: not extrapolated from weekdays; unknown dates remain blocked.
-- Actual Upstox authenticated historical downloader, sandbox adapter and broker integration: no account/token yet by user choice.
+- Actual Upstox authenticated historical downloader, sandbox end-to-end request and broker integration: no sandbox app/token or live account yet by user choice. Sandbox-only V3 client code is ready for token-backed verification.
 - Verified dated Upstox all-in fee schedule and API/account entitlements.
 - Full browser-driven INR dashboard and end-to-end operational validation.
 
