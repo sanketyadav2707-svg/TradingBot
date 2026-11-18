@@ -1,0 +1,82 @@
+# Phase 4: Deterministic Replay and Paper-Execution Engine
+
+**Status:** Core offline replay, risk-gated paper execution, durable accounting/order lifecycle, session control and watchdog foundations are implemented. Live market-data ingestion and an unattended Upstox paper route are intentionally not enabled.
+
+## Objective
+
+Provide a deterministic, auditable path from validated closed market bars through strategy decisions, risk checks, simulated fills, position/account accounting and restart recovery. The initial holding-time ceiling is 3–15 minutes. The system must fail closed when event ordering, market-data freshness, persistence, account state or reconciliation is uncertain.
+
+## Implemented components
+
+| Required subsystem | Repository implementation | Current boundary |
+|---|---|---|
+| Market-data validation | `models.Bar`, strict CSV loader, raw-data validators, NSE session-bar guard, `timestamp_is_fresh` | Historical files and injected events only; no live NSE feed |
+| Strategy runtime | Existing strategy interface and conservative `BacktestEngine`; new content-addressed replay runner | Replay invokes the selected strategy against the complete validated historical series; no unattended live scheduler |
+| Signal/event validation | `SessionController` rejects duplicate/out-of-order closed bars; stable order IDs and lifecycle payload hashes prevent duplicate submissions | A strategy-specific live signal adapter remains separate |
+| Risk engine | Decimal `RiskGuard`, account snapshots, dated fee schedules, optional fail-closed compliance gate | Illustrative defaults are not a verified broker/account risk profile |
+| Order manager | Durable SQLite `OrderLifecycleStore`, explicit state transitions, idempotency, unresolved-order detection and broker-snapshot reconciliation | Broker snapshot is an injected interface; no live broker implementation |
+| Paper execution | `PaperBroker` and `PaperAccountEngine`; risk approval required before order routing | Simulated market fills with configured slippage/fees; not exchange fills |
+| Position/account manager | SQLite FIFO lots, partial closes, reversals, realised/unrealised P&L, mark freshness and equity snapshots | Mark updates are supplied by caller; no live quote source |
+| Session manager | `SessionController`, NSE session-bar guard and 3–15 minute holding ceiling | Caller supplies closed bars and startup checks |
+| Process supervisor | Tick-driven `EngineSupervisor`, heartbeat watchdog, bounded restart and recovery checks | External service manager must call `poll`; no hidden daemon is started |
+| Event/audit log | Accounting `account_events`, lifecycle transition/fill journal, deterministic replay JSON events | Replay report is a local artifact; external alerting is not configured |
+| Deterministic historical replay | `tradingbot.runtime.replay` and `tradingbot replay` CLI | Bar-OHLC simulation limitations apply |
+
+## Historical replay command
+
+After installing the development dependencies and activating the project virtual environment:
+
+```bash
+tradingbot replay \
+  --csv data/sample/MES_5m_sample.csv \
+  --symbol MES \
+  --provider local_fixture \
+  --dataset MES_5m_sample_v1 \
+  --output reports/replay.json
+```
+
+The command writes a deterministic JSON report with:
+- content SHA-256 for the normalized bar sequence;
+- configuration SHA-256 and deterministic run ID;
+- ordered `BAR_CLOSED`, `SIGNAL_EMITTED`, `PAPER_ENTRY_FILL` and `PAPER_EXIT_FILL` events;
+- trade ledger and aggregate metrics;
+- explicit safety flags showing no network access and no live orders.
+
+Identical bars, instrument/risk/strategy configuration and software version produce the same run ID and report content. A changed bar or configuration changes the corresponding digest. Do not compare run IDs across different software versions as if the implementation were identical.
+
+The EMA crossover remains a pipeline/plumbing example, not an approved trading strategy.
+
+## Safety properties already covered by tests
+
+- closed-bar timestamps must be timezone-aware and strictly increasing;
+- duplicate/out-of-order bars degrade the session and block later bars;
+- startup and bar/session checks fail closed;
+- exceptions in the bar handler degrade the session;
+- emergency halt is latched until explicit operator recovery;
+- stale/future/missing market timestamps are not considered fresh;
+- supervisor restarts are bounded and require health and reconciliation checks;
+- risk approval is mandatory before paper submission;
+- stable client order IDs and payload hashes prevent accidental duplicate submission;
+- accounting and order journal recovery is validated on restart;
+- accounting/lifecycle mismatches and unresolved order states block execution;
+- daily loss, drawdown, trade count, lot size, quantity step and quantity freeze are enforced;
+- persistence is transactional and cross-process order submission is serialized.
+
+## Current CI evidence
+
+GitHub Actions on commit `800f6b28f7a5f0e64e505df87a13de00c741142f` passed **345 tests, 2 warnings**. The CI run is a software test result, not evidence of profitable strategies or real-market execution quality.
+
+## Explicit remaining gates (not silently waived)
+
+1. **Phase 2 / raw NSE MII:** no raw positional parser is enabled until a dated official sample, complete header/ISO mapping and row-level mapping audit are pinned. The normalized master boundary is implemented and validated; it is not a raw MII parser.
+2. **Phase 2 / calendar:** current NSE calendar coverage is verified through 31 December 2026. Unknown 2027 dates fail closed until official dates and special sessions are verified.
+3. **Phase 2 / browser validation:** full end-to-end browser tests for INR display, account lifecycle and all dashboard states remain separate from Python CI.
+4. **Phase 3 / data:** no authentic, licensed NSE one-minute raw-expiry-contract dataset has been supplied. The three NSE hypotheses and protected holdout evaluator are implemented, but empirical NSE strategy evaluation is not complete.
+5. **Phase 3 / costs:** a verified, dated Upstox/NSE all-in fee schedule is not configured. Zero fees must never be presented as realistic.
+6. **Phase 2 / Upstox:** no account or API credentials exist yet. The offline monthly date-window planner is implemented; authenticated historical downloading, instrument refresh, sandbox verification and broker adapter remain gated until account/API onboarding.
+7. **Phase 4 / unattended paper session:** the reusable session controller, supervisor, durable paper account and replay engine exist, but a production-grade end-to-end feed-to-strategy-to-position-management loop with live/delayed data, alert delivery, full restart drill and 8–12 weeks of observed paper operation has not been validated.
+8. **Phase 4 / fill realism:** OHLC replay cannot reproduce bid/ask, depth, queue position, partial fills, latency, market impact or exchange rejects. These need authorized higher-resolution data and a verified broker route.
+
+## Phase exit decision
+
+The **offline Phase 4 engineering foundation** is implemented and CI-tested. The phase is **not approved for unattended or live deployment**. The next validation stage must use an authorized data source, complete the strategy-to-position lifecycle, perform fault-injection/restart drills, then run at least 8–12 weeks of paper operation. Any unresolved state must block new entries. Live routing remains absent and disabled.
