@@ -66,6 +66,11 @@ class MarketDataGate:
         with self._lock:
             return self._last_timestamp
 
+    def reset_for_new_session(self) -> None:
+        """Clear the ordering cursor after the prior session is fully flat."""
+        with self._lock:
+            self._last_timestamp = None
+
     def validate(self, bar: Bar, *, received_at: datetime) -> MarketDataDecision:
         with self._lock:
             if not isinstance(bar, Bar):
@@ -228,6 +233,14 @@ class ClosedBarStrategyRuntime:
                 self._state = RuntimeState.DEGRADED
                 self._reason = "strategy_or_signal_handler_failed"
                 return None
+
+    def reset_for_new_session(self) -> None:
+        with self._lock:
+            if self._state != RuntimeState.RUNNING:
+                raise RuntimeError("degraded_or_halted_runtime_requires_operator_restart")
+            self._history.clear()
+            self.market_data_gate.reset_for_new_session()
+            self._reason = "new_session_ready"
 
     def halt(self, *, reason: str) -> None:
         with self._lock:
