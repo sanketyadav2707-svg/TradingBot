@@ -95,5 +95,5 @@ def test_stale_market_bar_latches_failed_inbox_and_stops_future_dispatch(tmp_pat
 
 def test_runner_health_blocks_unresolved_order_and_halted_account(tmp_path):
     _, engine, _, _, runner = make_runner(tmp_path)
-    engine.store.emergency_halt("operator test")
+    engine.emergency_halt("operator test")
     assert not runner.health().ready_for_dispatch
