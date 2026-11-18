@@ -480,8 +480,8 @@ def test_nse_instrument_master_api_reports_bse_only_exclusions(tmp_path, monkeyp
     master = tmp_path / "nse-bse-master-v2.csv"
     master.write_text(
         "exchange_token,trading_symbol,underlying,segment,instrument_type,expiry,lot_size,quantity_freeze,tick_size,currency_code,source_as_of,admission_type\n"
-        "12345,NIFTY26DEC_FUT,NIFTY,NSE_FO,FUTIDX,2026-12-29,65,1800,0.05,INR,2026-11-17,1\n"
-        "67890,BSEONLY26DEC_FUT,BSEONLY,NSE_FO,FUTSTK,2026-12-29,50,1000,0.05,INR,2026-11-17,2\n",
+        "12345,NIFTY26DEC_FUT,NIFTY,NSE_FO,FUTIDX,2026-12-29,65,1800,0.05,INR,2026-11-18,1\n"
+        "67890,BSEONLY26DEC_FUT,BSEONLY,NSE_FO,FUTSTK,2026-12-29,50,1000,0.05,INR,2026-11-18,2\n",
         encoding="utf-8",
     )
     manifest_path = tmp_path / "runtime-manifest.json"
