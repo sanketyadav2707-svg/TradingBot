@@ -138,15 +138,31 @@ def build_replay_report(
         }
         for index, bar in enumerate(bars)
     ]
-    events.extend(
-        {
-            "sequence": len(bars) + index,
-            "event_type": "TRADE_CLOSED",
+    signals = strategy.generate_signals(bars)
+    for index, signal in enumerate(signals):
+        if signal is not None:
+            events.append({
+                "sequence": len(bars) + index,
+                "event_type": "SIGNAL_EMITTED",
+                "timestamp": bars[index].timestamp,
+                "symbol": bars[index].symbol,
+                "side": signal.side.name,
+                "reason": signal.reason,
+                "eligible_execution": "NEXT_BAR_OPEN",
+            })
+    for index, trade in enumerate(trades):
+        events.append({
+            "sequence": 2 * len(bars) + 2 * index,
+            "event_type": "PAPER_ENTRY_FILL",
+            "timestamp": trade["entry_time"],
+            "trade": trade,
+        })
+        events.append({
+            "sequence": 2 * len(bars) + 2 * index + 1,
+            "event_type": "PAPER_EXIT_FILL",
             "timestamp": trade["exit_time"],
             "trade": trade,
-        }
-        for index, trade in enumerate(trades)
-    )
+        })
     events.sort(key=lambda event: (event["timestamp"], event["sequence"]))
     core = {
         "schema_version": 1,
@@ -172,7 +188,7 @@ def build_replay_report(
         },
     }
     run_id = hashlib.sha256(_json_bytes(core)).hexdigest()
-    return {**core, "run_id": run_id}
+    return _canonical({**core, "run_id": run_id})
 
 
 def write_replay_report(path: str | Path, report: dict[str, Any]) -> Path:
