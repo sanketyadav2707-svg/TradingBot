@@ -469,7 +469,7 @@ class PaperTradingLoop:
             return exit_event if exit_event is not None else fill
         except Exception:
             self.position_manager.halt("paper_entry_or_position_registration_failed")
-            self.strategy_runtime.halt("paper_entry_or_position_registration_failed")
+            self.strategy_runtime.halt(reason="paper_entry_or_position_registration_failed")
             raise
 
     def force_flatten(
