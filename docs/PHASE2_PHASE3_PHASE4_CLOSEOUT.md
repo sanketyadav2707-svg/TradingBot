@@ -59,11 +59,28 @@ Budget: ₹0 unless explicitly approved
 - Complete 8–12 weeks of observed paper operation before considering any controlled deployment.
 - Upstox live route remains absent and disabled.
 
+## Phase 5 — Durable ingestion and paper operations
+
+### Implemented engineering foundation
+- SQLite durable closed-bar inbox with source/symbol/timestamp idempotency and conflicting-payload detection.
+- Bounded pending queue, backpressure, transactional state transitions and explicit PENDING/DISPATCHING/PROCESSED/FAILED/RESOLVED states.
+- Ambiguous dispatch after crash is never automatically replayed; operator reconciliation is required and audited with a reason.
+- Provider-neutral `PaperFeedRunner` composes normalized closed-bar ingestion with Phase 4 paper execution and exposes fail-closed health diagnostics.
+- End-to-end injected-bar tests cover successful paper dispatch, symbol mismatch, stale-data halt, inbox recovery and account emergency halt.
+
+### Still externally blocked
+- Authenticated Upstox historical downloader and live market-data feed; user has no account/API credentials yet.
+- Official feed reconnect, heartbeat, subscription, sequence and candle-close semantics cannot be verified without provider documentation and authorized access.
+- Production scheduler/process manager, alert delivery, backup/restore and VPS deployment are not configured; no paid service has been authorized.
+- Sustained operational paper observation and fault-injection drills remain required.
+
+See [Phase 5 durable paper operations](PHASE5_DURABLE_PAPER_OPERATIONS.md). Phase 5 engineering foundation is implemented; operational exit criteria are not yet met.
+
 ## Validation record
 
 - Earlier baseline after Phase 2 test-fixture repair: 341 passed, 2 warnings.
 - Deterministic replay implementation CI: 345 passed, 2 warnings.
-- Closed-bar strategy, next-bar-open paper execution, stop/target/time exits, restart recovery, risk-off flattening, Upstox sandbox adapter and fail-closed tests passed on commit `499f9e9a6025b5f2ad28e8f892edf780169873aa`: **376 passed, 2 warnings**. Subsequent changes are documentation-only.
+- Closed-bar strategy, next-bar-open paper execution, stop/target/time exits, restart recovery, risk-off flattening, Upstox sandbox adapter and fail-closed tests passed on commit `499f9e9a6025b5f2ad28e8f892edf780169873aa`: **376 passed, 2 warnings**. Phase 5 inbox and paper-runner changes are under CI validation; the latest result is recorded in the pull request and workflow run.
 - No CI result, historical test, or simulated fill proves profitability or actual exchange execution.
 
 ## Release rule
