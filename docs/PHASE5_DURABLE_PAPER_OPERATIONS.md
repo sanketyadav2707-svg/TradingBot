@@ -61,3 +61,8 @@ Do not connect a feed until the provider contract, candle close semantics, times
 ## Exit criteria
 
 Phase 5 engineering foundation is implemented. Phase 5 operational validation is **not complete** until an authorized data provider is configured, feed semantics and reconnect behavior are verified, fault-injection/restart drills pass, alerting and backup/restore are configured, and a sustained paper observation period is completed. Live trading remains out of scope.
+
+
+## CI validation
+
+GitHub Actions on commit `576a60e0a4155e78bb1358d22ec4c693b5700eca` passed **387 tests, 2 warnings**. This validates the offline software path only; it does not validate an authorized provider connection or unattended operation.
