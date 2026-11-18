@@ -414,8 +414,10 @@ class PaperTradingLoop:
 
     def start_new_session(self) -> None:
         """Reset bar history only when flat, unhalted and no signal is pending."""
-        if self.position_manager.has_position:
+        if self.position_manager.has_position or self.position_manager.engine.store.list_positions():
             raise RuntimeError("cannot_start_new_session_with_open_position")
+        if self.position_manager.engine.order_lifecycle.list_unresolved_orders():
+            raise RuntimeError("cannot_start_new_session_with_unresolved_orders")
         if self.position_manager.halted or self.position_manager.engine.halted:
             raise RuntimeError("halted_paper_engine_requires_operator_recovery")
         if self._pending_signal is not None:
