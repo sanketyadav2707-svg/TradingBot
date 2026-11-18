@@ -336,16 +336,16 @@ class PaperPositionManager:
         timestamp: datetime,
         reason: str = "SESSION_END",
     ) -> PositionExit | None:
-        if self._halted:
-            raise RuntimeError("position_manager_halted")
-        if not self.has_position:
-            return None
         if not isinstance(reason, str) or not reason.strip():
             raise ValueError("position_exit_reason_required")
+        position = self._position()
+        if position is None:
+            self._state_store.delete(self.instrument.symbol)
+            self._state = None
+            return None
         fills = self.engine.close_position(
             self.instrument, reference_price=reference_price, timestamp=timestamp
         )
-        state = self._state
         self._state_store.delete(self.instrument.symbol)
         self._state = None
         self._reason = reason.strip().upper()
