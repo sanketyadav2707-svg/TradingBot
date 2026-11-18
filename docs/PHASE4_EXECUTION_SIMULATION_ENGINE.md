@@ -64,7 +64,7 @@ The EMA crossover remains a pipeline/plumbing example, not an approved trading s
 
 ## Current CI evidence
 
-GitHub Actions on commit `6129b0d0d1dca4d50c89c7893068ba1961a0279f` passed **353 tests, 2 warnings**. The CI run is a software test result, not evidence of profitable strategies or real-market execution quality.
+GitHub Actions on commit `d4da98be61145c864005cd2f08dfeb069451a967` passed **363 tests, 2 warnings**. The CI run is a software test result, not evidence of profitable strategies or real-market execution quality.
 
 ## Explicit remaining gates (not silently waived)
 
