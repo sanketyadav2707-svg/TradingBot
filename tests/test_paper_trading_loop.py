@@ -203,9 +203,8 @@ def test_missing_position_bar_halts_and_operator_can_still_flatten(tmp_path):
     process(loop, make_bar(0, open_=25000, high=25001, low=24999, close=25000.5))
     process(loop, make_bar(1, open_=25001, high=25001.2, low=25000.9, close=25001.1))
 
-    with pytest.raises(ValueError, match="position_bar_gap_detected"):
-        process(loop, make_bar(3, open_=25001, high=25001.2, low=25000.9, close=25001.1))
-
+    result = process(loop, make_bar(3, open_=25001, high=25001.2, low=25000.9, close=25001.1))
+    assert result is None
     assert manager.halted
     assert engine.halted
     assert store.list_positions()
@@ -216,4 +215,21 @@ def test_missing_position_bar_halts_and_operator_can_still_flatten(tmp_path):
     )
     assert isinstance(flattened, PositionExit)
     assert store.list_positions() == []
+    assert engine.halted
+
+
+
+def test_position_manager_itself_rejects_gap_after_restart_or_bypassed_gate(tmp_path):
+    import pytest
+
+    store, engine, runtime, manager, loop = make_runtime_and_loop(
+        tmp_path, stop_ticks=20, target_ticks=20, max_holding_bars=3
+    )
+    process(loop, make_bar(0, open_=25000, high=25001, low=24999, close=25000.5))
+    process(loop, make_bar(1, open_=25001, high=25001.2, low=25000.9, close=25001.1))
+    with pytest.raises(ValueError, match="position_bar_gap_detected"):
+        manager.on_closed_bar(
+            make_bar(3, open_=25001, high=25001.2, low=25000.9, close=25001.1)
+        )
+    assert manager.halted
     assert engine.halted
