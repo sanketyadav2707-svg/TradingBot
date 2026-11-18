@@ -51,8 +51,8 @@ def test_closed_bar_runtime_only_exposes_history_up_to_current_bar():
         strategy_on_bar=strategy,
         on_signal=dispatched.append,
     )
-    result = runtime.process_closed_bar(bar(0), received_at=T0 + timedelta(seconds=1))
-    runtime.process_closed_bar(bar(1), received_at=T0 + timedelta(minutes=1, seconds=1))
+    result = runtime.process_closed_bar(bar(0), received_at=T0 + timedelta(minutes=1, seconds=1))
+    runtime.process_closed_bar(bar(1), received_at=T0 + timedelta(minutes=2, seconds=1))
     assert result is not None
     assert len(observed) == 2
     assert len(dispatched) == 1
@@ -67,16 +67,16 @@ def test_closed_bar_runtime_degrades_and_blocks_after_stale_data():
         on_signal=lambda signal: None,
     )
     assert runtime.process_closed_bar(
-        bar(0), received_at=T0 + timedelta(seconds=1)
+        bar(0), received_at=T0 + timedelta(minutes=1, seconds=1)
     ) is None
     assert runtime.process_closed_bar(
-        bar(1), received_at=T0 + timedelta(minutes=2)
+        bar(1), received_at=T0 + timedelta(minutes=4)
     ) is None
     assert runtime.state == RuntimeState.DEGRADED
     assert runtime.reason == "stale_market_bar"
     assert len(calls) == 1
     assert runtime.process_closed_bar(
-        bar(2), received_at=T0 + timedelta(minutes=2)
+        bar(2), received_at=T0 + timedelta(minutes=4)
     ) is None
     assert len(calls) == 1
 
@@ -99,7 +99,7 @@ def test_strategy_or_order_callback_exception_degrades_runtime():
         on_signal=lambda signal: (_ for _ in ()).throw(RuntimeError("router unavailable")),
     )
     assert runtime.process_closed_bar(
-        bar(0), received_at=T0 + timedelta(seconds=1)
+        bar(0), received_at=T0 + timedelta(minutes=1, seconds=1)
     ) is None
     assert runtime.state == RuntimeState.DEGRADED
     assert runtime.reason == "strategy_or_signal_handler_failed"
@@ -114,5 +114,5 @@ def test_runtime_halt_is_latched():
     runtime.halt(reason="operator stop")
     assert runtime.state == RuntimeState.HALTED
     assert runtime.process_closed_bar(
-        bar(0), received_at=T0 + timedelta(seconds=1)
+        bar(0), received_at=T0 + timedelta(minutes=1, seconds=1)
     ) is None
