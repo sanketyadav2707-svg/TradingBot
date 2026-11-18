@@ -233,3 +233,28 @@ def test_position_manager_itself_rejects_gap_after_restart_or_bypassed_gate(tmp_
         )
     assert manager.halted
     assert engine.halted
+
+
+
+def test_session_reset_requires_flat_and_clears_bar_ordering_history(tmp_path):
+    import pytest
+
+    store, engine, runtime, manager, loop = make_runtime_and_loop(tmp_path)
+    process(loop, make_bar(0, open_=25000, high=25001, low=24999, close=25000.5))
+    with pytest.raises(RuntimeError, match="pending_signal"):
+        loop.start_new_session()
+
+    loop.cancel_pending_signal("end_of_session")
+    loop.start_new_session()
+    next_day = Bar(
+        timestamp=START + timedelta(days=1),
+        symbol=NIFTY.symbol,
+        open=25000,
+        high=25001,
+        low=24999,
+        close=25000.5,
+        volume=1000,
+    )
+    result = process(loop, next_day)
+    assert result is not None
+    assert len(runtime.history) == 1
