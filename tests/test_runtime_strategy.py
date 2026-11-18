@@ -116,3 +116,16 @@ def test_runtime_halt_is_latched():
     assert runtime.process_closed_bar(
         bar(0), received_at=T0 + timedelta(minutes=1, seconds=1)
     ) is None
+
+def test_signal_validator_rejects_plain_integer_side():
+    validator = SignalValidator()
+    validated, reason = validator.validate(bar(0), Signal(1, "not-an-enum"))  # type: ignore[arg-type]
+    assert validated is None
+    assert reason == "signal_side_invalid"
+
+
+def test_market_data_gate_rejects_naive_receive_timestamp():
+    gate = MarketDataGate(symbol="NIFTY26DEC_FUT")
+    decision = gate.validate(bar(0), received_at=T0.replace(tzinfo=None))
+    assert decision.accepted is False
+    assert decision.reason == "receive_timestamp_must_be_timezone_aware"
