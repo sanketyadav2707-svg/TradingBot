@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 import sqlite3
 
@@ -91,7 +92,7 @@ def test_paper_loop_queues_signal_then_fills_at_next_bar_open_and_takes_profit(t
     exit_event = process(loop, second)
     assert isinstance(exit_event, PositionExit)
     assert exit_event.reason == "TAKE_PROFIT"
-    assert exit_event.reference_price == 25001.4
+    assert exit_event.reference_price == Decimal("25001.4")
     fills = store.list_fills()
     assert len(fills) == 2
     assert float(fills[0]["requested_price"]) == 25001.0
@@ -110,7 +111,7 @@ def test_paper_position_manager_uses_stop_first_when_stop_and_target_both_touch(
     )
     assert isinstance(result, PositionExit)
     assert result.reason == "STOP_LOSS"
-    assert result.reference_price == 25000.8
+    assert result.reference_price == Decimal("25000.8")
     assert store.list_positions() == []
 
 
@@ -125,7 +126,7 @@ def test_paper_position_manager_enforces_maximum_holding_bars(tmp_path):
     )
     assert isinstance(result, PositionExit)
     assert result.reason == "TIME_EXIT"
-    assert result.reference_price == 25001.1
+    assert result.reference_price == Decimal("25001.1")
     assert result.bars_held == 1
     assert store.list_positions() == []
 
