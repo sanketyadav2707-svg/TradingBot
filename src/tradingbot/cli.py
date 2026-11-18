@@ -76,6 +76,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional exact account-model TOML profile; incomplete profiles fail closed",
     )
 
+    replay = sub.add_parser("replay", help="Run deterministic offline historical replay")
+    replay.add_argument("--csv", required=True, type=Path)
+    replay.add_argument("--symbol", required=True)
+    replay.add_argument("--fast", type=int, default=9)
+    replay.add_argument("--slow", type=int, default=21)
+    replay.add_argument("--stop-ticks", type=int, default=8)
+    replay.add_argument("--target-ticks", type=int, default=12)
+    replay.add_argument("--max-holding-bars", type=int, default=3)
+    replay.add_argument("--config-dir", type=Path, default=Path("config"))
+    replay.add_argument("--firm-rules", type=Path)
+    replay.add_argument("--provider", default="user_supplied")
+    replay.add_argument("--dataset", default="unspecified")
+    replay.add_argument("--output", required=True, type=Path)
+
     validate = sub.add_parser("validate-data", help="Validate a CSV file without trading")
     validate.add_argument("--csv", required=True, type=Path)
     validate.add_argument("--symbol")
@@ -844,6 +858,27 @@ def main() -> None:
         ),
         compliance_gate=compliance_gate,
     )
+    if args.command == "replay":
+        from tradingbot.runtime.replay import build_replay_report, write_replay_report
+
+        report = build_replay_report(
+            bars=bars, engine=engine, instrument=instrument,
+            strategy_name="ema_cross_plumbing_baseline",
+            provider=args.provider, dataset=args.dataset,
+        )
+        report_path = write_replay_report(args.output, report)
+        print(json.dumps({
+            "status": "replay_complete",
+            "report": str(report_path),
+            "run_id": report["run_id"],
+            "dataset_sha256": report["dataset"]["sha256"],
+            "configuration_sha256": report["configuration_sha256"],
+            "bars": report["dataset"]["row_count"],
+            "trades": len(report["trades"]),
+            "live_orders_enabled": False,
+        }, indent=2))
+        return
+
     result = engine.run(bars)
     print(json.dumps(result.metrics(), indent=2))
 
