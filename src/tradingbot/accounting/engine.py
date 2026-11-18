@@ -8,6 +8,7 @@ This module never starts a strategy, market-data feed, scheduler or background l
 from __future__ import annotations
 
 import fcntl
+import hashlib
 import threading
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -19,7 +20,7 @@ from tradingbot.execution.router import AccountRiskSnapshot, ExecutionMode, Exec
 from tradingbot.execution.order_lifecycle import (
     BrokerSnapshot, OrderLifecycleStore, OrderState, ReconciliationReport,
 )
-from tradingbot.models import Instrument
+from tradingbot.models import Instrument, Side
 from tradingbot.paper.broker import PaperBroker
 from tradingbot.money import FeeSchedule
 from tradingbot.risk.limits import RiskGuard, RiskLimits
@@ -359,6 +360,83 @@ class PaperAccountEngine:
             submission_lock=self._execution_lock,
             order_lifecycle=self.order_lifecycle,
         )
+
+    def close_position(
+        self,
+        instrument: Instrument,
+        *,
+        reference_price: float,
+        timestamp: datetime,
+    ) -> tuple:
+        """Flatten the complete open position using paper fills, even during a halt.
+
+        This is an exit-only path: it cannot create a position from flat. It bypasses
+        entry risk limits because reducing exposure must remain possible after a halt,
+        but still requires a verified instrument, fresh caller-supplied price/time,
+        no unresolved order states, exchange quantity-step compliance and durable
+        accounting/lifecycle persistence. Oversized positions are sliced below freeze.
+        """
+        if not isinstance(timestamp, datetime) or timestamp.tzinfo is None or timestamp.utcoffset() is None:
+            raise ValueError("position_close_timestamp_must_be_timezone_aware")
+        try:
+            price = Decimal(str(reference_price))
+        except Exception as exc:
+            raise ValueError("position_close_reference_price_must_be_finite") from exc
+        if not price.is_finite():
+            raise ValueError("position_close_reference_price_must_be_finite")
+
+        with self._execution_lock:
+            if self.order_lifecycle.list_unresolved_orders():
+                raise RuntimeError("unresolved_orders_block_position_close")
+            symbol = instrument.symbol.strip().upper()
+            positions = [
+                position for position in self.store.list_positions()
+                if str(position["symbol"]).strip().upper() == symbol
+            ]
+            if not positions:
+                raise ValueError("no_open_position_for_symbol")
+            if len(positions) != 1:
+                raise RuntimeError("position_ledger_not_unique_for_symbol")
+            position = positions[0]
+            remaining = int(position["quantity"])
+            if remaining <= 0:
+                raise RuntimeError("open_position_quantity_invalid")
+            exit_side = Side.SHORT if position["side"] == "LONG" else Side.LONG
+            broker = self._broker_for(instrument)
+            max_slice = instrument.quantity_freeze - (
+                instrument.quantity_freeze % instrument.quantity_step
+            )
+            if max_slice < instrument.lot_size:
+                raise RuntimeError("instrument_freeze_below_quantity_step")
+            original_quantity = remaining
+            fills = []
+            slice_index = 0
+            while remaining:
+                quantity = min(remaining, max_slice)
+                quantity -= quantity % instrument.quantity_step
+                if quantity < instrument.lot_size:
+                    raise RuntimeError("remaining_position_cannot_be_sliced_to_valid_quantity")
+                identity = "|".join((
+                    "paper-close",
+                    symbol,
+                    str(position["opened_at"]),
+                    str(original_quantity),
+                    str(remaining),
+                    str(slice_index),
+                    timestamp.astimezone(timezone.utc).isoformat(timespec="microseconds"),
+                    format(price, "f"),
+                ))
+                client_order_id = "close-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:48]
+                fills.append(broker.submit_market(
+                    side=exit_side,
+                    quantity=quantity,
+                    reference_price=float(price),
+                    timestamp=timestamp,
+                    order_id=client_order_id,
+                ))
+                remaining -= quantity
+                slice_index += 1
+            return tuple(fills)
 
     def emergency_halt(self, reason: str = "manual_emergency_halt") -> None:
         """Durably block all routers, waiting for any in-flight paper submission.
