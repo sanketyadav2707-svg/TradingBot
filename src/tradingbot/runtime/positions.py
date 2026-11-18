@@ -212,8 +212,8 @@ class PaperPositionManager:
             raise ValueError("entry_fill_side_invalid")
         if fill.timestamp.tzinfo is None or fill.timestamp.utcoffset() is None:
             raise ValueError("entry_fill_timestamp_must_be_timezone_aware")
-        if self.has_position or self._position() is not None:
-            raise RuntimeError("position_already_open")
+        if self.has_position:
+            raise RuntimeError("position_already_managed")
         position = self._position()
         if position is None:
             raise RuntimeError("entry_fill_not_persisted_to_paper_account")
