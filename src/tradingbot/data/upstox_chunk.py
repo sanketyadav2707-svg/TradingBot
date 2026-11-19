@@ -9,7 +9,8 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -75,11 +76,9 @@ def validate_historical_chunk(
             raise HistoricalChunkError("invalid_candle_timestamp") from exc
         if stamp.tzinfo is None or stamp.utcoffset() is None:
             raise HistoricalChunkError("naive_candle_timestamp")
-        if not window.from_date <= stamp.date() <= window.to_date:
-            # Compare in exchange-local time rather than the host timezone.
-            from zoneinfo import ZoneInfo
-            if not window.from_date <= stamp.astimezone(ZoneInfo("Asia/Kolkata")).date() <= window.to_date:
-                raise HistoricalChunkError("candle_outside_requested_window")
+        # Request dates are exchange-local, never UTC or host-local.
+        if not window.from_date <= stamp.astimezone(ZoneInfo("Asia/Kolkata")).date() <= window.to_date:
+            raise HistoricalChunkError("candle_outside_requested_window")
         stamp = stamp.astimezone(timezone.utc)
         if stamp in seen:
             raise HistoricalChunkError("duplicate_candle_timestamp")
