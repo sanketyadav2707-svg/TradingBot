@@ -95,3 +95,10 @@ This is **not** a downloader: no Upstox API requests, credentials, entitlements,
 `src/tradingbot/data/upstox_coverage.py` audits saved, immutable historical response chunks against an **explicitly supplied expected timestamp calendar**. It verifies chunk and receipt SHA-256, exact instrument identity, requested date windows, bar counts, canonical payloads, duplicate bars across chunks, and reports missing or unexpected timestamps. A complete report means only that the supplied candle timestamps match the supplied calendar. It does **not** independently verify that the calendar is correct, that the provider is licensed, that the contract is economically valid, or that a profitable trading strategy exists.
 
 The current module does not perform network retrieval or automatically generate NSE session timestamps. The source calendar must be independently verified for holidays, special sessions, expiring derivatives and trading halts before a report can be used as research evidence.
+
+
+## Canonical research export integration
+
+`src/tradingbot/data/upstox_research_export.py` converts **complete, hash-verified** historical chunks into the canonical CSV schema required by `tradingbot.research.nse.load_nse_bars_csv`. It requires explicitly supplied symbol, raw-contract ID, licence reference, exchange calendar reference and expected one-minute timestamps. It refuses incomplete coverage and existing output files, and emits a CSV SHA-256 receipt listing source hashes. An integration test feeds the resulting CSV into the NSE research loader.
+
+The instrument key, contract ID and licence are **caller assertions**, not provider-authenticated facts. The importer does not independently validate exchange trading halts, expired contract selection, entitlement, timestamp semantics, or trading performance. Production ingestion must bind these to the official instrument master and a licensed provider response before research use. Fixtures are synthetic and are not evidence of trading profitability.
