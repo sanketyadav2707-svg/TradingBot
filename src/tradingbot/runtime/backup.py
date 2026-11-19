@@ -82,10 +82,10 @@ def create_sqlite_backup(
     manifest_path = target.with_name(target.name + ".manifest.json")
     if not source.is_file():
         raise FileNotFoundError("source_database_missing")
-    if target.exists() or manifest_path.exists():
-        raise FileExistsError("backup_destination_must_not_exist")
     if source.resolve() == target.resolve():
         raise ValueError("backup_must_not_overwrite_source")
+    if target.exists() or manifest_path.exists():
+        raise FileExistsError("backup_destination_must_not_exist")
     target.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=".paper-backup-", suffix=".sqlite3", dir=target.parent)
     os.close(fd)
