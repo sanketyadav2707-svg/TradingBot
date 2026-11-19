@@ -4,6 +4,7 @@ import pytest
 
 from tradingbot.accounting import PaperAccountEngine, PaperAccountStore
 from tradingbot.data.closed_bar_inbox import ClosedBarInbox, MarketDataInboxBlocked
+from tradingbot.data.continuity import ClosedBarContinuityGuard
 from tradingbot.models import Bar, Instrument, Side, Signal
 from tradingbot.risk.limits import RiskLimits
 from tradingbot.runtime.positions import PaperPositionManager, PaperTradingLoop
@@ -99,3 +100,16 @@ def test_runner_health_blocks_unresolved_order_and_halted_account(tmp_path):
     _, engine, _, _, runner = make_runner(tmp_path)
     engine.emergency_halt("operator test")
     assert not runner.health().ready_for_dispatch
+
+
+def test_optional_continuity_guard_latches_missing_bar_before_paper_execution(tmp_path):
+    _, engine, runtime, manager, runner = make_runner(tmp_path)
+    runner.continuity_guard = ClosedBarContinuityGuard(symbol=SYMBOL)
+    runner.ingest(make_bar(0), received_at=T0 + timedelta(minutes=1, seconds=1))
+    runner.drain_one()
+    runner.ingest(make_bar(2), received_at=T0 + timedelta(minutes=3, seconds=1))
+    with pytest.raises(RuntimeError, match="market_data_continuity_failure:missing_bar_gap"):
+        runner.drain_one()
+    assert runner.inbox.health().failed == 1
+    assert not runner.health().ready_for_dispatch
+    assert not engine.halted
