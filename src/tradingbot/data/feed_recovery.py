@@ -15,6 +15,8 @@ from tradingbot.data.continuity import ClosedBarContinuityGuard
 
 @dataclass(frozen=True, slots=True)
 class FeedRecoveryReport:
+    source_id: str
+    symbol: str
     safe_to_resume: bool
     reason: str
     last_processed_timestamp: datetime | None
@@ -91,6 +93,8 @@ def inspect_feed_recovery(
     else:
         reason = "operator_reconciled"
     return FeedRecoveryReport(
+        source_id=source,
+        symbol=instrument,
         safe_to_resume=reason == "operator_reconciled",
         reason=reason,
         last_processed_timestamp=datetime.fromisoformat(last) if last else None,
@@ -116,6 +120,8 @@ def restore_continuity_guard(
         raise TypeError("feed_recovery_report_required")
     if operator_approved is not True or not report.safe_to_resume:
         raise RuntimeError("feed_recovery_not_approved_or_not_reconciled")
+    if guard.symbol != report.symbol:
+        raise RuntimeError("recovery_symbol_does_not_match_continuity_guard")
     if guard.halted or guard.last_timestamp is not None:
         raise RuntimeError("continuity_guard_must_be_new_and_unhalted")
     guard._last = report.last_processed_timestamp
