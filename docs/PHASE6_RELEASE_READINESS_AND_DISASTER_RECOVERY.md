@@ -36,3 +36,10 @@ Phase 5 remains incomplete operationally. Offline recovery and reconnect state m
 **Current result: NO-GO** for unattended paper operation or live trading. The code is ready for continued offline testing, but account/data and observation dependencies remain outstanding.
 
 Do not change the gate logic to obtain a green release report. Reassess only after authentic evidence is available.
+
+
+## Evidence collection implemented (19 November 2026)
+
+`src/tradingbot/runtime/evidence_inventory.py` now inventories every required Phase 6 gate, checking registered local artifacts against pinned SHA-256 digests. Missing, unpinned, altered and out-of-root/symlink-escaped paths remain unverified. The resulting JSON is reproducible given the same input and explicit timestamp.
+
+**Important:** A SHA-256 match establishes only file identity, not the truth of a claim inside it. The inventory intentionally does not turn artifact checks into release approval. Broker entitlements, legal eligibility, fee schedules, authentic NSE historical data, strategy performance and sustained paper operation still require independently sourced evidence. The next implementation tasks should build a documented, licensed data import and reproducible evidence capture pipeline, not bypass release gates.
