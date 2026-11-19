@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from tradingbot.data.closed_bar_inbox import ClosedBarInbox, InboxEvent
+from tradingbot.data.continuity import ClosedBarContinuityGuard
 from tradingbot.models import Bar
 from tradingbot.runtime.positions import PaperTradingLoop
 from tradingbot.runtime.strategy import RuntimeState
@@ -36,6 +37,7 @@ class PaperFeedRunner:
         paper_loop: PaperTradingLoop,
         expected_symbol: str,
         source_id: str,
+        continuity_guard: ClosedBarContinuityGuard | None = None,
     ) -> None:
         if not isinstance(inbox, ClosedBarInbox):
             raise TypeError("closed_bar_inbox_required")
@@ -49,6 +51,11 @@ class PaperFeedRunner:
         self.paper_loop = paper_loop
         self.expected_symbol = expected_symbol.strip().upper()
         self.source_id = source_id.strip()
+        if continuity_guard is not None and not isinstance(continuity_guard, ClosedBarContinuityGuard):
+            raise TypeError("continuity_guard_must_be_closed_bar_guard")
+        if continuity_guard is not None and continuity_guard.symbol != self.expected_symbol:
+            raise ValueError("continuity_guard_symbol_mismatch")
+        self.continuity_guard = continuity_guard
 
     def ingest(self, bar: Bar, *, received_at: datetime) -> int:
         if not isinstance(bar, Bar):
@@ -58,6 +65,10 @@ class PaperFeedRunner:
         return self.inbox.enqueue(bar, source_id=self.source_id, received_at=received_at)
 
     def _dispatch(self, bar: Bar, received_at: datetime) -> None:
+        if self.continuity_guard is not None:
+            decision = self.continuity_guard.inspect(bar)
+            if not decision.accepted:
+                raise RuntimeError("market_data_continuity_failure:" + decision.reason)
         self.paper_loop.process_closed_bar(bar, received_at=received_at)
         if self.paper_loop.strategy_runtime.state != RuntimeState.RUNNING:
             raise RuntimeError(
@@ -83,6 +94,7 @@ class PaperFeedRunner:
         strategy_state = self.paper_loop.strategy_runtime.state.value
         ready = (
             inbox_health.ready
+            and (self.continuity_guard is None or not self.continuity_guard.halted)
             and strategy_state == RuntimeState.RUNNING.value
             and not manager_halted
             and not account_halted
