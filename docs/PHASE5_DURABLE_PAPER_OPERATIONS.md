@@ -75,3 +75,11 @@ GitHub Actions on commit `576a60e0a4155e78bb1358d22ec4c693b5700eca` passed **387
 - `PaperFeedRunner` can optionally apply the continuity guard immediately before paper dispatch. A gap raises a handler error, latching the durable inbox FAILED and requiring operator review.
 - The guard's session reset requires explicit `flat=True` and `reconciled=True`. The guard itself is in-memory; after restart, a service must reconcile its expected sequence with the durable inbox and authorized source before admitting new bars. This integration is not yet automatic.
 - Alert delivery, authenticated feed adapter, continuity recovery across market holidays/session boundaries, and a sustained paper observation period remain open.
+
+
+## Restart and feed integration test seams
+
+- `src/tradingbot/data/feed_recovery.py` inspects persisted processed/pending/ambiguous inbox events. It requires flat paper positions, ledger reconciliation, and independently confirmed source-gap reconciliation before a newly constructed continuity guard may restore its last processed timestamp. An ambiguous DISPATCHING or FAILED event blocks recovery. Pending events also block a fresh feed until controlled replay is handled.
+- `src/tradingbot/runtime/feed_coordinator.py` provides an offline deterministic connection state machine with explicit connect, subscribe/source reconciliation confirmation, bounded reconnect attempts and backoff. It does not create a WebSocket, authenticate, subscribe or access a broker. A provider adapter must implement these externally and verify the assertions passed to the coordinator.
+- Recovery booleans are *operator-supplied assertions*, not cryptographic evidence or a substitute for exchange/broker reconciliation. No automatic unattended recovery is claimed.
+- The continuity guard currently only enforces within-session one-minute bars. Session calendar changes, provider sequence IDs, transport-level heartbeat and authenticated feed gap replay still require integration.
