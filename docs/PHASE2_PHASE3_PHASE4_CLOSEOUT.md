@@ -76,6 +76,19 @@ Budget: ₹0 unless explicitly approved
 
 See [Phase 5 durable paper operations](PHASE5_DURABLE_PAPER_OPERATIONS.md). Phase 5 engineering foundation is implemented; operational exit criteria are not yet met.
 
+## Phase 6 — Offline release readiness and disaster recovery
+
+### Implemented
+- SQLite online backup, integrity-check and SHA-256 manifest verification, and operator-approved restore into a new destination without overwriting existing state.
+- Offline release-readiness evaluator with explicit required evidence gates; missing evidence fails closed and live-trading release scope is unsupported.
+- Backup tamper/restore and release-gate tests.
+- See [Phase 6 release readiness and disaster recovery](PHASE6_RELEASE_READINESS_AND_DISASTER_RECOVERY.md).
+
+### Not yet complete
+- Real backup scheduling, offsite retention, encryption and independently observed restore drill.
+- Upstox account/feed and broker-sandbox validation, real NSE data, full fee and calendar verification, 8–12 weeks of paper observation, alert delivery and deployment safety evidence.
+- Phase 6 release decision remains NO-GO. Implemented code does not mean the operational phase is complete.
+
 ## Validation record
 
 - Earlier baseline after Phase 2 test-fixture repair: 341 passed, 2 warnings.
