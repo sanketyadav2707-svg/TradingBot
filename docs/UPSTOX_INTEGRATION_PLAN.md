@@ -88,3 +88,10 @@ Until every relevant gate is signed off, the supported status is research and pa
 `src/tradingbot/data/upstox_chunk.py` now validates an already obtained Upstox V3-style successful historical candle JSON response and saves an immutable canonical JSON chunk with SHA-256 receipt. Checks include exchange-local date window, timezone-aware timestamps, newest-first ordering, duplicate bars, nonnegative volumes/open interest, and OHLC price consistency. Empty windows are deliberately rejected for operator review rather than misrepresented as complete coverage.
 
 This is **not** a downloader: no Upstox API requests, credentials, entitlements, response coverage proof or actual market data have been obtained. A future authorized downloader must check provider retention, request limits, market session completeness and historical contract identity before using these chunks for research. Existing month-window planning remains separate.
+
+
+## Historical coverage audit (19 November 2026)
+
+`src/tradingbot/data/upstox_coverage.py` audits saved, immutable historical response chunks against an **explicitly supplied expected timestamp calendar**. It verifies chunk and receipt SHA-256, exact instrument identity, requested date windows, bar counts, canonical payloads, duplicate bars across chunks, and reports missing or unexpected timestamps. A complete report means only that the supplied candle timestamps match the supplied calendar. It does **not** independently verify that the calendar is correct, that the provider is licensed, that the contract is economically valid, or that a profitable trading strategy exists.
+
+The current module does not perform network retrieval or automatically generate NSE session timestamps. The source calendar must be independently verified for holidays, special sessions, expiring derivatives and trading halts before a report can be used as research evidence.
