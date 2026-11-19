@@ -81,3 +81,10 @@ API access being free does not make trading free. The cost model must include th
 - No credentials or private account data are committed.
 
 Until every relevant gate is signed off, the supported status is research and paper simulation only.
+
+
+## Offline historical response capture implemented (19 November 2026)
+
+`src/tradingbot/data/upstox_chunk.py` now validates an already obtained Upstox V3-style successful historical candle JSON response and saves an immutable canonical JSON chunk with SHA-256 receipt. Checks include exchange-local date window, timezone-aware timestamps, newest-first ordering, duplicate bars, nonnegative volumes/open interest, and OHLC price consistency. Empty windows are deliberately rejected for operator review rather than misrepresented as complete coverage.
+
+This is **not** a downloader: no Upstox API requests, credentials, entitlements, response coverage proof or actual market data have been obtained. A future authorized downloader must check provider retention, request limits, market session completeness and historical contract identity before using these chunks for research. Existing month-window planning remains separate.
