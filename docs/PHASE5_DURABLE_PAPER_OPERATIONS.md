@@ -66,3 +66,12 @@ Phase 5 engineering foundation is implemented. Phase 5 operational validation is
 ## CI validation
 
 GitHub Actions on commit `576a60e0a4155e78bb1358d22ec4c693b5700eca` passed **387 tests, 2 warnings**. This validates the offline software path only; it does not validate an authorized provider connection or unattended operation.
+
+
+## Phase 5 operational monitoring and continuity extension
+
+- `src/tradingbot/runtime/operations_monitor.py` evaluates deterministic health snapshots. It reports critical alerts for stale/missing/future-dated feed heartbeats, failed or ambiguous inbox dispatch, unresolved orders, paper account halt, strategy halt, supervisor not running, and aged pending candles. High queue depth is a warning; it cannot override a critical fault. No notification delivery service is configured.
+- `src/tradingbot/data/continuity.py` enforces contiguous one-minute candle timestamps within an explicitly started session. Missing candles, duplicate/out-of-order timestamps and mismatched symbols latch the guard. It never fabricates replacement candles.
+- `PaperFeedRunner` can optionally apply the continuity guard immediately before paper dispatch. A gap raises a handler error, latching the durable inbox FAILED and requiring operator review.
+- The guard's session reset requires explicit `flat=True` and `reconciled=True`. The guard itself is in-memory; after restart, a service must reconcile its expected sequence with the durable inbox and authorized source before admitting new bars. This integration is not yet automatic.
+- Alert delivery, authenticated feed adapter, continuity recovery across market holidays/session boundaries, and a sustained paper observation period remain open.
