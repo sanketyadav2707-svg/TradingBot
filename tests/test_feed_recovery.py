@@ -86,3 +86,11 @@ def test_new_guard_required_for_cursor_restoration(tmp_path):
     assert guard.inspect(bar(0)).accepted
     with pytest.raises(RuntimeError, match="new_and_unhalted"):
         restore_continuity_guard(guard=guard, report=state, operator_approved=True)
+
+
+def test_recovery_rejects_different_symbol_guard(tmp_path):
+    inbox = ClosedBarInbox(tmp_path / "events.sqlite3")
+    state = report(inbox)
+    guard = ClosedBarContinuityGuard(symbol="BANKNIFTY26DEC_FUT")
+    with pytest.raises(RuntimeError, match="symbol"):
+        restore_continuity_guard(guard=guard, report=state, operator_approved=True)
