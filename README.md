@@ -2,7 +2,7 @@
 
 [![Python Checks](https://github.com/sanketyadav2707-svg/TradingBot/actions/workflows/tests.yml/badge.svg)](https://github.com/sanketyadav2707-svg/TradingBot/actions/workflows/tests.yml)
 
-A personal, research-first, capital-first automated intraday trading system targeting 3–15 minute holding periods for the owner's own capital. India/NSE is the primary market profile; US futures research is preserved as an optional, isolated integration. It is intentionally **offline-first, broker-neutral, and paper-only** until market data, legal eligibility, broker/API permissions, deployment resilience, and strategy performance are independently validated. Prop-firm compatibility is optional, not the core objective.
+A personal, research-first, capital-first automated intraday trading system targeting 3–15 minute holding periods for the owner's own capital. NIFTY index option buying is the **new experimental research priority**, not yet proven profitable. The existing NSE linear-futures research and US futures research are preserved as an optional, isolated integration. It is intentionally **offline-first, broker-neutral, and paper-only** until market data, legal eligibility, broker/API permissions, deployment resilience, and strategy performance are independently validated. Prop-firm compatibility is optional, not the core objective.
 
 > This repository is software research, not investment advice. No strategy is represented as profitable. The included EMA crossover is only a plumbing example and must not be used as a live strategy.
 
@@ -18,7 +18,10 @@ For bugs and feature proposals, use the repository issue templates.
 
 - [30-Day Master Build Plan](docs/ONE_MONTH_MASTER_PLAN.md): strategy research, risk/compliance gates and build milestones.
 - [India-First Migration Plan](docs/INDIA_MARKET_MIGRATION_PLAN.md): staged migration, preserved US components, INR support, NSE market data, compliance and release gates.
-- [NSE Phase 3 Research Engine](docs/PHASE3_NSE_RESEARCH_ENGINE.md): INR-native ORB/VWAP/compression research, strict data provenance, dated fees and protected chronological holdout.\n- [Phase 4 Replay and Paper Execution Engine](docs/PHASE4_EXECUTION_SIMULATION_ENGINE.md): deterministic historical replay, risk-gated paper account, order lifecycle, session controller and watchdog status.\n- [Phase 2–4 Closeout Register](docs/PHASE2_PHASE3_PHASE4_CLOSEOUT.md): implemented work, external blockers and release gates in one checklist.
+- [NSE Phase 3 Research Engine](docs/PHASE3_NSE_RESEARCH_ENGINE.md): INR-native ORB/VWAP/compression research, strict data provenance, dated fees and protected chronological holdout.
+- [Phase 4 Replay and Paper Execution Engine](docs/PHASE4_EXECUTION_SIMULATION_ENGINE.md): deterministic historical replay, risk-gated paper account, order lifecycle, session controller and watchdog status.
+- [Phase 2–4 Closeout Register](docs/PHASE2_PHASE3_PHASE4_CLOSEOUT.md): implemented work, external blockers and release gates in one checklist.
+- [Index Options Adversarial Risk Audit](docs/INDEX_OPTIONS_ADVERSARIAL_RISK_RESEARCH.md): buy-only option premium-at-risk gate, adversarial loss stress and synthetic bid/ask paper execution; never a guarantee of profit or capital preservation.
 - [Upstox Integration Plan](docs/UPSTOX_INTEGRATION_PLAN.md): first broker target, verified API constraints, authentication, data limits, compliance and implementation gates.
 - [NSE Market Profile Scaffold](config/markets/india_nse.toml): source-backed session conventions only; not consumed by live runtime.
 - [US Research Master Plan](docs/ONE_MONTH_MASTER_PLAN.md): preserved MES/MNQ research plan.
@@ -31,6 +34,7 @@ For bugs and feature proposals, use the repository issue templates.
 - Conservative bar-based backtester
 - Risk guard with daily-loss, drawdown, position-size, and trade-count limits
 - Paper broker only
+- Experimental NSE NIFTY/BSE SENSEX option-buying risk gate and **in-memory synthetic** paper simulator, isolated from the futures router
 - Live order routing deliberately does not exist
 - Prop-firm and market research in docs/
 
@@ -55,7 +59,8 @@ pytest
 python -m tradingbot --help
 python -m tradingbot validate-data --csv data/sample/MES_5m_sample.csv --symbol MES
 python -m tradingbot audit-data --csv data/sample/MES_5m_sample.csv --symbol MES --expected-interval-seconds 300
-python -m tradingbot backtest --csv data/sample/MES_5m_sample.csv --symbol MES\npython -m tradingbot replay --csv data/sample/MES_5m_sample.csv --symbol MES --provider local_fixture --dataset MES_5m_sample_v1 --output reports/replay.json
+python -m tradingbot backtest --csv data/sample/MES_5m_sample.csv --symbol MES
+python -m tradingbot replay --csv data/sample/MES_5m_sample.csv --symbol MES --provider local_fixture --dataset MES_5m_sample_v1 --output reports/replay.json
 ```
 
 **Cost caveat:** `config/risk.toml` currently sets `commission_per_contract_per_side_usd = 0.0` because the target broker/account fee schedule has not yet been verified and applied. Local backtest results therefore exclude commissions unless you explicitly configure the applicable fee. The default one-tick-per-side slippage assumption does not replace commission, spread, or fill modelling.
@@ -91,7 +96,9 @@ tests/                   Automated tests
 
 ## Current market research position
 
-India/NSE is now the primary market for future capital deployment. Upstox is the first broker integration target. The initial research universe remains NSE linear index/stock futures; options are deferred. No specific contract is selected until current instrument metadata, liquidity, margins, data quality, realistic costs and broker permissions are verified. The broker adapter remains unimplemented and live trading remains disabled. See [Upstox Integration Plan](docs/UPSTOX_INTEGRATION_PLAN.md). See [India-First Migration Plan](docs/INDIA_MARKET_MIGRATION_PLAN.md).\n\nThe MES/MNQ/MGC/MCL/M2K/MYM research remains preserved as an optional US-futures integration. Its CME-specific assumptions must not leak into the NSE runtime.
+India/NSE is now the primary market for future capital deployment. Upstox is the first broker integration target. The initial research universe remains NSE linear index/stock futures; options are deferred. No specific contract is selected until current instrument metadata, liquidity, margins, data quality, realistic costs and broker permissions are verified. The broker adapter remains unimplemented and live trading remains disabled. See [Upstox Integration Plan](docs/UPSTOX_INTEGRATION_PLAN.md). See [India-First Migration Plan](docs/INDIA_MARKET_MIGRATION_PLAN.md).
+
+The MES/MNQ/MGC/MCL/M2K/MYM research remains preserved as an optional US-futures integration. Its CME-specific assumptions must not leak into the NSE runtime.
 
 ## Prop-firm approach
 
