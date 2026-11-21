@@ -48,8 +48,9 @@ https://betanseapi.nseindia.com/static/invest/be-a-smart-investor
 
 - `src/tradingbot/risk/index_options.py`: buy-only NSE/BSE candidate safety gate; Decimal INR accounting; full-premium-at-risk position sizing; current-master/quote checks; spread, size, IV, expiry, drawdown, fees and market-health filters.
 - `src/tradingbot/risk/option_stress.py`: explicit IV-crush, zero-bid, worsening spread/slippage and transaction cost P&L stress calculator, without fabricated probabilities.
-- `src/tradingbot/paper/index_options.py`: **offline, in-memory** bought-option paper model using ask for entry and bid for exit. Models stop/target/time signals, but fills only when a supplied quote/depth permits them. Stale data and unavailable depth halt and leave the position open.
-- Adversarial unit tests cover full premium wipeout, thin depth, stale quotes, wrong contract, adverse exit, gap-through-stop, risk budget, recovery block and duplicate entries.
+- `src/tradingbot/paper/index_options.py`: **offline, in-memory** bought-option paper model using ask for entry and bid for exit. Models stop/target/time signals, but fills only when a supplied quote/depth permits them. Stale data and unavailable depth halt and leave the position open. Quote SHA-256 fingerprints prevent using a risk decision with a different market snapshot.
+- `src/tradingbot/data/option_quote_store.py`: SQLite append-only normalized option quote snapshots with source IDs, timestamp/provenance, Decimal-preserving values and duplicate/conflict rejection. This is **not** the Upstox Protobuf decoder and does not prove feed authenticity.
+- Adversarial unit tests cover full premium wipeout, thin depth, stale quotes, wrong contract, adverse exit, gap-through-stop, risk budget, quote identity binding, recovery block, duplicate entries and tick journal integrity.
 
 ### Critical budget reality
 
