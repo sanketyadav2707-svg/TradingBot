@@ -87,6 +87,7 @@ class OptionContract:
 @dataclass(frozen=True, slots=True)
 class OptionQuote:
     timestamp: datetime
+    instrument_key: str
     bid: Decimal
     ask: Decimal
     bid_quantity: int
@@ -98,6 +99,8 @@ class OptionQuote:
     trading_halted: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.instrument_key, str) or not self.instrument_key.strip():
+            raise ValueError("quote_instrument_key_required")
         aware(self.timestamp, "quote_timestamp")
         aware(self.underlying_timestamp, "underlying_timestamp")
         for field in ("bid", "ask", "underlying_price", "implied_volatility"):
@@ -244,6 +247,8 @@ def evaluate_long_option_entry(
     for failure, passed in flags.items():
         if not passed:
             return reject(failure)
+    if quote.instrument_key != contract.instrument_key:
+        return reject("option_quote_instrument_key_mismatch")
     if account.risk_halted or not account.reconciled or account.unresolved_orders:
         return reject("account_halted_unreconciled_or_orders_unresolved")
     if account.open_positions != 0 or account.open_option_debit != 0:
