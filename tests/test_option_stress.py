@@ -25,6 +25,7 @@ def approved():
     )
     quote = OptionQuote(
         timestamp=NOW - timedelta(seconds=1),
+        instrument_key="NSE_FO|100",
         bid=D("99"), ask=D("100"), bid_quantity=200, ask_quantity=200,
         underlying_price=D("25000"), underlying_timestamp=NOW - timedelta(seconds=1),
         implied_volatility=D("0.25"), open_interest=1000,
