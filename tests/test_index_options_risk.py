@@ -35,6 +35,7 @@ def fixture():
     )
     quote = OptionQuote(
         timestamp=NOW - timedelta(seconds=1),
+        instrument_key="NSE_FO|123456",
         bid=D("99.00"),
         ask=D("100.00"),
         bid_quantity=1000,
@@ -136,7 +137,7 @@ def test_rejects_float_money_nan_and_unverified_broker_flags():
     c, q, a, policy = fixture()
     with pytest.raises(ValueError, match="exact_decimal"):
         OptionQuote(
-            timestamp=NOW, bid=99.0, ask=D("100"), bid_quantity=65,
+            timestamp=NOW, instrument_key="NSE_FO|123456", bid=99.0, ask=D("100"), bid_quantity=65,
             ask_quantity=65, underlying_price=D("25000"),
             underlying_timestamp=NOW, implied_volatility=D("0.2"),
             open_interest=1000,
