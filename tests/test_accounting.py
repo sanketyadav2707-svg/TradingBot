@@ -843,7 +843,7 @@ def test_account_money_v3_view_exposes_neutral_amounts_with_currency(tmp_path) -
             "WHERE entity_type = 'fill' AND entity_id = 'money-view-fill' ORDER BY field_name"
         ).fetchall()
 
-    assert schema_version == "4"
+    assert schema_version == "5"
     assert columns == ["entity_type", "entity_id", "field_name", "amount", "currency_code"]
     assert {row[0]: (row[1], row[2]) for row in values} == {
         "commission": ("0.5", "USD"),
@@ -992,7 +992,7 @@ def test_schema_v3_account_migrates_exchange_quantity_metadata_to_v4(tmp_path) -
         columns = {
             row[1] for row in connection.execute("PRAGMA table_info(fills)")
         }
-    assert version == "4"
+    assert version == "5"
     assert {"lot_size", "quantity_step", "quantity_freeze"} <= columns
 
 
@@ -1054,3 +1054,55 @@ def test_nse_two_lot_order_flows_through_risk_router_broker_lifecycle_and_ledger
     assert order["quantity"] == 130
     assert order["cumulative_filled"] == 130
     assert order["state"] == "FILLED"
+
+
+
+def test_risk_off_close_position_flattens_even_after_emergency_halt(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "close.sqlite3", 50_000)
+    store.record_fill(make_fill("entry-before-halt", Side.LONG, 2, 100), MES)
+    engine = PaperAccountEngine(store, RiskLimits(max_contracts=1))
+    engine.emergency_halt("test_halt")
+
+    fills = engine.close_position(
+        MES, reference_price=101, timestamp=T0 + timedelta(minutes=1)
+    )
+
+    assert len(fills) == 1
+    assert fills[0].side == Side.SHORT
+    assert fills[0].quantity == 2
+    assert store.list_positions() == []
+    assert len(store.list_trades()) == 1
+    assert engine.halted
+
+
+def test_risk_off_close_position_slices_to_quantity_freeze(tmp_path) -> None:
+    instrument = Instrument(
+        "MES", 0.25, 1.25, 5.0, lot_size=1, quantity_step=1, quantity_freeze=2
+    )
+    store = PaperAccountStore(tmp_path / "close-sliced.sqlite3", 50_000)
+    for index in range(3):
+        quantity = (2, 2, 1)[index]
+        store.record_fill(
+            make_fill(
+                f"entry-slice-{index}", Side.LONG, quantity, 100,
+                timestamp=T0 + timedelta(minutes=index),
+            ),
+            instrument,
+        )
+    engine = PaperAccountEngine(store, RiskLimits(max_contracts=5))
+    fills = engine.close_position(
+        instrument, reference_price=99, timestamp=T0 + timedelta(minutes=5)
+    )
+
+    assert [fill.quantity for fill in fills] == [2, 2, 1]
+    assert all(fill.side == Side.SHORT for fill in fills)
+    assert store.list_positions() == []
+
+
+def test_risk_off_close_position_cannot_open_a_new_position(tmp_path) -> None:
+    store = PaperAccountStore(tmp_path / "close-flat.sqlite3", 50_000)
+    engine = PaperAccountEngine(store, RiskLimits())
+    with pytest.raises(ValueError, match="no_open_position_for_symbol"):
+        engine.close_position(
+            MES, reference_price=100, timestamp=T0 + timedelta(minutes=1)
+        )

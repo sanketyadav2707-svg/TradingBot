@@ -285,9 +285,13 @@ class PaperAccountStore:
                 # The neutral view depends on per-row currency columns. Drop it
                 # before any legacy schema repair, then recreate it after validation.
                 connection.execute("DROP VIEW IF EXISTS account_money_v3")
+                connection.execute("DROP VIEW IF EXISTS account_money_v4")
                 # Schema v2 makes denomination explicit on every monetary ledger row.
                 # Existing rows receive the already-established account currency;
                 # a legacy ledger is always classified as USD above.
+                # Remove the v5 view before repairing legacy tables that may drop
+                # per-row currency columns during an older-schema migration.
+                connection.execute("DROP VIEW IF EXISTS account_money_v4")
                 currency_tables = ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox")
                 for table in currency_tables:
                     columns = {
@@ -352,9 +356,163 @@ class PaperAccountStore:
                        SELECT 'lifecycle_outbox', order_id, 'commission', commission_usd, currency_code
                        FROM lifecycle_outbox"""
                 )
+                # Schema v5 adds physically stored currency-neutral financial
+                # columns. Legacy *_usd columns remain compatibility write aliases;
+                # triggers mirror their values into the canonical neutral columns.
+                neutral_columns = {
+                    "fills": {
+                        "commission": "commission_usd",
+                        "tick_value": "tick_value_usd",
+                        "point_value": "point_value_usd",
+                    },
+                    "open_lots": {
+                        "tick_value": "tick_value_usd",
+                        "point_value": "point_value_usd",
+                    },
+                    "closed_trades": {
+                        "gross_pnl": "gross_pnl_usd",
+                        "entry_commission": "entry_commission_usd",
+                        "exit_commission": "exit_commission_usd",
+                        "net_pnl": "net_pnl_usd",
+                    },
+                    "equity_snapshots": {
+                        "balance": "balance_usd",
+                        "realized_gross_pnl": "realized_gross_pnl_usd",
+                        "commissions": "commissions_usd",
+                        "unrealized_pnl": "unrealized_pnl_usd",
+                        "equity": "equity_usd",
+                    },
+                    "lifecycle_outbox": {
+                        "commission": "commission_usd",
+                    },
+                }
+                for table, mappings in neutral_columns.items():
+                    columns = {
+                        row["name"] for row in connection.execute(
+                            f"PRAGMA table_info({table})"
+                        ).fetchall()
+                    }
+                    for neutral_name in mappings:
+                        if neutral_name not in columns:
+                            connection.execute(
+                                f"ALTER TABLE {table} ADD COLUMN {neutral_name} TEXT"
+                            )
+                    assignments = ", ".join(
+                        f"{neutral_name} = {legacy_name}"
+                        for neutral_name, legacy_name in mappings.items()
+                    )
+                    connection.execute(f"UPDATE {table} SET {assignments}")
+
+                # The application still writes legacy aliases during the
+                # compatibility window. Keep neutral physical columns in sync.
+                trigger_specs = {
+                    "fills": ("order_id", ("commission_usd", "tick_value_usd", "point_value_usd"),
+                              ("commission", "tick_value", "point_value")),
+                    "open_lots": ("id", ("tick_value_usd", "point_value_usd"),
+                                  ("tick_value", "point_value")),
+                    "closed_trades": ("id", ("gross_pnl_usd", "entry_commission_usd",
+                                              "exit_commission_usd", "net_pnl_usd"),
+                                      ("gross_pnl", "entry_commission", "exit_commission", "net_pnl")),
+                    "equity_snapshots": ("id", ("balance_usd", "realized_gross_pnl_usd",
+                                                 "commissions_usd", "unrealized_pnl_usd", "equity_usd"),
+                                         ("balance", "realized_gross_pnl", "commissions",
+                                          "unrealized_pnl", "equity")),
+                    "lifecycle_outbox": ("order_id", ("commission_usd",), ("commission",)),
+                }
+                for table, (primary_key, legacy_names, neutral_names) in trigger_specs.items():
+                    for operation in ("insert", "update"):
+                        trigger_name = f"sync_{table}_neutral_money_{operation}"
+                        connection.execute(f"DROP TRIGGER IF EXISTS {trigger_name}")
+                        if operation == "insert":
+                            event = "AFTER INSERT"
+                        else:
+                            event = f"AFTER UPDATE OF {', '.join(legacy_names)}"
+                        assignments = ", ".join(
+                            f"{neutral} = NEW.{legacy}"
+                            for neutral, legacy in zip(neutral_names, legacy_names, strict=True)
+                        )
+                        connection.execute(
+                            f"""CREATE TRIGGER {trigger_name}
+                                {event} ON {table}
+                                BEGIN
+                                    UPDATE {table} SET {assignments}
+                                    WHERE {primary_key} = NEW.{primary_key};
+                                END"""
+                        )
+
+                # Keep a neutral account-level opening-balance key for new readers.
+                connection.execute("DROP TRIGGER IF EXISTS sync_account_starting_balance_insert")
+                connection.execute("DROP TRIGGER IF EXISTS sync_account_starting_balance_update")
                 connection.execute(
-                    "INSERT INTO account_meta(key, value) VALUES ('schema_version', '4') "
-                    "ON CONFLICT(key) DO UPDATE SET value = '4'"
+                    """CREATE TRIGGER sync_account_starting_balance_insert
+                       AFTER INSERT ON account_meta
+                       WHEN NEW.key = 'starting_balance_usd'
+                       BEGIN
+                           INSERT INTO account_meta(key, value)
+                           VALUES ('starting_balance', NEW.value)
+                           ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+                       END"""
+                )
+                connection.execute(
+                    """CREATE TRIGGER sync_account_starting_balance_update
+                       AFTER UPDATE OF value ON account_meta
+                       WHEN NEW.key = 'starting_balance_usd'
+                       BEGIN
+                           INSERT INTO account_meta(key, value)
+                           VALUES ('starting_balance', NEW.value)
+                           ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+                       END"""
+                )
+                connection.execute(
+                    """INSERT INTO account_meta(key, value)
+                       SELECT 'starting_balance', value FROM account_meta
+                       WHERE key = 'starting_balance_usd'
+                       ON CONFLICT(key) DO UPDATE SET value = excluded.value"""
+                )
+                connection.execute("DROP VIEW IF EXISTS account_money_v4")
+                connection.execute(
+                    """CREATE VIEW account_money_v4 AS
+                       SELECT 'account' AS entity_type, 'account' AS entity_id,
+                              'starting_balance' AS field_name, value AS amount,
+                              (SELECT value FROM account_meta WHERE key='currency_code') AS currency_code
+                       FROM account_meta WHERE key='starting_balance'
+                       UNION ALL
+                       SELECT 'fill', order_id, 'commission', commission, currency_code FROM fills
+                       UNION ALL
+                       SELECT 'fill', order_id, 'tick_value', tick_value, currency_code FROM fills
+                       UNION ALL
+                       SELECT 'fill', order_id, 'point_value', point_value, currency_code FROM fills
+                       UNION ALL
+                       SELECT 'open_lot', CAST(id AS TEXT), 'tick_value', tick_value, currency_code FROM open_lots
+                       UNION ALL
+                       SELECT 'open_lot', CAST(id AS TEXT), 'point_value', point_value, currency_code FROM open_lots
+                       UNION ALL
+                       SELECT 'closed_trade', CAST(id AS TEXT), 'gross_pnl', gross_pnl, currency_code FROM closed_trades
+                       UNION ALL
+                       SELECT 'closed_trade', CAST(id AS TEXT), 'entry_commission', entry_commission, currency_code FROM closed_trades
+                       UNION ALL
+                       SELECT 'closed_trade', CAST(id AS TEXT), 'exit_commission', exit_commission, currency_code FROM closed_trades
+                       UNION ALL
+                       SELECT 'closed_trade', CAST(id AS TEXT), 'net_pnl', net_pnl, currency_code FROM closed_trades
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'balance', balance, currency_code FROM equity_snapshots
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'realized_gross_pnl', realized_gross_pnl, currency_code FROM equity_snapshots
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'commissions', commissions, currency_code FROM equity_snapshots
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'unrealized_pnl', unrealized_pnl, currency_code
+                       FROM equity_snapshots WHERE unrealized_pnl IS NOT NULL
+                       UNION ALL
+                       SELECT 'equity_snapshot', CAST(id AS TEXT), 'equity', equity, currency_code
+                       FROM equity_snapshots WHERE equity IS NOT NULL
+                       UNION ALL
+                       SELECT 'lifecycle_outbox', order_id, 'commission', commission, currency_code
+                       FROM lifecycle_outbox"""
+                )
+                connection.execute(
+                    "INSERT INTO account_meta(key, value) VALUES ('schema_version', '5') "
+                    "ON CONFLICT(key) DO UPDATE SET value = '5'"
                 )
                 stored_balance = Decimal(connection.execute(
                     "SELECT value FROM account_meta WHERE key = 'starting_balance_usd'"

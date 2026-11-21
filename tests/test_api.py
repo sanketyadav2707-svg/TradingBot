@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
@@ -480,8 +480,8 @@ def test_nse_instrument_master_api_reports_bse_only_exclusions(tmp_path, monkeyp
     master = tmp_path / "nse-bse-master-v2.csv"
     master.write_text(
         "exchange_token,trading_symbol,underlying,segment,instrument_type,expiry,lot_size,quantity_freeze,tick_size,currency_code,source_as_of,admission_type\n"
-        "12345,NIFTY26DEC_FUT,NIFTY,NSE_FO,FUTIDX,2026-12-29,65,1800,0.05,INR,2026-11-16,1\n"
-        "67890,BSEONLY26DEC_FUT,BSEONLY,NSE_FO,FUTSTK,2026-12-29,50,1000,0.05,INR,2026-11-16,2\n",
+        f"12345,NIFTY26DEC_FUT,NIFTY,NSE_FO,FUTIDX,{(date.today() + timedelta(days=30)).isoformat()},65,1800,0.05,INR,{date.today().isoformat()},1\n"
+        f"67890,BSEONLY26DEC_FUT,BSEONLY,NSE_FO,FUTSTK,{(date.today() + timedelta(days=30)).isoformat()},50,1000,0.05,INR,{date.today().isoformat()},2\n",
         encoding="utf-8",
     )
     manifest_path = tmp_path / "runtime-manifest.json"
