@@ -6,6 +6,7 @@ fees is the conservative exposure-at-risk for an unhedged bought option.
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -187,6 +188,20 @@ class OptionRiskPolicy:
             raise ValueError("entry_session_window_invalid")
 
 
+def option_quote_fingerprint(quote: OptionQuote) -> str:
+    """Bind a paper decision to the exact option quote snapshot it evaluated."""
+    if not isinstance(quote, OptionQuote):
+        raise TypeError("option_quote_required")
+    values = (
+        quote.instrument_key, aware(quote.timestamp, "quote_timestamp").isoformat(),
+        str(quote.bid), str(quote.ask), str(quote.bid_quantity), str(quote.ask_quantity),
+        str(quote.underlying_price),
+        aware(quote.underlying_timestamp, "underlying_timestamp").isoformat(),
+        str(quote.implied_volatility), str(quote.open_interest), str(quote.trading_halted),
+    )
+    return hashlib.sha256("|".join(values).encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class OptionDecision:
     approved: bool
@@ -196,6 +211,7 @@ class OptionDecision:
     worst_case_loss_rupees: Decimal
     estimated_round_trip_fees: Decimal
     spread_fraction: Decimal
+    quote_fingerprint: str = ""
 
 
 def evaluate_long_option_entry(
@@ -232,9 +248,10 @@ def evaluate_long_option_entry(
     debit = quote.ask * quantity
     worst = debit + fees
     spread = (quote.ask - quote.bid) / quote.ask
+    quote_id = option_quote_fingerprint(quote)
 
     def reject(reason: str) -> OptionDecision:
-        return OptionDecision(False, reason, 0, debit, worst, fees, spread)
+        return OptionDecision(False, reason, 0, debit, worst, fees, spread, quote_id)
 
     flags = {
         "exchange_session_unverified": official_session_verified,
@@ -299,4 +316,4 @@ def evaluate_long_option_entry(
         return reject("total_option_debit_exceeds_limit")
     if -account.daily_realized_pnl + worst >= account.peak_equity * policy.daily_loss_fraction:
         return reject("worst_case_trade_would_exhaust_daily_budget")
-    return OptionDecision(True, "approved_for_paper_simulation_only", quantity, debit, worst, fees, spread)
+    return OptionDecision(True, "approved_for_paper_simulation_only", quantity, debit, worst, fees, spread, quote_id)
