@@ -154,3 +154,17 @@ def test_fee_budget_and_market_risk_not_confused_with_guaranteed_stop():
     assert not result.approved
     assert result.worst_case_loss_rupees == D("25500")
     assert result.reason == "full_premium_loss_exceeds_trade_budget"
+
+def test_quote_identity_mismatch_is_rejected_even_if_external_flag_true():
+    _, q, _, _ = fixture()
+    result = decision(quote=replace(q, instrument_key="NSE_FO|different"))
+    assert not result.approved
+    assert result.reason == "option_quote_instrument_key_mismatch"
+
+
+def test_approved_paper_decision_contains_immutable_quote_fingerprint():
+    c, q, a, p = fixture()
+    approved = decision()
+    assert len(approved.quote_fingerprint) == 64
+    changed = decision(quote=replace(q, bid=D("98.95")))
+    assert approved.quote_fingerprint != changed.quote_fingerprint
