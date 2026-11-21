@@ -9,7 +9,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from tradingbot.risk.index_options import OptionContract, OptionDecision, OptionQuote, aware, decimal
+from tradingbot.risk.index_options import (
+    OptionContract, OptionDecision, OptionQuote, aware, decimal, option_quote_fingerprint,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +73,8 @@ class LongOptionPaperSimulator:
             raise TypeError("option_contract_and_quote_required")
         if quote.instrument_key != contract.instrument_key:
             raise ValueError("paper_quote_contract_mismatch")
+        if decision.quote_fingerprint != option_quote_fingerprint(quote):
+            raise ValueError("risk_decision_bound_to_different_quote")
         if decision.quantity <= 0 or decision.quantity % contract.lot_size:
             raise ValueError("invalid_option_lot_quantity")
         if quote.ask * decision.quantity != decision.debit_rupees:
