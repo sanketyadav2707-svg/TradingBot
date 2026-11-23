@@ -114,3 +114,12 @@ def test_paper_time_exit_without_stop_or_target():
 def test_paper_engine_rejects_unsafe_holding_window():
     with pytest.raises(ValueError, match="3_to_15"):
         LongOptionPaperSimulator(max_holding_seconds=60)
+
+
+def test_exchange_halt_with_open_position_does_not_fabricate_fill():
+    sim, quote = setup()
+    halted = replace(quote, timestamp=NOW + timedelta(seconds=1), trading_halted=True)
+    with pytest.raises(RuntimeError, match="option_market_halted"):
+        sim.evaluate_exit(quote=halted, now=halted.timestamp)
+    assert sim.position is not None
+    assert sim.halted
