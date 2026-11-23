@@ -13,6 +13,10 @@ from decimal import Decimal, InvalidOperation
 from enum import Enum
 from zoneinfo import ZoneInfo
 
+from tradingbot.risk.option_conditions import (
+    OptionConditionPolicy, OptionMarketConditions, reject_unsafe_option_conditions,
+)
+
 IST = ZoneInfo("Asia/Kolkata")
 D = Decimal
 
@@ -227,6 +231,8 @@ def evaluate_long_option_entry(
     data_feed_healthy: bool,
     option_master_matches_quote: bool,
     broker_permissions_verified: bool,
+    market_conditions: OptionMarketConditions | None = None,
+    condition_policy: OptionConditionPolicy | None = None,
 ) -> OptionDecision:
     """Allow one fully paid LONG option paper entry only if all gates pass.
 
@@ -266,6 +272,14 @@ def evaluate_long_option_entry(
             return reject(failure)
     if quote.instrument_key != contract.instrument_key:
         return reject("option_quote_instrument_key_mismatch")
+    if market_conditions is not None or condition_policy is not None:
+        if market_conditions is None or condition_policy is None:
+            return reject("market_conditions_policy_incomplete")
+        failure = reject_unsafe_option_conditions(
+            now=now, conditions=market_conditions, policy=condition_policy
+        )
+        if failure is not None:
+            return reject(failure)
     if account.risk_halted or not account.reconciled or account.unresolved_orders:
         return reject("account_halted_unreconciled_or_orders_unresolved")
     if account.open_positions != 0 or account.open_option_debit != 0:
