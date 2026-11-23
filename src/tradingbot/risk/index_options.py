@@ -110,8 +110,8 @@ class OptionQuote:
         aware(self.underlying_timestamp, "underlying_timestamp")
         for field in ("bid", "ask", "underlying_price", "implied_volatility"):
             value = decimal(getattr(self, field), field)
-            if value <= 0:
-                raise ValueError(field + "_must_be_positive")
+            if value < 0 or (value == 0 and field != "bid"):
+                raise ValueError(field + "_must_be_nonnegative_or_positive")
             object.__setattr__(self, field, value)
         if self.ask < self.bid:
             raise ValueError("crossed_quote_rejected")
@@ -298,9 +298,10 @@ def evaluate_long_option_entry(
         return reject("option_quote_stale")
     if (utc_now - aware(quote.underlying_timestamp, "underlying_timestamp")).total_seconds() > policy.max_quote_age_seconds:
         return reject("underlying_quote_stale")
-    if contract.master_verified_at > now:
+    master_time = aware(contract.master_verified_at, "master_verified_at")
+    if master_time > utc_now:
         return reject("instrument_master_future_dated")
-    if now - contract.master_verified_at > timedelta(hours=policy.max_master_age_hours):
+    if utc_now - master_time > timedelta(hours=policy.max_master_age_hours):
         return reject("instrument_master_stale")
     if quote.trading_halted:
         return reject("market_halt_active")
