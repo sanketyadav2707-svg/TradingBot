@@ -75,3 +75,29 @@ https://www.sebi.gov.in/legal/circulars/sep-2025/extension-of-timeline-for-imple
 ## Release decision
 
 **NO-GO for live orders and unattended capital exposure.** The new code is an offline options safety/research foundation. It must not be misrepresented as a fully trained, verified, profitable AI trading system. Code tests cannot create the missing market conditions or regulatory evidence.
+
+
+## 23 November 2026: screenshot-driven safety hardening
+
+The two user-provided screenshots described the following proposed benefits and hazards. These claims are treated as **hypotheses**, not trading guarantees.
+
+| Screenshot claim | Audit finding | Engineering response |
+|---|---|---|
+| ₹20,000 can access a full index option lot | A whole bought option lot is accessible *only if* its current premium, lot size and charges fit cash and risk budgets; contract specifications change | Keep exact instrument master and whole-lot sizing; never relax the 2% premium-at-risk cap automatically |
+| Options can rise 20–50% quickly | Possible but not a reliable expected return | Evaluate net P&L after spread, fees, slippage, and unfavorable exit quotes; no fabricated probability of a breakout |
+| Tight bid-ask spread means clean execution | False in thin strikes, sudden news, freezes, and fast markets | Enforce depth/spread/freshness and quote-identity checks; paper fills at bid/ask, not last-traded price |
+| Theta causes option value to fall every hour | Overgeneralized: theta is a model sensitivity, not a guaranteed constant loss per hour; price also changes with underlying, volatility, and microstructure | Do not hardcode deterministic hourly theta deductions; require historical bid/ask chains and time-to-expiry-aware research |
+| Excellent option bots win only 40–50% | No universal defensible win-rate range | `research/option_performance.py` calculates realized net expectancy, average wins/losses, profit factor, max drawdown, losing streak, and estimated break-even win rate |
+| Five losses can create 30–40% drawdown | Possible only at sufficiently large per-trade losses; not an automatic consequence of five losses | Existing 2% full-premium-risk gate plus optional two-loss streak breaker and 20-minute cooldown |
+| VIX, policy, budget, and regulatory events can cause spikes and failed stops | True risk category, but market spikes are not directly *caused* by algorithmic throttling in every case | `risk/option_conditions.py` adds verified high-impact-event blackout, IV change and index move shock filters, exchange-state gate, latency, feed recovery, broker health and exchange order eligibility |
+
+### Additional implementation caveats
+
+- The market-conditions layer is **optional in the legacy research entry function** for backward-compatible offline fixtures. Production-grade entry MUST provide a verified `OptionMarketConditions` and `OptionConditionPolicy`, with independently authenticated data sources. An optional caller-supplied boolean is not a regulatory attestation.
+- The high-impact-event input is a **single nearest event time** and requires a verified calendar snapshot. It does not discover RBI announcements, elections, company news or surprise events. Unknown or stale event coverage blocks when the conditions layer is used.
+- Loss-streak and cooldown values must come from reconciled durable realized trade history. A process restart must not reset these. Current market-context integration is not a production-ready account state machine.
+- A zero-bid option quote is now representable for realistic worthless-option and failed-exit simulations. No executable bid quantity means the paper simulator must leave the position unresolved rather than falsely close it.
+- The in-memory option paper simulator now halts on an explicit trading halt even when the stop/target/time threshold has not yet triggered. **Halting software does not close a position**.
+- The 2% full-premium exposure policy may leave a ₹20,000 account with zero eligible index option trades. That is preferable to falsely claiming controlled risk.
+
+**Still missing:** authenticated historical and live option-chain data, independently verified corporate/economic event calendar, bid/ask depth replay, theta/IV/Greeks sensitivity calibrated to actual options, fee schedules, actual broker acknowledgements, order-state reconciliation, durable option position state, and 8–12 weeks of forward paper evidence. No prediction model has been trained or shown to beat costs.
