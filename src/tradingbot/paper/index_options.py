@@ -114,6 +114,9 @@ class LongOptionPaperSimulator:
         if age < 0 or age > self.quote_max_age_seconds:
             self.halted, self.halt_reason = True, "unreliable_option_exit_quote"
             raise RuntimeError(self.halt_reason)
+        if quote.trading_halted:
+            self.halted, self.halt_reason = True, "option_market_halted_with_open_position"
+            raise RuntimeError(self.halt_reason)
         seconds = int((utc_now - aware(position.entry_timestamp, "entry_timestamp")).total_seconds())
         if seconds < 0:
             self.halted, self.halt_reason = True, "exit_before_entry"
@@ -128,7 +131,7 @@ class LongOptionPaperSimulator:
             reason = "TIME_EXIT_SIGNAL"
         else:
             return None
-        if quote.trading_halted or quote.bid_quantity < position.quantity:
+        if quote.bid_quantity < position.quantity:
             self.halted, self.halt_reason = True, "exit_depth_or_session_unavailable"
             raise RuntimeError(self.halt_reason)
         slippage = decimal(extra_exit_slippage, "extra_exit_slippage")
