@@ -268,7 +268,7 @@ def test_currency_schema_v4_tags_every_monetary_ledger_table(tmp_path):
         version = connection.execute(
             "SELECT value FROM account_meta WHERE key='schema_version'"
         ).fetchone()[0]
-        assert version == "4"
+        assert version == "5"
         for table in ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox"):
             columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
             assert "currency_code" in columns
@@ -324,13 +324,14 @@ def test_existing_inr_schema_v1_rows_are_migrated_without_relabelling(tmp_path):
     # in account_meta and did not have per-row currency_code columns.
     with sqlite3.connect(path) as connection:
         connection.execute("DROP VIEW IF EXISTS account_money_v3")
+        connection.execute("DROP VIEW IF EXISTS account_money_v4")
         for table in ("fills", "open_lots", "closed_trades", "equity_snapshots", "lifecycle_outbox"):
             connection.execute(f"ALTER TABLE {table} DROP COLUMN currency_code")
         connection.execute("DELETE FROM account_meta WHERE key='schema_version'")
     migrated = PaperAccountStore(path, "100000.00", currency_code="INR")
     assert migrated.get_summary()["starting_balance_usd"] == "100000"
     with sqlite3.connect(path) as connection:
-        assert connection.execute("SELECT value FROM account_meta WHERE key='schema_version'").fetchone()[0] == "4"
+        assert connection.execute("SELECT value FROM account_meta WHERE key='schema_version'").fetchone()[0] == "5"
         assert connection.execute("SELECT currency_code FROM fills").fetchone()[0] == "INR"
         assert connection.execute("SELECT currency_code FROM open_lots").fetchone()[0] == "INR"
         assert connection.execute("SELECT currency_code FROM lifecycle_outbox").fetchone()[0] == "INR"

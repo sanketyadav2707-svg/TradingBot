@@ -100,7 +100,7 @@ Current domain and accounting APIs use USD-specific names. Before INR support:
 
 ### M5: Broker adapter and paper execution
 - Broker integration must implement the existing ExecutionPort/router boundary; strategies never call broker APIs directly.
-- Broker adapter candidate is not selected yet. Compare official API access, fees, data entitlement, order types, static-IP/authentication rules, rate limits, websocket stability, partial-fill semantics, order/position reconciliation and support.
+- Upstox is selected as the first broker adapter target. Its documented API access and market-data APIs are currently advertised as free, with a ₹10/order offer through 31 December 2026 (GTT excluded). This does not make trading free: statutory charges, brokerage after promotional expiry, slippage, spread and hosting/static-IP costs remain. Verify the exact user/account charges before fee modelling. See [Upstox Integration Plan](UPSTOX_INTEGRATION_PLAN.md).
 - Add broker sandbox/paper adapter only after terms and data entitlement are verified.
 - Idempotency, partial-fill accounting, reconnect/reconciliation, emergency halt and audit trail are release blockers.
 - No live order path is to be enabled by changing a config value.
@@ -137,7 +137,7 @@ Selection is data-driven. The first instrument is not selected by brand familiar
 2. Implement and test currency-neutral account/instrument/fee models without breaking existing USD research.
 3. Add versioned NSE market profile and session-calendar tests.
 4. Audit data providers and choose a zero-cost, legally usable historical-data route for NSE.
-5. Compare candidate instruments and broker APIs before selecting one.
+5. Confirm Upstox account eligibility, segment access, API enablement, static-IP requirements and exact fee schedule; then compare eligible instruments using current source data.
 6. Only then port strategy hypotheses and build an NSE adapter.
 
 ## Definition of done for the migration foundation
